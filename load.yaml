@@ -1,0 +1,8 @@
+config:
+  httpFile: "./request.http"
+  prometheus: false
+  breaker_threshold_pct: 20.0
+
+stages:
+  - duration: 10s
+    target_vpu: 10
