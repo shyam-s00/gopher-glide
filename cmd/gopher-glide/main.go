@@ -2,15 +2,15 @@ package main
 
 import (
 	"fmt"
-	"gopher-gun/internal/config"
+	"gopher-glide/internal/config"
 	"os"
 )
 
 func main() {
-	fmt.Println("Gopher-Gun - Api load testing tool using Go")
+	fmt.Println("Gopher-Glide - Api load testing tool using Go")
 
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: gopher-gun <config-file>")
+		fmt.Println("Usage: gopher-glide <config-file>")
 		os.Exit(1)
 	}
 
