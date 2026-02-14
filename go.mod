@@ -1,6 +1,8 @@
 module gopher-glide
 
-go 1.25
+go 1.25.7
+
+require gopkg.in/yaml.v3 v3.0.1
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
@@ -22,5 +24,4 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/text v0.3.8 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
