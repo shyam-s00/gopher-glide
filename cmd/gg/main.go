@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"gopher-glide/internal/config"
+	"gopher-glide/internal/engine"
 	"gopher-glide/internal/tui"
 
 	"os"
@@ -28,9 +29,11 @@ func main() {
 	fmt.Printf(" Prometheus: %t\n", cfg.ConfigSection.Prometheus)
 	fmt.Printf(" Stages: %v\n", cfg.Stages)
 
+	eng := engine.New()
+
 	// Temporary: Start TUI for development
 	fmt.Println("Starting TUI...")
-	if err := tui.Start(); err != nil {
+	if err := tui.Start(eng, cfg); err != nil {
 		fmt.Printf("Error running TUI: %v\n", err)
 		os.Exit(1)
 	}
