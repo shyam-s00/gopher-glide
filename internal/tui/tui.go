@@ -50,12 +50,11 @@ func (m model) Init() tea.Cmd {
 	go func() {
 		targetVPU := 10
 		duration := time.Second * 30
-		url := "https:httpbin.org/get"
+		url := "https://httpbin.org/get"
 
 		_ = m.engine.Run(m.ctx, targetVPU, duration, url)
 	}()
 
-	m.running = true
 	return tea.Batch(tickCmd())
 }
 
@@ -84,6 +83,13 @@ func (m model) renderContent() string {
 		Padding(0, 2).
 		MarginRight(2).
 		Width(28)
+
+	debugStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#63")).
+		Padding(0, 1).
+		MarginTop(1).
+		Width(94)
 
 	sectionStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -121,7 +127,7 @@ func (m model) renderContent() string {
 		labelStyle.Render("Uptime:"), valueStyle.Render(fmt.Sprintf("%.2fs", elapsed)),
 		labelStyle.Render("Http File:"), valueStyle.Render(m.config.ConfigSection.HTTPFile),
 		labelStyle.Render("Active VPU:"), valueStyle.Render(fmt.Sprintf("%d / %d Target", m.metrics.ActiveVPUs, m.metrics.CurrentVPUs)),
-		"", "")
+		"", "", "")
 
 	throughput := lipgloss.JoinVertical(lipgloss.Left,
 		sectionStyle.Render("THROUGHPUT"),
@@ -138,13 +144,17 @@ func (m model) renderContent() string {
 		labelStyle.Render("Max:"), valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.MaxLatency)),
 		labelStyle.Render("P50:"), valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.P50Latency)),
 		labelStyle.Render("P95:"), valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.P95Latency)),
-		labelStyle.Render("P99:"), valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.P99Latency)))
+		labelStyle.Render("P99:"), valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.P99Latency)),
+		"")
 
 	panel1 := boxStyle.Render(configuration)
 	panel2 := boxStyle.Render(throughput)
 	panel3 := boxStyle.Render(latency)
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, panel1, panel2, panel3)
+
+	debugContent := m.renderDebugPanel()
+	debugPanel := debugStyle.Render(debugContent)
 
 	help := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#A0A0A0")).
@@ -153,8 +163,63 @@ func (m model) renderContent() string {
 	return appStyle.Render(
 		lipgloss.JoinVertical(
 			lipgloss.Left,
-			header, body, help))
+			header, body, debugPanel, help))
 
+}
+
+func (m model) renderDebugPanel() string {
+	sectionStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#7D56F4"))
+
+	successStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#04B575"))
+
+	errorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FF5F87"))
+
+	normalStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("252"))
+
+	logs := m.engine.GetRecentLogs(10)
+
+	var lines []string
+	lines = append(lines, sectionStyle.Render("[DEBUG]Recent Logs"))
+	lines = append(lines, "")
+
+	if len(logs) == 0 {
+		lines = append(lines, normalStyle.Render("No logs available"))
+	} else {
+		for _, log := range logs {
+			timestamp := log.Timestamp.Format("2006-01-02 15:04:05")
+			duration := fmt.Sprintf("%.0fms", log.Duration.Seconds()/1000)
+
+			var statusStr string
+			var statusStyle lipgloss.Style
+
+			if log.Error != "" {
+				statusStr = fmt.Sprintf("[ERROR] %s", log.Error)
+				statusStyle = errorStyle
+			} else if log.StatusCode >= 200 && log.StatusCode < 300 {
+				statusStr = successStyle.Render(fmt.Sprintf("[%d]", log.StatusCode))
+				statusStyle = successStyle
+			} else {
+				statusStr = errorStyle.Render(fmt.Sprintf("[%d]", log.StatusCode))
+				statusStyle = errorStyle
+			}
+
+			line := fmt.Sprintf("%s %s %s %s %s",
+				normalStyle.Render(timestamp),
+				normalStyle.Render(log.Method),
+				normalStyle.Render(log.Url),
+				statusStyle.Render(statusStr),
+				normalStyle.Render(duration))
+
+			lines = append(lines, line)
+		}
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -174,6 +239,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
+		// Update the running status from the engine
+		m.running = m.engine.IsRunning()
+
 		m.metrics = m.engine.GetMetrics()
 
 		elapsed := time.Since(m.startTime).Seconds()

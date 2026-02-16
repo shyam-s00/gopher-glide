@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -33,9 +34,23 @@ type MetricsSnapshot struct {
 	ErrorRate     float64
 }
 
+type CallLog struct {
+	Timestamp  time.Time
+	Method     string
+	Url        string
+	StatusCode int
+	Duration   time.Duration
+	Error      string
+}
+
 type Engine struct {
-	client  *http.Client
-	metrics *Metrics
+	client     *http.Client
+	metrics    *Metrics
+	isRunning  atomic.Bool // this is used to track if the engine is running
+	callLogs   []CallLog
+	callLogsMu sync.RWMutex
+	maxLogs    int
+	startTime  time.Time
 }
 
 func New() *Engine {
@@ -48,11 +63,17 @@ func New() *Engine {
 				IdleConnTimeout:     90 * time.Second,
 			},
 		},
-		metrics: &Metrics{},
+		metrics:  &Metrics{},
+		callLogs: make([]CallLog, 0, 100),
+		maxLogs:  100, // just keep the last 100 logs
 	}
 }
 
 func (e *Engine) Run(ctx context.Context, targetVPU int, duration time.Duration, url string) error {
+	e.isRunning.Store(true)
+	e.startTime = time.Now()
+	defer e.isRunning.Store(false)
+
 	ctx, cancel := context.WithTimeout(ctx, duration)
 	defer cancel()
 
@@ -111,16 +132,30 @@ func (e *Engine) executeRequest(ctx context.Context, url string) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
+		duration := time.Since(start)
+		e.logCall(http.MethodGet, url, 0, duration, err)
+		e.metrics.totalLatency.Add(duration.Milliseconds())
+		//e.metrics.totalRequests.Add(duration.Milliseconds())
 		return err
 	}
 
 	resp, err := e.client.Do(req)
+	duration := time.Since(start)
+	e.metrics.totalLatency.Add(duration.Milliseconds())
+
 	if err != nil {
+		e.logCall(http.MethodGet, url, 0, duration, err)
 		return err
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
 	}(resp.Body)
+
+	var callErr error
+	if resp.StatusCode >= 400 {
+		callErr = ErrHttpError
+	}
+	e.logCall(http.MethodGet, url, resp.StatusCode, duration, callErr)
 
 	if resp.StatusCode >= 400 {
 		return ErrHttpError
@@ -145,13 +180,67 @@ func (e *Engine) GetMetrics() *MetricsSnapshot {
 		errorRate = float64(failed) / float64(total)
 	}
 
+	var throughput float64
+	if e.startTime.IsZero() {
+		elapsed := time.Since(e.startTime).Seconds()
+		if elapsed > 0 {
+			throughput = float64(total) / elapsed
+		}
+	}
+
 	return &MetricsSnapshot{
 		TotalRequests: total,
 		SuccessCount:  success,
 		FailureCount:  failed,
 		AvgLatency:    avgLatency,
 		ErrorRate:     errorRate,
+		Throughput:    throughput,
 		//TODO: add more metrics as we move forward
-		MinLatency: 0, MaxLatency: 0, P50Latency: 0, P95Latency: 0, P99Latency: 0, ActiveVPUs: 0, CurrentVPUs: 0, Throughput: 0,
+		MinLatency: 0, MaxLatency: 0, P50Latency: 0, P95Latency: 0, P99Latency: 0, ActiveVPUs: 0, CurrentVPUs: 0,
 	}
+}
+
+func (e *Engine) IsRunning() bool {
+	return e.isRunning.Load()
+}
+
+func (e *Engine) logCall(method, url string, statusCode int, duration time.Duration, err error) {
+	e.callLogsMu.Lock()
+	defer e.callLogsMu.Unlock()
+
+	log := CallLog{
+		Timestamp:  time.Now(),
+		Method:     method,
+		Url:        url,
+		StatusCode: statusCode,
+		Duration:   duration,
+	}
+
+	if err != nil {
+		log.Error = err.Error()
+	}
+
+	e.callLogs = append(e.callLogs, log)
+	if len(e.callLogs) > e.maxLogs {
+		e.callLogs = e.callLogs[len(e.callLogs)-e.maxLogs:]
+	}
+}
+
+func (e *Engine) GetRecentLogs(count int) []CallLog {
+	e.callLogsMu.RLock()
+	defer e.callLogsMu.RUnlock()
+
+	if count > len(e.callLogs) {
+		count = len(e.callLogs)
+	}
+
+	if count == 0 {
+		return []CallLog{}
+	}
+
+	start := len(e.callLogs) - count
+	logs := make([]CallLog, count)
+	copy(logs, e.callLogs[start:])
+
+	return e.callLogs[:count]
 }
