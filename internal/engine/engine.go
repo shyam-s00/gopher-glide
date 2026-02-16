@@ -51,6 +51,7 @@ type Engine struct {
 	callLogsMu sync.RWMutex
 	maxLogs    int
 	startTime  time.Time
+	endTime    time.Time
 }
 
 func New() *Engine {
@@ -72,7 +73,10 @@ func New() *Engine {
 func (e *Engine) Run(ctx context.Context, targetVPU int, duration time.Duration, url string) error {
 	e.isRunning.Store(true)
 	e.startTime = time.Now()
-	defer e.isRunning.Store(false)
+	defer func() {
+		e.endTime = time.Now()
+		e.isRunning.Store(false)
+	}()
 
 	ctx, cancel := context.WithTimeout(ctx, duration)
 	defer cancel()
@@ -181,8 +185,14 @@ func (e *Engine) GetMetrics() *MetricsSnapshot {
 	}
 
 	var throughput float64
-	if e.startTime.IsZero() {
-		elapsed := time.Since(e.startTime).Seconds()
+	if !e.startTime.IsZero() { //started and startTime is set now
+		var elapsed float64
+		if e.endTime.IsZero() {
+			elapsed = time.Since(e.startTime).Seconds() // we are still running
+		} else {
+			elapsed = e.endTime.Sub(e.startTime).Seconds() // stopped
+		}
+
 		if elapsed > 0 {
 			throughput = float64(total) / elapsed
 		}
@@ -243,4 +253,17 @@ func (e *Engine) GetRecentLogs(count int) []CallLog {
 	copy(logs, e.callLogs[start:])
 
 	return e.callLogs[:count]
+}
+
+func (e *Engine) GetElapsedTime() float64 {
+	if e.startTime.IsZero() {
+		return 0
+	}
+
+	if e.endTime.IsZero() {
+		// still running
+		return time.Since(e.startTime).Seconds()
+	}
+	//stopped
+	return e.endTime.Sub(e.startTime).Seconds()
 }

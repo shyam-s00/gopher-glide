@@ -13,17 +13,17 @@ import (
 )
 
 type model struct {
-	viewport  viewport.Model
-	engine    *engine.Engine
-	config    *config.Config
-	metrics   *engine.MetricsSnapshot
-	ctx       context.Context
-	cancel    context.CancelFunc
-	ready     bool
-	running   bool
-	startTime time.Time
-	width     int
-	height    int
+	viewport viewport.Model
+	engine   *engine.Engine
+	config   *config.Config
+	metrics  *engine.MetricsSnapshot
+	ctx      context.Context
+	cancel   context.CancelFunc
+	ready    bool
+	running  bool
+	//startTime time.Time
+	width  int
+	height int
 }
 
 type tickMsg time.Time
@@ -35,21 +35,21 @@ func initialModel(eng *engine.Engine, cfg *config.Config) model {
 	vp.SetContent("Initializing ....")
 
 	return model{
-		engine:    eng,
-		config:    cfg,
-		metrics:   &engine.MetricsSnapshot{},
-		ctx:       ctx,
-		cancel:    cancel,
-		running:   false,
-		startTime: time.Now(),
-		viewport:  vp,
+		engine:  eng,
+		config:  cfg,
+		metrics: &engine.MetricsSnapshot{},
+		ctx:     ctx,
+		cancel:  cancel,
+		running: false,
+		//startTime: time.Now(),
+		viewport: vp,
 	}
 }
 
 func (m model) Init() tea.Cmd {
 	go func() {
-		targetVPU := 10
-		duration := time.Second * 30
+		targetVPU := 250
+		duration := time.Second * 10
 		url := "https://httpbin.org/get"
 
 		_ = m.engine.Run(m.ctx, targetVPU, duration, url)
@@ -65,7 +65,7 @@ func tickCmd() tea.Cmd {
 }
 
 func (m model) renderContent() string {
-	elapsed := time.Since(m.startTime).Seconds()
+	elapsed := m.engine.GetElapsedTime()
 
 	appStyle := lipgloss.NewStyle().Padding(0, 2)
 
@@ -241,13 +241,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		// Update the running status from the engine
 		m.running = m.engine.IsRunning()
-
 		m.metrics = m.engine.GetMetrics()
 
-		elapsed := time.Since(m.startTime).Seconds()
-		if elapsed > 0 && m.metrics.TotalRequests > 0 {
-			m.metrics.Throughput = float64(m.metrics.TotalRequests) / elapsed
-		}
+		//elapsed := time.Since(m.startTime).Seconds()
+		//if elapsed > 0 && m.metrics.TotalRequests > 0 {
+		//	m.metrics.Throughput = float64(m.metrics.TotalRequests) / elapsed
+		//}
 
 		if m.ready && m.viewport.Width > 0 {
 			m.viewport.SetContent(m.renderContent())
