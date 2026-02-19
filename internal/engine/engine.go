@@ -252,7 +252,7 @@ func (e *Engine) GetRecentLogs(count int) []CallLog {
 	logs := make([]CallLog, count)
 	copy(logs, e.callLogs[start:])
 
-	return e.callLogs[:count]
+	return logs
 }
 
 func (e *Engine) GetElapsedTime() float64 {

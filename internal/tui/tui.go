@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"gopher-glide/internal/config"
 	"gopher-glide/internal/engine"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -13,17 +14,18 @@ import (
 )
 
 type model struct {
-	viewport viewport.Model
-	engine   *engine.Engine
-	config   *config.Config
-	metrics  *engine.MetricsSnapshot
-	ctx      context.Context
-	cancel   context.CancelFunc
-	ready    bool
-	running  bool
+	logView viewport.Model
+	engine  *engine.Engine
+	config  *config.Config
+	metrics *engine.MetricsSnapshot
+	ctx     context.Context
+	cancel  context.CancelFunc
+	ready   bool
+	running bool
 	//startTime time.Time
-	width  int
-	height int
+	width        int
+	height       int
+	showFailures bool
 }
 
 type tickMsg time.Time
@@ -31,8 +33,9 @@ type tickMsg time.Time
 func initialModel(eng *engine.Engine, cfg *config.Config) model {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	vp := viewport.New(80, 24)
-	vp.SetContent("Initializing ....")
+	vp := viewport.New(0, 0)
+	vp.YPosition = 0
+	//vp.SetContent("Initializing ....")
 
 	return model{
 		engine:  eng,
@@ -42,7 +45,8 @@ func initialModel(eng *engine.Engine, cfg *config.Config) model {
 		cancel:  cancel,
 		running: false,
 		//startTime: time.Now(),
-		viewport: vp,
+		showFailures: true,
+		logView:      vp,
 	}
 }
 
@@ -55,19 +59,19 @@ func (m model) Init() tea.Cmd {
 		_ = m.engine.Run(m.ctx, targetVPU, duration, url)
 	}()
 
-	return tea.Batch(tickCmd())
+	return tea.Batch(tickCmd(), tea.EnterAltScreen)
 }
 
 func tickCmd() tea.Cmd {
-	return tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
+	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
 
-func (m model) renderContent() string {
-	elapsed := m.engine.GetElapsedTime()
+func (m model) renderHeader() string {
 
-	appStyle := lipgloss.NewStyle().Padding(0, 2)
+	elapsed := m.engine.GetElapsedTime()
+	//appStyle := lipgloss.NewStyle().Padding(0, 2)
 
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -83,13 +87,6 @@ func (m model) renderContent() string {
 		Padding(0, 2).
 		MarginRight(2).
 		Width(28)
-
-	debugStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#63")).
-		Padding(0, 1).
-		MarginTop(1).
-		Width(94)
 
 	sectionStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -110,9 +107,6 @@ func (m model) renderContent() string {
 		Foreground(lipgloss.Color("#FF5f87")).
 		Bold(true)
 
-	header := titleStyle.Render("Gopher Glide (GG) -  Load Test")
-
-	//uptime := time.Since(m.startTime).Round(time.Second)
 	statusStr := "STOPPED"
 	statusColor := lipgloss.Color("#FF5F87")
 
@@ -147,117 +141,124 @@ func (m model) renderContent() string {
 		labelStyle.Render("P99:"), valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.P99Latency)),
 		"")
 
-	panel1 := boxStyle.Render(configuration)
-	panel2 := boxStyle.Render(throughput)
-	panel3 := boxStyle.Render(latency)
+	header := titleStyle.Render("Gopher Glide (GG) -  Load Test")
+	stats := lipgloss.JoinHorizontal(lipgloss.Top,
+		boxStyle.Render(configuration),
+		boxStyle.Render(throughput),
+		boxStyle.Render(latency),
+	)
 
-	body := lipgloss.JoinHorizontal(lipgloss.Top, panel1, panel2, panel3)
-
-	debugContent := m.renderDebugPanel()
-	debugPanel := debugStyle.Render(debugContent)
-
-	help := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#A0A0A0")).
-		Render("Press 'q' to quit")
-
-	return appStyle.Render(
-		lipgloss.JoinVertical(
-			lipgloss.Left,
-			header, body, debugPanel, help))
-
+	return lipgloss.JoinVertical(lipgloss.Left, header, stats)
 }
 
-func (m model) renderDebugPanel() string {
-	sectionStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#7D56F4"))
+func (m model) renderLogContent() string {
+	// Fetch more logs to ensure we have enough history when filtering
+	// Ideally this should be paginated or scrollable at source, but fetching 100 is a safe increment for now.
+	logs := m.engine.GetRecentLogs(100)
 
-	successStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#04B575"))
-
-	errorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FF5F87"))
-
-	normalStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252"))
-
-	logs := m.engine.GetRecentLogs(10)
+	//Styles
+	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
+	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87"))
+	normalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 
 	var lines []string
-	lines = append(lines, sectionStyle.Render("[DEBUG]Recent Logs"))
-	lines = append(lines, "")
 
-	if len(logs) == 0 {
-		lines = append(lines, normalStyle.Render("No logs available"))
-	} else {
-		for _, log := range logs {
-			timestamp := log.Timestamp.Format("2006-01-02 15:04:05")
-			duration := fmt.Sprintf("%.0fms", log.Duration.Seconds()/1000)
-
-			var statusStr string
-			var statusStyle lipgloss.Style
-
-			if log.Error != "" {
-				statusStr = fmt.Sprintf("[ERROR] %s", log.Error)
-				statusStyle = errorStyle
-			} else if log.StatusCode >= 200 && log.StatusCode < 300 {
-				statusStr = successStyle.Render(fmt.Sprintf("[%d]", log.StatusCode))
-				statusStyle = successStyle
-			} else {
-				statusStr = errorStyle.Render(fmt.Sprintf("[%d]", log.StatusCode))
-				statusStyle = errorStyle
-			}
-
-			line := fmt.Sprintf("%s %s %s %s %s",
-				normalStyle.Render(timestamp),
-				normalStyle.Render(log.Method),
-				normalStyle.Render(log.Url),
-				statusStyle.Render(statusStr),
-				normalStyle.Render(duration))
-
-			lines = append(lines, line)
+	for _, log := range logs {
+		isError := log.StatusCode >= 400 || log.Error != ""
+		if m.showFailures && !isError {
+			continue
 		}
+
+		timestamp := log.Timestamp.Format("15:04:05")
+		duration := fmt.Sprintf("%dms", log.Duration.Milliseconds())
+
+		var statusStr string
+		var statusStyle lipgloss.Style
+
+		if log.Error != "" {
+			statusStr = fmt.Sprintf("[ERROR] %s", log.Error)
+			statusStyle = errorStyle
+		} else if log.StatusCode >= 200 && log.StatusCode < 300 {
+			statusStr = fmt.Sprintf("[%d]", log.StatusCode)
+			statusStyle = successStyle
+		} else {
+			statusStr = fmt.Sprintf("[%d]", log.StatusCode)
+			statusStyle = errorStyle
+		}
+
+		line := fmt.Sprintf("%s %s %s %s %s",
+			normalStyle.Render(timestamp),
+			normalStyle.Render(log.Method),
+			normalStyle.Render(log.Url),
+			statusStyle.Render(statusStr),
+			normalStyle.Render(duration))
+
+		lines = append(lines, line)
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+	if len(lines) == 0 {
+		return normalStyle.Render("Waiting for traffic (or no errors found)...")
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var (
+		cmd  tea.Cmd
+		cmds []tea.Cmd
+	)
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
 			m.cancel()
 			return m, tea.Quit
+		case "f":
+			m.showFailures = !m.showFailures
 		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.viewport = viewport.New(msg.Width, msg.Height)
-		m.viewport.SetContent(m.renderContent())
 		m.ready = true
-		return m, nil
 
+		// title (3) + stats (10) + debug header (3) + extra margins
+		headerHeight := 20
+
+		logWidth := msg.Width - 4
+		if logWidth < 1 {
+			logWidth = 1
+		}
+
+		// Subtract header height, top margin(1), and 2 lines for border
+		logHeight := msg.Height - headerHeight - 3
+		if logHeight < 1 {
+			logHeight = 1
+		}
+
+		m.logView.Width = logWidth
+		m.logView.Height = logHeight
+		m.logView.SetContent(m.renderLogContent())
 	case tickMsg:
 		// Update the running status from the engine
 		m.running = m.engine.IsRunning()
 		m.metrics = m.engine.GetMetrics()
 
-		//elapsed := time.Since(m.startTime).Seconds()
-		//if elapsed > 0 && m.metrics.TotalRequests > 0 {
-		//	m.metrics.Throughput = float64(m.metrics.TotalRequests) / elapsed
-		//}
-
-		if m.ready && m.viewport.Width > 0 {
-			m.viewport.SetContent(m.renderContent())
+		if m.ready {
+			atBottom := m.logView.AtBottom()
+			m.logView.SetContent(m.renderLogContent())
+			if atBottom {
+				m.logView.GotoBottom()
+			}
 		}
-
-		return m, tickCmd()
+		cmds = append(cmds, tickCmd())
 	}
+	// update the log view to handle scrolling if needed
+	m.logView, cmd = m.logView.Update(msg)
+	cmds = append(cmds, cmd)
 
-	var cmd tea.Cmd
-	m.viewport, cmd = m.viewport.Update(msg)
-	return m, cmd
+	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() string {
@@ -265,13 +266,35 @@ func (m model) View() string {
 		return "Loading..."
 	}
 
-	return m.viewport.View()
+	header := m.renderHeader()
+
+	mode := "FAILURES ONLY"
+	if !m.showFailures {
+		mode = "ALL LOGS"
+	}
+
+	debugHeader := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#7D56F4")).
+		Render(fmt.Sprintf("[DEBUG] Press 'f' to toggle log mode (Current: %s)", mode))
+
+	logBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#63")).
+		Padding(0, 1).
+		MarginTop(1).
+		Width(m.logView.Width).
+		Height(m.logView.Height). // Height sets content height, borders are added outside
+		Render(m.logView.View())
+
+	return lipgloss.JoinVertical(lipgloss.Left, header, debugHeader, logBox)
 }
 
 func Start(eng *engine.Engine, cfg *config.Config) error {
 	p := tea.NewProgram(
 		initialModel(eng, cfg),
 		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
 	)
 
 	_, err := p.Run()
