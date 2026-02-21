@@ -152,9 +152,14 @@ func (m model) renderHeader() string {
 }
 
 func (m model) renderLogContent() string {
-	// Fetch more logs to ensure we have enough history when filtering
-	// Ideally this should be paginated or scrollable at source, but fetching 100 is a safe increment for now.
-	logs := m.engine.GetRecentLogs(100)
+	// When in failures-only mode, read from the dedicated error log buffer so
+	// error entries are never evicted by high-volume successful requests.
+	var logs []engine.CallLog
+	if m.showFailures {
+		logs = m.engine.GetRecentErrorLogs(100)
+	} else {
+		logs = m.engine.GetRecentLogs(100)
+	}
 
 	//Styles
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
@@ -164,10 +169,6 @@ func (m model) renderLogContent() string {
 	var lines []string
 
 	for _, log := range logs {
-		isError := log.StatusCode >= 400 || log.Error != ""
-		if m.showFailures && !isError {
-			continue
-		}
 
 		timestamp := log.Timestamp.Format("15:04:05")
 		duration := fmt.Sprintf("%dms", log.Duration.Milliseconds())

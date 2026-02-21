@@ -46,8 +46,9 @@ type CallLog struct {
 type Engine struct {
 	client     *http.Client
 	metrics    *Metrics
-	isRunning  atomic.Bool // this is used to track if the engine is running
-	callLogs   []CallLog
+	isRunning  atomic.Bool
+	callLogs   []*CallLog // ring buffer of all requests
+	errorLogs  []*CallLog // ring buffer of error requests — shares the same *CallLog pointers, no duplication
 	callLogsMu sync.RWMutex
 	maxLogs    int
 	startTime  time.Time
@@ -64,9 +65,10 @@ func New() *Engine {
 				IdleConnTimeout:     90 * time.Second,
 			},
 		},
-		metrics:  &Metrics{},
-		callLogs: make([]CallLog, 0, 100),
-		maxLogs:  100, // just keep the last 100 logs
+		metrics:   &Metrics{},
+		callLogs:  make([]*CallLog, 0, 100),
+		errorLogs: make([]*CallLog, 0, 100),
+		maxLogs:   100,
 	}
 }
 
@@ -215,24 +217,32 @@ func (e *Engine) IsRunning() bool {
 }
 
 func (e *Engine) logCall(method, url string, statusCode int, duration time.Duration, err error) {
-	e.callLogsMu.Lock()
-	defer e.callLogsMu.Unlock()
-
-	log := CallLog{
+	entry := &CallLog{
 		Timestamp:  time.Now(),
 		Method:     method,
 		Url:        url,
 		StatusCode: statusCode,
 		Duration:   duration,
 	}
-
 	if err != nil {
-		log.Error = err.Error()
+		entry.Error = err.Error()
 	}
 
-	e.callLogs = append(e.callLogs, log)
+	e.callLogsMu.Lock()
+	defer e.callLogsMu.Unlock()
+
+	// append to the all-requests ring buffer
+	e.callLogs = append(e.callLogs, entry)
 	if len(e.callLogs) > e.maxLogs {
 		e.callLogs = e.callLogs[len(e.callLogs)-e.maxLogs:]
+	}
+
+	// errors share the same pointer — zero extra allocation
+	if entry.Error != "" || entry.StatusCode >= 400 {
+		e.errorLogs = append(e.errorLogs, entry)
+		if len(e.errorLogs) > e.maxLogs {
+			e.errorLogs = e.errorLogs[len(e.errorLogs)-e.maxLogs:]
+		}
 	}
 }
 
@@ -243,15 +253,37 @@ func (e *Engine) GetRecentLogs(count int) []CallLog {
 	if count > len(e.callLogs) {
 		count = len(e.callLogs)
 	}
-
 	if count == 0 {
 		return []CallLog{}
 	}
 
-	start := len(e.callLogs) - count
+	src := e.callLogs[len(e.callLogs)-count:]
 	logs := make([]CallLog, count)
-	copy(logs, e.callLogs[start:])
+	for i, p := range src {
+		logs[i] = *p // copy value out so the caller has no shared pointer
+	}
+	return logs
+}
 
+// GetRecentErrorLogs returns the most recent error-only entries from a dedicated
+// ring buffer. Each entry is a pointer-shared copy of the same *CallLog already
+// in callLogs — no duplicate heap allocation.
+func (e *Engine) GetRecentErrorLogs(count int) []CallLog {
+	e.callLogsMu.RLock()
+	defer e.callLogsMu.RUnlock()
+
+	if count > len(e.errorLogs) {
+		count = len(e.errorLogs)
+	}
+	if count == 0 {
+		return []CallLog{}
+	}
+
+	src := e.errorLogs[len(e.errorLogs)-count:]
+	logs := make([]CallLog, count)
+	for i, p := range src {
+		logs[i] = *p
+	}
 	return logs
 }
 
