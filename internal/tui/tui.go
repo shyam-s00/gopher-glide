@@ -52,11 +52,11 @@ func initialModel(eng *engine.Engine, cfg *config.Config) model {
 
 func (m model) Init() tea.Cmd {
 	go func() {
-		targetVPU := 250
+		targetRPS := 300
 		duration := time.Second * 10
 		url := "https://httpbin.org/get"
 
-		_ = m.engine.Run(m.ctx, targetVPU, duration, url)
+		_ = m.engine.Run(m.ctx, targetRPS, duration, url)
 	}()
 
 	return tea.Batch(tickCmd(), tea.EnterAltScreen)
@@ -120,8 +120,9 @@ func (m model) renderHeader() string {
 		labelStyle.Render("Status:"), lipgloss.NewStyle().Foreground(statusColor).Bold(true).Render(statusStr),
 		labelStyle.Render("Uptime:"), valueStyle.Render(fmt.Sprintf("%.2fs", elapsed)),
 		labelStyle.Render("Http File:"), valueStyle.Render(m.config.ConfigSection.HTTPFile),
-		labelStyle.Render("Active VPU:"), valueStyle.Render(fmt.Sprintf("%d / %d Target", m.metrics.ActiveVPUs, m.metrics.CurrentVPUs)),
-		"", "", "")
+		labelStyle.Render("Active VPU:"), valueStyle.Render(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
+		labelStyle.Render("Target RPS:"), valueStyle.Render(fmt.Sprintf("%d", m.metrics.TargetRPS)),
+		"")
 
 	throughput := lipgloss.JoinVertical(lipgloss.Left,
 		sectionStyle.Render("THROUGHPUT"),
@@ -152,8 +153,6 @@ func (m model) renderHeader() string {
 }
 
 func (m model) renderLogContent() string {
-	// When in failures-only mode, read from the dedicated error log buffer so
-	// error entries are never evicted by high-volume successful requests.
 	var logs []engine.CallLog
 	if m.showFailures {
 		logs = m.engine.GetRecentErrorLogs(100)
@@ -232,7 +231,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			logWidth = 1
 		}
 
-		// Subtract header height, top margin(1), and 2 lines for border
+		// Subtract header height, top margin(1), and 2 lines for a border
 		logHeight := msg.Height - headerHeight - 3
 		if logHeight < 1 {
 			logHeight = 1

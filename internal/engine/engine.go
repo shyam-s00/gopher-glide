@@ -32,6 +32,7 @@ type MetricsSnapshot struct {
 	ActiveVPUs    int
 	Throughput    float64
 	ErrorRate     float64
+	TargetRPS     int
 }
 
 type CallLog struct {
@@ -53,6 +54,8 @@ type Engine struct {
 	maxLogs    int
 	startTime  time.Time
 	endTime    time.Time
+	targetRPS  int
+	activeVPU  atomic.Int32
 }
 
 func New() *Engine {
@@ -72,8 +75,9 @@ func New() *Engine {
 	}
 }
 
-func (e *Engine) Run(ctx context.Context, targetVPU int, duration time.Duration, url string) error {
+func (e *Engine) Run(ctx context.Context, targetRPS int, duration time.Duration, url string) error {
 	e.isRunning.Store(true)
+	e.targetRPS = targetRPS
 	e.startTime = time.Now()
 	defer func() {
 		e.endTime = time.Now()
@@ -84,9 +88,9 @@ func (e *Engine) Run(ctx context.Context, targetVPU int, duration time.Duration,
 	defer cancel()
 
 	g, gCtx := errgroup.WithContext(ctx)
-	worker := make(chan struct{}, targetVPU*2)
+	worker := make(chan struct{}, targetRPS*2)
 
-	ticker := time.NewTicker(time.Second / time.Duration(targetVPU))
+	ticker := time.NewTicker(time.Second / time.Duration(targetRPS))
 	defer ticker.Stop()
 
 	//distributor
@@ -113,15 +117,17 @@ func (e *Engine) Run(ctx context.Context, targetVPU int, duration time.Duration,
 	//	},
 	//}
 
-	for i := 0; i < targetVPU; i++ {
+	for i := 0; i < targetRPS; i++ {
 		g.Go(func() error {
 			for range worker {
+				e.activeVPU.Add(1)
 				if err := e.executeRequest(gCtx, url); err != nil {
 					e.metrics.failureCount.Add(1)
 				} else {
 					e.metrics.successCount.Add(1)
 				}
 				e.metrics.totalRequests.Add(1)
+				e.activeVPU.Add(-1)
 			}
 			return nil
 		})
@@ -207,8 +213,10 @@ func (e *Engine) GetMetrics() *MetricsSnapshot {
 		AvgLatency:    avgLatency,
 		ErrorRate:     errorRate,
 		Throughput:    throughput,
+		ActiveVPUs:    int(e.activeVPU.Load()),
+		TargetRPS:     e.targetRPS,
 		//TODO: add more metrics as we move forward
-		MinLatency: 0, MaxLatency: 0, P50Latency: 0, P95Latency: 0, P99Latency: 0, ActiveVPUs: 0, CurrentVPUs: 0,
+		MinLatency: 0, MaxLatency: 0, P50Latency: 0, P95Latency: 0, P99Latency: 0, CurrentVPUs: 0,
 	}
 }
 
@@ -246,23 +254,29 @@ func (e *Engine) logCall(method, url string, statusCode int, duration time.Durat
 	}
 }
 
-func (e *Engine) GetRecentLogs(count int) []CallLog {
-	e.callLogsMu.RLock()
-	defer e.callLogsMu.RUnlock()
-
-	if count > len(e.callLogs) {
-		count = len(e.callLogs)
+// getRecentFromBuffer returns the most recent `count` entries from buffer.
+// Must be called with callLogsMu held (at least read-locked).
+func (e *Engine) getRecentFromBuffer(buffer []*CallLog, count int) []CallLog {
+	if count > len(buffer) {
+		count = len(buffer)
 	}
 	if count == 0 {
 		return []CallLog{}
 	}
 
-	src := e.callLogs[len(e.callLogs)-count:]
+	src := buffer[len(buffer)-count:]
 	logs := make([]CallLog, count)
 	for i, p := range src {
 		logs[i] = *p // copy value out so the caller has no shared pointer
 	}
 	return logs
+}
+
+func (e *Engine) GetRecentLogs(count int) []CallLog {
+	e.callLogsMu.RLock()
+	defer e.callLogsMu.RUnlock()
+
+	return e.getRecentFromBuffer(e.callLogs, count)
 }
 
 // GetRecentErrorLogs returns the most recent error-only entries from a dedicated
@@ -272,19 +286,7 @@ func (e *Engine) GetRecentErrorLogs(count int) []CallLog {
 	e.callLogsMu.RLock()
 	defer e.callLogsMu.RUnlock()
 
-	if count > len(e.errorLogs) {
-		count = len(e.errorLogs)
-	}
-	if count == 0 {
-		return []CallLog{}
-	}
-
-	src := e.errorLogs[len(e.errorLogs)-count:]
-	logs := make([]CallLog, count)
-	for i, p := range src {
-		logs[i] = *p
-	}
-	return logs
+	return e.getRecentFromBuffer(e.errorLogs, count)
 }
 
 func (e *Engine) GetElapsedTime() float64 {
