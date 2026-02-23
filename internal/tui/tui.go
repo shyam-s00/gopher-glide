@@ -135,11 +135,11 @@ func (m model) renderHeader() string {
 
 	latency := lipgloss.JoinVertical(lipgloss.Left,
 		sectionStyle.Render("LATENCY"),
-		labelStyle.Render("Min:"), valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.MinLatency)),
-		labelStyle.Render("Max:"), valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.MaxLatency)),
-		labelStyle.Render("P50:"), valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.P50Latency)),
-		labelStyle.Render("P95:"), valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.P95Latency)),
-		labelStyle.Render("P99:"), valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.P99Latency)),
+		labelStyle.Render("Min:"), valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.MinLatency)),
+		labelStyle.Render("Max:"), valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.MaxLatency)),
+		labelStyle.Render("P50:"), valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P50Latency)),
+		labelStyle.Render("P95:"), valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P95Latency)),
+		labelStyle.Render("P99:"), valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P99Latency)),
 		"")
 
 	header := titleStyle.Render("Gopher Glide (GG) -  Load Test")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -56,6 +57,8 @@ type Engine struct {
 	endTime    time.Time
 	targetRPS  int
 	activeVPU  atomic.Int32
+	latencies  []float64
+	latencyMu  sync.RWMutex
 }
 
 func New() *Engine {
@@ -79,6 +82,7 @@ func (e *Engine) Run(ctx context.Context, targetRPS int, duration time.Duration,
 	e.isRunning.Store(true)
 	e.targetRPS = targetRPS
 	e.startTime = time.Now()
+	e.latencies = make([]float64, 0, 1024)
 	defer func() {
 		e.endTime = time.Now()
 		e.isRunning.Store(false)
@@ -139,7 +143,11 @@ func (e *Engine) Run(ctx context.Context, targetRPS int, duration time.Duration,
 func (e *Engine) executeRequest(ctx context.Context, url string) error {
 	start := time.Now()
 	defer func() {
-		e.metrics.totalLatency.Add(time.Since(start).Milliseconds())
+		ms := float64(time.Since(start).Milliseconds())
+		e.metrics.totalLatency.Add(int64(ms))
+		e.latencyMu.Lock()
+		e.latencies = append(e.latencies, ms)
+		e.latencyMu.Unlock()
 	}()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -177,6 +185,44 @@ func (e *Engine) executeRequest(ctx context.Context, url string) error {
 
 }
 
+func (e *Engine) computeLatency() (min, max, p50, p95, p99 float64) {
+	e.latencyMu.RLock()
+	if len(e.latencies) == 0 {
+		e.latencyMu.RUnlock()
+		return
+	}
+
+	data := make([]float64, len(e.latencies))
+	copy(data, e.latencies)
+	e.latencyMu.RUnlock()
+
+	sort.Float64s(data)
+	n := len(data)
+
+	min = data[0]
+	max = data[n-1]
+	p50 = percentile(data, 50)
+	p95 = percentile(data, 95)
+	p99 = percentile(data, 99)
+	return
+}
+
+func percentile(data []float64, p float64) float64 {
+	if len(data) == 0 {
+		return 0
+	}
+
+	idx := (p / 100) * float64(len(data)-1)
+	lower := int(idx)
+	upper := lower + 1
+	if upper >= len(data) {
+		return data[lower]
+	}
+
+	frac := idx - float64(lower)
+	return data[lower] + frac*(data[upper]-data[lower])
+}
+
 func (e *Engine) GetMetrics() *MetricsSnapshot {
 	total := e.metrics.totalRequests.Load()
 	success := e.metrics.successCount.Load()
@@ -206,6 +252,8 @@ func (e *Engine) GetMetrics() *MetricsSnapshot {
 		}
 	}
 
+	minL, maxL, p50, p95, p99 := e.computeLatency()
+
 	return &MetricsSnapshot{
 		TotalRequests: total,
 		SuccessCount:  success,
@@ -215,8 +263,12 @@ func (e *Engine) GetMetrics() *MetricsSnapshot {
 		Throughput:    throughput,
 		ActiveVPUs:    int(e.activeVPU.Load()),
 		TargetRPS:     e.targetRPS,
-		//TODO: add more metrics as we move forward
-		MinLatency: 0, MaxLatency: 0, P50Latency: 0, P95Latency: 0, P99Latency: 0, CurrentVPUs: 0,
+		MinLatency:    minL,
+		MaxLatency:    maxL,
+		P50Latency:    p50,
+		P95Latency:    p95,
+		P99Latency:    p99,
+		CurrentVPUs:   0,
 	}
 }
 
