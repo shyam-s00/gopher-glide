@@ -1,0 +1,163 @@
+name: Release
+
+# Triggers on a pushed version tag, e.g. v1.0.0, v1.2.3-beta
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write   # needed to create a GitHub Release and upload assets
+
+jobs:
+  build:
+    name: Build — ${{ matrix.os_label }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      matrix:
+        include:
+          - os_label:  linux-amd64
+            runner:    ubuntu-latest
+            goos:      linux
+            goarch:    amd64
+            ext:       ""
+            archive:   tar
+
+          - os_label:  linux-arm64
+            runner:    ubuntu-latest
+            goos:      linux
+            goarch:    arm64
+            ext:       ""
+            archive:   tar
+
+          - os_label:  darwin-amd64
+            runner:    macos-latest
+            goos:      darwin
+            goarch:    amd64
+            ext:       ""
+            archive:   tar
+
+          - os_label:  darwin-arm64
+            runner:    macos-latest
+            goos:      darwin
+            goarch:    arm64
+            ext:       ""
+            archive:   tar
+
+          - os_label:  windows-amd64
+            runner:    windows-latest
+            goos:      windows
+            goarch:    amd64
+            ext:       ".exe"
+            archive:   zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so git describe works for version
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Resolve version metadata
+        id: meta
+        shell: bash
+        run: |
+          VERSION="${{ github.ref_name }}"
+          COMMIT=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          PACKAGE_NAME="gg-${VERSION}-${{ matrix.os_label }}"
+          echo "version=${VERSION}"        >> $GITHUB_OUTPUT
+          echo "commit=${COMMIT}"          >> $GITHUB_OUTPUT
+          echo "build_date=${BUILD_DATE}"  >> $GITHUB_OUTPUT
+          echo "package=${PACKAGE_NAME}"   >> $GITHUB_OUTPUT
+
+      - name: Build binary
+        env:
+          GOOS:   ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        shell: bash
+        run: |
+          LDFLAGS="-s -w \
+            -X 'gopher-glide/internal/version.Version=${{ steps.meta.outputs.version }}' \
+            -X 'gopher-glide/internal/version.GitCommit=${{ steps.meta.outputs.commit }}' \
+            -X 'gopher-glide/internal/version.BuildDate=${{ steps.meta.outputs.build_date }}'"
+          go build -ldflags "${LDFLAGS}" -o "gg${{ matrix.ext }}" ./cmd/gg
+
+      # ── Unix: tar.gz ──────────────────────────────────────────────────────
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar'
+        shell: bash
+        run: |
+          PKG="${{ steps.meta.outputs.package }}"
+          mkdir -p "${PKG}"
+          cp gg "${PKG}/"
+          cp config.yaml request.http "${PKG}/"
+          tar -czf "${PKG}.tar.gz" "${PKG}"
+          echo "ASSET=${PKG}.tar.gz" >> $GITHUB_ENV
+
+      # ── Windows: zip ──────────────────────────────────────────────────────
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $PKG = "${{ steps.meta.outputs.package }}"
+          New-Item -ItemType Directory -Force -Path $PKG | Out-Null
+          Copy-Item "gg.exe"        "$PKG/"
+          Copy-Item "config.yaml"   "$PKG/"
+          Copy-Item "request.http"  "$PKG/"
+          Compress-Archive -Path "$PKG" -DestinationPath "$PKG.zip"
+          "ASSET=$PKG.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.package }}
+          path: ${{ env.ASSET }}
+          retention-days: 1
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List assets
+        run: ls -lh artifacts/
+
+      - name: Create Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   ${{ github.ref_name }}
+          name:       "gg ${{ github.ref_name }}"
+          draft:      false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          body: |
+            ## gg (Gopher Glide) ${{ github.ref_name }}
+
+            ### What's included in each package
+            | File | Purpose |
+            |---|---|
+            | `gg` / `gg.exe` | Compiled binary |
+            | `config.yaml` | Default configuration — edit before running |
+            | `request.http` | Sample HTTP request definitions |
+
+            ### Quick start
+            ```bash
+            # Extract the archive for your platform, then:
+            ./gg config.yaml
+            ```
+          files: artifacts/*
+
