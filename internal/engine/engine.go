@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"gopher-glide/internal/httpreader"
 	"io"
 	"net/http"
 	"sort"
@@ -11,6 +12,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 )
+
+const userAgent = "gg/1.0"
 
 type Metrics struct {
 	totalRequests atomic.Int64
@@ -78,7 +81,11 @@ func New() *Engine {
 	}
 }
 
-func (e *Engine) Run(ctx context.Context, targetRPS int, duration time.Duration, url string) error {
+func (e *Engine) Run(ctx context.Context, targetRPS int, duration time.Duration, specs []httpreader.RequestSpec) error {
+	if len(specs) == 0 {
+		return ErrNoRequests
+	}
+
 	e.isRunning.Store(true)
 	e.targetRPS = targetRPS
 	e.startTime = time.Now()
@@ -92,13 +99,14 @@ func (e *Engine) Run(ctx context.Context, targetRPS int, duration time.Duration,
 	defer cancel()
 
 	g, gCtx := errgroup.WithContext(ctx)
-	worker := make(chan struct{}, targetRPS*2)
+	worker := make(chan httpreader.RequestSpec, targetRPS*2)
 
 	ticker := time.NewTicker(time.Second / time.Duration(targetRPS))
 	defer ticker.Stop()
 
-	//distributor
+	// distributor — emits one spec per ticker tick, round-robin across specs
 	g.Go(func() error {
+		idx := 0
 		for {
 			select {
 			case <-gCtx.Done():
@@ -106,26 +114,20 @@ func (e *Engine) Run(ctx context.Context, targetRPS int, duration time.Duration,
 				return nil
 			case <-ticker.C:
 				select {
-				case worker <- struct{}{}:
+				case worker <- specs[idx%len(specs)]:
+					idx++
 				default:
-					// is the channel full??
+					// channel full, drop tick
 				}
 			}
 		}
 	})
 
-	//worker pool
-	//workerPool := sync.Pool{
-	//	New: func() interface{} {
-	//		return &http.Client{}
-	//	},
-	//}
-
 	for i := 0; i < targetRPS; i++ {
 		g.Go(func() error {
-			for range worker {
+			for spec := range worker {
 				e.activeVPU.Add(1)
-				if err := e.executeRequest(gCtx, url); err != nil {
+				if err := e.executeRequest(gCtx, spec); err != nil {
 					e.metrics.failureCount.Add(1)
 				} else {
 					e.metrics.successCount.Add(1)
@@ -140,7 +142,7 @@ func (e *Engine) Run(ctx context.Context, targetRPS int, duration time.Duration,
 	return g.Wait()
 }
 
-func (e *Engine) executeRequest(ctx context.Context, url string) error {
+func (e *Engine) executeRequest(ctx context.Context, spec httpreader.RequestSpec) error {
 	start := time.Now()
 	defer func() {
 		ms := float64(time.Since(start).Milliseconds())
@@ -150,32 +152,34 @@ func (e *Engine) executeRequest(ctx context.Context, url string) error {
 		e.latencyMu.Unlock()
 	}()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := spec.ToHTTPRequest(nil)
 	if err != nil {
 		duration := time.Since(start)
-		e.logCall(http.MethodGet, url, 0, duration, err)
-		e.metrics.totalLatency.Add(duration.Milliseconds())
-		//e.metrics.totalRequests.Add(duration.Milliseconds())
+		e.logCall(spec.Method, spec.URL, 0, duration, err)
 		return err
 	}
+	req = req.WithContext(ctx)
+	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := e.client.Do(req)
 	duration := time.Since(start)
-	e.metrics.totalLatency.Add(duration.Milliseconds())
 
 	if err != nil {
-		e.logCall(http.MethodGet, url, 0, duration, err)
+		e.logCall(spec.Method, spec.URL, 0, duration, err)
 		return err
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
 	}(resp.Body)
 
+	// drain body so the connection can be reused
+	_, _ = io.Copy(io.Discard, resp.Body)
+
 	var callErr error
 	if resp.StatusCode >= 400 {
 		callErr = ErrHttpError
 	}
-	e.logCall(http.MethodGet, url, resp.StatusCode, duration, callErr)
+	e.logCall(spec.Method, spec.URL, resp.StatusCode, duration, callErr)
 
 	if resp.StatusCode >= 400 {
 		return ErrHttpError

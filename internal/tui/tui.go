@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"gopher-glide/internal/config"
 	"gopher-glide/internal/engine"
+	"gopher-glide/internal/httpreader"
 	"strings"
 	"time"
 
@@ -14,15 +15,15 @@ import (
 )
 
 type model struct {
-	logView viewport.Model
-	engine  *engine.Engine
-	config  *config.Config
-	metrics *engine.MetricsSnapshot
-	ctx     context.Context
-	cancel  context.CancelFunc
-	ready   bool
-	running bool
-	//startTime time.Time
+	logView      viewport.Model
+	engine       *engine.Engine
+	config       *config.Config
+	metrics      *engine.MetricsSnapshot
+	specs        []httpreader.RequestSpec
+	ctx          context.Context
+	cancel       context.CancelFunc
+	ready        bool
+	running      bool
 	width        int
 	height       int
 	showFailures bool
@@ -30,21 +31,20 @@ type model struct {
 
 type tickMsg time.Time
 
-func initialModel(eng *engine.Engine, cfg *config.Config) model {
+func initialModel(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpec) model {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	vp := viewport.New(0, 0)
 	vp.YPosition = 0
-	//vp.SetContent("Initializing ....")
 
 	return model{
-		engine:  eng,
-		config:  cfg,
-		metrics: &engine.MetricsSnapshot{},
-		ctx:     ctx,
-		cancel:  cancel,
-		running: false,
-		//startTime: time.Now(),
+		engine:       eng,
+		config:       cfg,
+		specs:        specs,
+		metrics:      &engine.MetricsSnapshot{},
+		ctx:          ctx,
+		cancel:       cancel,
+		running:      false,
 		showFailures: true,
 		logView:      vp,
 	}
@@ -52,11 +52,8 @@ func initialModel(eng *engine.Engine, cfg *config.Config) model {
 
 func (m model) Init() tea.Cmd {
 	go func() {
-		targetRPS := 300
-		duration := time.Second * 10
-		url := "https://httpbin.org/get"
-
-		_ = m.engine.Run(m.ctx, targetRPS, duration, url)
+		stage := m.config.Stages[0]
+		_ = m.engine.Run(m.ctx, stage.TargetRPS, stage.Duration, m.specs)
 	}()
 
 	return tea.Batch(tickCmd(), tea.EnterAltScreen)
@@ -142,7 +139,7 @@ func (m model) renderHeader() string {
 		labelStyle.Render("P99:"), valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P99Latency)),
 		"")
 
-	header := titleStyle.Render("Gopher Glide (GG) -  Load Test")
+	header := titleStyle.Render("Gopher Glide (GG)")
 	stats := lipgloss.JoinHorizontal(lipgloss.Top,
 		boxStyle.Render(configuration),
 		boxStyle.Render(throughput),
@@ -290,9 +287,9 @@ func (m model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, header, debugHeader, logBox)
 }
 
-func Start(eng *engine.Engine, cfg *config.Config) error {
+func Start(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpec) error {
 	p := tea.NewProgram(
-		initialModel(eng, cfg),
+		initialModel(eng, cfg, specs),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)

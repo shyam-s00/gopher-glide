@@ -1,0 +1,26 @@
+### Get Users
+GET https://httpbin.org/get
+Accept: application/json
+X-Request-ID: gg-001
+X-Client-Name: gg/1.0
+
+### Get Post by Query Param
+GET https://httpbin.org/get?userId=1
+Accept: application/json
+X-Request-ID: gg-002
+X-Client-Name: gg/1.0
+Cache-Control: no-cache
+
+### Create Post
+POST https://httpbin.org/post
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: gg-003
+X-Client-Name: gg/1.0
+
+{
+  "title": "Gopher Glide http engine",
+  "body": "Testing POST requests via gg HTTP engine",
+  "userId": 1
+}
+

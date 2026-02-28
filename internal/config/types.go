@@ -9,14 +9,15 @@ type Config struct {
 
 type Section struct {
 	HTTPFile       string  `yaml:"httpFile"`
+	HTTPFilePath   string  `yaml:"-"` // resolved absolute path, not from yaml
 	Prometheus     bool    `yaml:"prometheus"`
 	PrometheusPort int     `yaml:"prometheus_port"`
 	BreakerPct     float64 `yaml:"breaker_threshold_pct"`
 }
 
 type Stage struct {
-	Duration   time.Duration `yaml:"duration"`
-	TargetVPUs int           `yaml:"target_vpu"`
+	Duration  time.Duration `yaml:"duration"`
+	TargetRPS int           `yaml:"target_rps"`
 }
 
 func (c *Config) Validate() error {
@@ -37,8 +38,8 @@ func (c *Config) Validate() error {
 			return NewErrInvalidStageDuration(i)
 		}
 
-		if stage.TargetVPUs <= 0 {
-			return NewErrInvalidStageTargetVPU(i)
+		if stage.TargetRPS <= 0 {
+			return NewErrInvalidStageTargetRPS(i)
 		}
 	}
 

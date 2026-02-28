@@ -14,6 +14,6 @@ func NewErrInvalidStageDuration(index int) error {
 	return fmt.Errorf("stage %d: duration must be greater than 0", index)
 }
 
-func NewErrInvalidStageTargetVPU(index int) error {
-	return fmt.Errorf("stage %d: target_vpu must be greater than 0", index)
+func NewErrInvalidStageTargetRPS(index int) error {
+	return fmt.Errorf("stage %d: target_rps must be greater than 0", index)
 }
