@@ -6,11 +6,12 @@ import (
 	"gopher-glide/internal/engine"
 	"gopher-glide/internal/httpreader"
 	"gopher-glide/internal/tui"
+	"gopher-glide/internal/version"
 	"os"
 )
 
 func main() {
-	fmt.Println("Gopher-Glide (gg)")
+	fmt.Printf("gg (Gopher Glide) %s (commit:%s) built %s\n", version.Version, version.GitCommit, version.GetBuildDate())
 
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: gg <config-file>")
