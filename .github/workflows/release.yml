@@ -90,6 +90,16 @@ jobs:
             -X 'gopher-glide/internal/version.BuildDate=${{ steps.meta.outputs.build_date }}'"
           go build -ldflags "${LDFLAGS}" -o "gg${{ matrix.ext }}" ./cmd/gg
 
+      # ── macOS: ad-hoc code sign to satisfy Gatekeeper ────────────────────
+      # Ad-hoc signing (-) is free — no Apple Developer account needed.
+      # It removes the "Apple could not verify" block for unsigned binaries
+      # downloaded from the internet. Without this, macOS quarantines the
+      # binary and users must run: xattr -d com.apple.quarantine ./gg
+      - name: Ad-hoc codesign (macOS only)
+        if: matrix.goos == 'darwin'
+        shell: bash
+        run: codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime gg
+
       # ── Unix: tar.gz ──────────────────────────────────────────────────────
       - name: Package (tar.gz)
         if: matrix.archive == 'tar'
@@ -158,6 +168,14 @@ jobs:
             ```bash
             # Extract the archive for your platform, then:
             ./gg config.yaml
+            ```
+
+            ### macOS — "Apple could not verify" warning
+            The binary is **ad-hoc signed** (free signing, no Apple Developer account).
+            Most macOS systems will run it without any prompt.
+            If you still see a Gatekeeper warning, run once to clear the quarantine flag:
+            ```bash
+            xattr -d com.apple.quarantine ./gg
             ```
           files: artifacts/*
 

@@ -2,87 +2,96 @@
 ## Local build script. Mirrors exactly what the GHA release workflow does.
 ##
 ## Usage:
-##   make build          → build for current platform (dev build)
-##   make build-all      → cross-compile for linux/macos/windows
-##   make release        → build-all + package each platform into dist/
-##   make clean          → remove dist/ and local binary
-##   make run            → dev run using config.yaml
-##   make version        → print current version info
+##   make build              → build for current platform (dev build)
+##   make build-all          → cross-compile for all platforms into dist/
+##   make release            → build-all + package each into dist/
+##   make clean              → remove dist/ and local binary
+##   make run                → build and run with config.yaml
+##   make version            → print version info
 
 # ── Variables ─────────────────────────────────────────────────────────────────
-BINARY      := gg
-MODULE      := gopher-glide
-CMD         := ./cmd/gg
-DIST        := dist
+BINARY  := gg
+MODULE  := gopher-glide
+CMD     := ./cmd/gg
+DIST    := dist
+ASSETS  := config.yaml request.http
 
-VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-COMMIT      := $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
-BUILD_DATE  := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+# VERSION, GIT_COMMIT, BUILD_DATE can be overridden by env (GHA sets them).
+# Locally they are computed from git.
+VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "v0.1.0-dev")
+GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
+BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 LDFLAGS := -s -w \
   -X '$(MODULE)/internal/version.Version=$(VERSION)'      \
-  -X '$(MODULE)/internal/version.GitCommit=$(COMMIT)'     \
+  -X '$(MODULE)/internal/version.GitCommit=$(GIT_COMMIT)' \
   -X '$(MODULE)/internal/version.BuildDate=$(BUILD_DATE)'
-
-# Bundled assets copied into every release package
-ASSETS := config.yaml request.http
 
 # ── Targets ───────────────────────────────────────────────────────────────────
 
-.PHONY: all build build-all release clean run version
+.PHONY: all build build-all release clean run version \
+        build-linux-amd64 build-linux-arm64 \
+        build-darwin-amd64 build-darwin-arm64 \
+        build-windows-amd64
 
 all: build
 
-## build: compile for the current OS/ARCH (dev workflow)
+## build: compile for the current OS/ARCH
 build:
 	@echo "→ Building $(BINARY) ($(VERSION)) for current platform..."
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
 	@echo "✓ $(BINARY) ready"
 
-## build-all: cross-compile for all target platforms
+# ── Per-platform targets — called directly by GHA matrix build step ───────────
+
+build-linux-amd64:
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
+
+build-linux-arm64:
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
+
+build-darwin-amd64:
+	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
+	@codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime $(BINARY) 2>/dev/null || true
+
+build-darwin-arm64:
+	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
+	@codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime $(BINARY) 2>/dev/null || true
+
+build-windows-amd64:
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY).exe $(CMD)
+
+## build-all: cross-compile all platforms into dist/
 build-all:
 	@mkdir -p $(DIST)
-	@echo "→ linux/amd64"
-	GOOS=linux   GOARCH=amd64  go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-linux-amd64      $(CMD)
-	@echo "→ linux/arm64"
-	GOOS=linux   GOARCH=arm64  go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-linux-arm64      $(CMD)
-	@echo "→ darwin/amd64"
-	GOOS=darwin  GOARCH=amd64  go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-darwin-amd64     $(CMD)
-	@echo "→ darwin/arm64  (Apple Silicon)"
-	GOOS=darwin  GOARCH=arm64  go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-darwin-arm64     $(CMD)
-	@echo "→ windows/amd64"
-	GOOS=windows GOARCH=amd64  go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-windows-amd64.exe $(CMD)
+	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-linux-amd64       $(CMD)
+	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-linux-arm64       $(CMD)
+	GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-darwin-amd64      $(CMD)
+	@codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime $(DIST)/$(BINARY)-darwin-amd64 2>/dev/null || true
+	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-darwin-arm64      $(CMD)
+	@codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime $(DIST)/$(BINARY)-darwin-arm64 2>/dev/null || true
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-windows-amd64.exe $(CMD)
 	@echo "✓ All binaries in $(DIST)/"
 
-## release: build-all + package each platform (tar.gz for unix, zip for windows)
+## release: build-all + package each platform (tar.gz unix, zip windows)
 release: build-all
 	@echo "→ Packaging release archives..."
-	# linux/amd64
-	@mkdir -p $(DIST)/pkg/$(BINARY)-$(VERSION)-linux-amd64
-	@cp $(DIST)/$(BINARY)-linux-amd64      $(DIST)/pkg/$(BINARY)-$(VERSION)-linux-amd64/$(BINARY)
-	@cp $(ASSETS)                           $(DIST)/pkg/$(BINARY)-$(VERSION)-linux-amd64/
-	@tar -czf $(DIST)/$(BINARY)-$(VERSION)-linux-amd64.tar.gz   -C $(DIST)/pkg $(BINARY)-$(VERSION)-linux-amd64
-	# linux/arm64
-	@mkdir -p $(DIST)/pkg/$(BINARY)-$(VERSION)-linux-arm64
-	@cp $(DIST)/$(BINARY)-linux-arm64      $(DIST)/pkg/$(BINARY)-$(VERSION)-linux-arm64/$(BINARY)
-	@cp $(ASSETS)                           $(DIST)/pkg/$(BINARY)-$(VERSION)-linux-arm64/
-	@tar -czf $(DIST)/$(BINARY)-$(VERSION)-linux-arm64.tar.gz   -C $(DIST)/pkg $(BINARY)-$(VERSION)-linux-arm64
-	# darwin/amd64
-	@mkdir -p $(DIST)/pkg/$(BINARY)-$(VERSION)-darwin-amd64
-	@cp $(DIST)/$(BINARY)-darwin-amd64     $(DIST)/pkg/$(BINARY)-$(VERSION)-darwin-amd64/$(BINARY)
-	@cp $(ASSETS)                           $(DIST)/pkg/$(BINARY)-$(VERSION)-darwin-amd64/
-	@tar -czf $(DIST)/$(BINARY)-$(VERSION)-darwin-amd64.tar.gz  -C $(DIST)/pkg $(BINARY)-$(VERSION)-darwin-amd64
-	# darwin/arm64
-	@mkdir -p $(DIST)/pkg/$(BINARY)-$(VERSION)-darwin-arm64
-	@cp $(DIST)/$(BINARY)-darwin-arm64     $(DIST)/pkg/$(BINARY)-$(VERSION)-darwin-arm64/$(BINARY)
-	@cp $(ASSETS)                           $(DIST)/pkg/$(BINARY)-$(VERSION)-darwin-arm64/
-	@tar -czf $(DIST)/$(BINARY)-$(VERSION)-darwin-arm64.tar.gz  -C $(DIST)/pkg $(BINARY)-$(VERSION)-darwin-arm64
-	# windows/amd64
-	@mkdir -p $(DIST)/pkg/$(BINARY)-$(VERSION)-windows-amd64
-	@cp $(DIST)/$(BINARY)-windows-amd64.exe $(DIST)/pkg/$(BINARY)-$(VERSION)-windows-amd64/$(BINARY).exe
-	@cp $(ASSETS)                            $(DIST)/pkg/$(BINARY)-$(VERSION)-windows-amd64/
-	@cd $(DIST)/pkg && zip -r ../$(BINARY)-$(VERSION)-windows-amd64.zip $(BINARY)-$(VERSION)-windows-amd64
-	@rm -rf $(DIST)/pkg
+	@for plat in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do \
+		PKG="$(DIST)/$(BINARY)-$(VERSION)-$$plat"; \
+		mkdir -p "$$PKG"; \
+		cp "$(DIST)/$(BINARY)-$$plat" "$$PKG/$(BINARY)"; \
+		cp $(ASSETS) "$$PKG/"; \
+		tar -czf "$$PKG.tar.gz" -C $(DIST) "$(BINARY)-$(VERSION)-$$plat"; \
+		rm -rf "$$PKG"; \
+		echo "  ✓ $$PKG.tar.gz"; \
+	done
+	@PKG="$(DIST)/$(BINARY)-$(VERSION)-windows-amd64"; \
+		mkdir -p "$$PKG"; \
+		cp "$(DIST)/$(BINARY)-windows-amd64.exe" "$$PKG/$(BINARY).exe"; \
+		cp $(ASSETS) "$$PKG/"; \
+		cd $(DIST) && zip -r "$(BINARY)-$(VERSION)-windows-amd64.zip" "$(BINARY)-$(VERSION)-windows-amd64" && cd ..; \
+		rm -rf "$$PKG"; \
+		echo "  ✓ $$PKG.zip"
 	@echo "✓ Release packages:"
 	@ls -lh $(DIST)/*.tar.gz $(DIST)/*.zip 2>/dev/null
 
@@ -95,9 +104,8 @@ clean:
 run: build
 	@./$(BINARY) config.yaml
 
-## version: show version info that would be embedded in the binary
+## version: show what gets embedded in the binary
 version:
 	@echo "Version:    $(VERSION)"
-	@echo "Commit:     $(COMMIT)"
-	@echo "Build date: $(BUILD_DATE)"
-
+	@echo "GitCommit:  $(GIT_COMMIT)"
+	@echo "BuildDate:  $(BUILD_DATE)"
