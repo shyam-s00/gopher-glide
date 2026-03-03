@@ -42,3 +42,4 @@ jobs:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: shyam-s00/gopher-glide
+          codecov_yml_path: .github/codecov.yml

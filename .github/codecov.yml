@@ -1,0 +1,19 @@
+coverage:
+  status:
+    project:
+      default:
+        # Don't fail if there is no base report to compare against
+        informational: true
+    patch:
+      default:
+        # Don't fail PR checks if there is no base report to diff against
+        informational: true
+
+comment:
+  # Post a PR comment with coverage details
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: false
+  require_base: false       # don't require a base report to post a comment
+  require_head: true
+
