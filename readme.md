@@ -29,7 +29,7 @@ A lightweight, terminal-based HTTP load testing tool built in Go. `gg` reads you
 
 ### 1. Download the latest release
 
-Go to the [Releases](https://github.com/shyam-s00/gopher-gun/releases) page and download the archive for your platform:
+Go to the [Releases](https://github.com/shyam-s00/gopher-glide/releases) page and download the archive for your platform:
 
 | Platform | Archive |
 |---|---|
