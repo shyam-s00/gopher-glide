@@ -2,8 +2,10 @@ package engine
 
 import (
 	"context"
+	"gopher-glide/internal/config"
 	"gopher-glide/internal/httpreader"
 	"io"
+	"math/rand"
 	"net/http"
 	"sort"
 	"sync"
@@ -22,6 +24,54 @@ type Metrics struct {
 	totalLatency  atomic.Int64
 }
 
+// rpsWindow is a fixed-size ring of per-second request counts used to
+// compute a smooth, responsive current-RPS without any cumulative lag.
+const rpsWindowSize = 3 // seconds to average over — short enough to be responsive
+
+type rpsWindow struct {
+	mu      sync.Mutex
+	buckets [rpsWindowSize]int64
+	seconds [rpsWindowSize]int64 // unix second each bucket belongs to
+}
+
+func (w *rpsWindow) record(count int64) {
+	now := time.Now().Unix()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	slot := int(now % rpsWindowSize)
+	if w.seconds[slot] != now {
+		w.seconds[slot] = now
+		w.buckets[slot] = 0
+	}
+	w.buckets[slot] += count
+}
+
+// rate returns the request rate over the past rpsWindowSize seconds.
+// It always divides by the full window width so there is no oscillation at
+// second boundaries — only complete past seconds count (current second is
+// excluded because it is still accumulating).
+func (w *rpsWindow) rate() float64 {
+	now := time.Now().Unix()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	var total int64
+	// Sum the (rpsWindowSize - 1) fully-completed seconds before now.
+	// Skipping "now" avoids a partial-second low reading at the boundary.
+	for i := 0; i < rpsWindowSize; i++ {
+		age := now - w.seconds[i]
+		if age >= 1 && age < rpsWindowSize {
+			total += w.buckets[i]
+		}
+	}
+	// Divide by the number of complete seconds we looked at.
+	windowSecs := float64(rpsWindowSize - 1)
+	if windowSecs < 1 {
+		windowSecs = 1
+	}
+	return float64(total) / windowSecs
+}
+
 type MetricsSnapshot struct {
 	TotalRequests int64
 	SuccessCount  int64
@@ -37,6 +87,9 @@ type MetricsSnapshot struct {
 	Throughput    float64
 	ErrorRate     float64
 	TargetRPS     int
+	// Stage progress — updated by RunStages
+	CurrentStage int
+	TotalStages  int
 }
 
 type CallLog struct {
@@ -52,16 +105,25 @@ type Engine struct {
 	client     *http.Client
 	metrics    *Metrics
 	isRunning  atomic.Bool
-	callLogs   []*CallLog // ring buffer of all requests
-	errorLogs  []*CallLog // ring buffer of error requests — shares the same *CallLog pointers, no duplication
+	callLogs   []*CallLog
+	errorLogs  []*CallLog
 	callLogsMu sync.RWMutex
 	maxLogs    int
 	startTime  time.Time
 	endTime    time.Time
-	targetRPS  int
-	activeVPU  atomic.Int32
-	latencies  []float64
-	latencyMu  sync.RWMutex
+
+	// targetRPS is written by the stage-runner and read by GetMetrics – use atomic.
+	targetRPS atomic.Int64
+	activeVPU atomic.Int32
+	latencies []float64
+	latencyMu sync.RWMutex
+
+	// rpsWin gives a responsive current-rate without cumulative lag.
+	rpsWin rpsWindow
+
+	// stage progress (written by stage-runner goroutine, read by TUI)
+	currentStage atomic.Int32
+	totalStages  atomic.Int32
 }
 
 func New() *Engine {
@@ -81,51 +143,50 @@ func New() *Engine {
 	}
 }
 
-func (e *Engine) Run(ctx context.Context, targetRPS int, duration time.Duration, specs []httpreader.RequestSpec) error {
+// SetTargetRPS allows live override (Director Mode – Phase 3).
+func (e *Engine) SetTargetRPS(rps int) {
+	e.targetRPS.Store(int64(rps))
+}
+
+// RunStages runs all configured stages sequentially, updating the ticker
+// between stages so the engine follows the full plan.
+func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []httpreader.RequestSpec) error {
 	if len(specs) == 0 {
 		return ErrNoRequests
 	}
+	if len(cfg.Stages) == 0 {
+		return ErrNoRequests
+	}
+
+	timeScale := cfg.ConfigSection.TimeScale
+	if timeScale <= 0 {
+		timeScale = 1.0
+	}
+	jitter := cfg.ConfigSection.Jitter // 0 = no jitter
 
 	e.isRunning.Store(true)
-	e.targetRPS = targetRPS
 	e.startTime = time.Now()
 	e.latencies = make([]float64, 0, 1024)
+	e.totalStages.Store(int32(len(cfg.Stages)))
 	defer func() {
 		e.endTime = time.Now()
 		e.isRunning.Store(false)
 	}()
 
-	ctx, cancel := context.WithTimeout(ctx, duration)
-	defer cancel()
+	// ── worker pool ───────────────────────────────────────────────────────
+	// We size the pool generously so it can handle the peak RPS across all stages.
+	peakRPS := cfg.PeakRPS()
+	if peakRPS < 1 {
+		peakRPS = 1
+	}
 
 	g, gCtx := errgroup.WithContext(ctx)
-	worker := make(chan httpreader.RequestSpec, targetRPS*2)
+	work := make(chan httpreader.RequestSpec, peakRPS*2)
 
-	ticker := time.NewTicker(time.Second / time.Duration(targetRPS))
-	defer ticker.Stop()
-
-	// distributor — emits one spec per ticker tick, round-robin across specs
-	g.Go(func() error {
-		idx := 0
-		for {
-			select {
-			case <-gCtx.Done():
-				close(worker)
-				return nil
-			case <-ticker.C:
-				select {
-				case worker <- specs[idx%len(specs)]:
-					idx++
-				default:
-					// channel full, drop tick
-				}
-			}
-		}
-	})
-
-	for i := 0; i < targetRPS; i++ {
+	// Spawn workers equal to peak RPS so the pool never starves.
+	for i := 0; i < peakRPS; i++ {
 		g.Go(func() error {
-			for spec := range worker {
+			for spec := range work {
 				e.activeVPU.Add(1)
 				if err := e.executeRequest(gCtx, spec); err != nil {
 					e.metrics.failureCount.Add(1)
@@ -133,13 +194,109 @@ func (e *Engine) Run(ctx context.Context, targetRPS int, duration time.Duration,
 					e.metrics.successCount.Add(1)
 				}
 				e.metrics.totalRequests.Add(1)
+				e.rpsWin.record(1)
 				e.activeVPU.Add(-1)
 			}
 			return nil
 		})
 	}
 
+	// ── stage runner ──────────────────────────────────────────────────────
+	// Runs in its own goroutine so it can block on each stage duration while
+	// the workers above consume from the shared channel.
+	g.Go(func() error {
+		defer close(work) // signals all workers to exit when stages are done
+
+		idx := 0 // round-robin across specs
+
+		for stageIdx, stage := range cfg.Stages {
+			// Skip zero-duration stages (instant jumps – just update RPS target).
+			if stage.Duration == 0 {
+				e.targetRPS.Store(int64(stage.TargetRPS))
+				e.currentStage.Store(int32(stageIdx))
+				continue
+			}
+
+			// Scale the duration by TimeScale.
+			scaledDur := time.Duration(float64(stage.Duration) / timeScale)
+
+			e.targetRPS.Store(int64(stage.TargetRPS))
+			e.currentStage.Store(int32(stageIdx))
+
+			// Build a precise ticker for this stage.
+			// We track the ideal fire time and sleep to it, which eliminates
+			// drift accumulation. Jitter is applied as a ±fraction of the
+			// base interval but clamped so we never skip more than one tick.
+			baseInterval := time.Second / time.Duration(stage.TargetRPS)
+			if baseInterval < time.Millisecond {
+				baseInterval = time.Millisecond
+			}
+
+			stageEnd := time.Now().Add(scaledDur)
+			nextFire := time.Now().Add(baseInterval)
+
+			for {
+				if gCtx.Err() != nil {
+					return nil
+				}
+				if time.Now().After(stageEnd) {
+					break
+				}
+
+				rps := float64(stage.TargetRPS)
+				if rps < 1 {
+					select {
+					case <-gCtx.Done():
+						return nil
+					case <-time.After(100 * time.Millisecond):
+					}
+					continue
+				}
+
+				// Sleep until the next scheduled fire time.
+				sleepFor := time.Until(nextFire)
+				if sleepFor > 0 {
+					timer := time.NewTimer(sleepFor)
+					select {
+					case <-gCtx.Done():
+						timer.Stop()
+						return nil
+					case <-timer.C:
+					}
+				}
+
+				// Advance ideal next-fire time by exactly one interval,
+				// then add a small jitter offset (±jitter/2 of interval).
+				// Using the ideal time as the base prevents drift accumulation.
+				jitterOffset := time.Duration(0)
+				if jitter > 0 {
+					// ±(jitter/2) so that on average the rate is unchanged.
+					jitterOffset = time.Duration(float64(baseInterval) * jitter * (rand.Float64() - 0.5))
+				}
+				nextFire = nextFire.Add(baseInterval + jitterOffset)
+
+				// Emit work (non-blocking — drop if workers are saturated).
+				select {
+				case work <- specs[idx%len(specs)]:
+					idx++
+				default:
+				}
+			}
+		}
+		return nil
+	})
+
 	return g.Wait()
+}
+
+// Run is kept for backward-compatibility (single stage).
+func (e *Engine) Run(ctx context.Context, targetRPS int, duration time.Duration, specs []httpreader.RequestSpec) error {
+	stageCfg := &config.Config{
+		Stages: []config.Stage{
+			{Duration: duration, TargetRPS: targetRPS},
+		},
+	}
+	return e.RunStages(ctx, stageCfg, specs)
 }
 
 func (e *Engine) executeRequest(ctx context.Context, spec httpreader.RequestSpec) error {
@@ -184,9 +341,7 @@ func (e *Engine) executeRequest(ctx context.Context, spec httpreader.RequestSpec
 	if resp.StatusCode >= 400 {
 		return ErrHttpError
 	}
-
 	return nil
-
 }
 
 func (e *Engine) computeLatency() (min, max, p50, p95, p99 float64) {
@@ -195,14 +350,12 @@ func (e *Engine) computeLatency() (min, max, p50, p95, p99 float64) {
 		e.latencyMu.RUnlock()
 		return
 	}
-
 	data := make([]float64, len(e.latencies))
 	copy(data, e.latencies)
 	e.latencyMu.RUnlock()
 
 	sort.Float64s(data)
 	n := len(data)
-
 	min = data[0]
 	max = data[n-1]
 	p50 = percentile(data, 50)
@@ -215,14 +368,12 @@ func percentile(data []float64, p float64) float64 {
 	if len(data) == 0 {
 		return 0
 	}
-
 	idx := (p / 100) * float64(len(data)-1)
 	lower := int(idx)
 	upper := lower + 1
 	if upper >= len(data) {
 		return data[lower]
 	}
-
 	frac := idx - float64(lower)
 	return data[lower] + frac*(data[upper]-data[lower])
 }
@@ -242,19 +393,9 @@ func (e *Engine) GetMetrics() *MetricsSnapshot {
 		errorRate = float64(failed) / float64(total)
 	}
 
-	var throughput float64
-	if !e.startTime.IsZero() { //started and startTime is set now
-		var elapsed float64
-		if e.endTime.IsZero() {
-			elapsed = time.Since(e.startTime).Seconds() // we are still running
-		} else {
-			elapsed = e.endTime.Sub(e.startTime).Seconds() // stopped
-		}
-
-		if elapsed > 0 {
-			throughput = float64(total) / elapsed
-		}
-	}
+	// Use the sliding-window rate for a responsive current-RPS display.
+	// Falls back to 0 when the engine hasn't started yet.
+	throughput := e.rpsWin.rate()
 
 	minL, maxL, p50, p95, p99 := e.computeLatency()
 
@@ -266,13 +407,15 @@ func (e *Engine) GetMetrics() *MetricsSnapshot {
 		ErrorRate:     errorRate,
 		Throughput:    throughput,
 		ActiveVPUs:    int(e.activeVPU.Load()),
-		TargetRPS:     e.targetRPS,
+		TargetRPS:     int(e.targetRPS.Load()),
 		MinLatency:    minL,
 		MaxLatency:    maxL,
 		P50Latency:    p50,
 		P95Latency:    p95,
 		P99Latency:    p99,
 		CurrentVPUs:   0,
+		CurrentStage:  int(e.currentStage.Load()),
+		TotalStages:   int(e.totalStages.Load()),
 	}
 }
 
@@ -295,13 +438,11 @@ func (e *Engine) logCall(method, url string, statusCode int, duration time.Durat
 	e.callLogsMu.Lock()
 	defer e.callLogsMu.Unlock()
 
-	// append to the all-requests ring buffer
 	e.callLogs = append(e.callLogs, entry)
 	if len(e.callLogs) > e.maxLogs {
 		e.callLogs = e.callLogs[len(e.callLogs)-e.maxLogs:]
 	}
 
-	// errors share the same pointer — zero extra allocation
 	if entry.Error != "" || entry.StatusCode >= 400 {
 		e.errorLogs = append(e.errorLogs, entry)
 		if len(e.errorLogs) > e.maxLogs {
@@ -310,8 +451,6 @@ func (e *Engine) logCall(method, url string, statusCode int, duration time.Durat
 	}
 }
 
-// getRecentFromBuffer returns the most recent `count` entries from buffer.
-// Must be called with callLogsMu held (at least read-locked).
 func (e *Engine) getRecentFromBuffer(buffer []*CallLog, count int) []CallLog {
 	if count > len(buffer) {
 		count = len(buffer)
@@ -319,11 +458,10 @@ func (e *Engine) getRecentFromBuffer(buffer []*CallLog, count int) []CallLog {
 	if count == 0 {
 		return []CallLog{}
 	}
-
 	src := buffer[len(buffer)-count:]
 	logs := make([]CallLog, count)
 	for i, p := range src {
-		logs[i] = *p // copy value out so the caller has no shared pointer
+		logs[i] = *p
 	}
 	return logs
 }
@@ -331,17 +469,12 @@ func (e *Engine) getRecentFromBuffer(buffer []*CallLog, count int) []CallLog {
 func (e *Engine) GetRecentLogs(count int) []CallLog {
 	e.callLogsMu.RLock()
 	defer e.callLogsMu.RUnlock()
-
 	return e.getRecentFromBuffer(e.callLogs, count)
 }
 
-// GetRecentErrorLogs returns the most recent error-only entries from a dedicated
-// ring buffer. Each entry is a pointer-shared copy of the same *CallLog already
-// in callLogs — no duplicate heap allocation.
 func (e *Engine) GetRecentErrorLogs(count int) []CallLog {
 	e.callLogsMu.RLock()
 	defer e.callLogsMu.RUnlock()
-
 	return e.getRecentFromBuffer(e.errorLogs, count)
 }
 
@@ -349,11 +482,8 @@ func (e *Engine) GetElapsedTime() float64 {
 	if e.startTime.IsZero() {
 		return 0
 	}
-
 	if e.endTime.IsZero() {
-		// still running
 		return time.Since(e.startTime).Seconds()
 	}
-	//stopped
 	return e.endTime.Sub(e.startTime).Seconds()
 }

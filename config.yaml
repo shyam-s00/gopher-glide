@@ -19,17 +19,17 @@ stages:
     target_rps: 75
 
   # 2. Sustain — hold at 50 RPS for 1 minute
-  - duration: 1m
-    target_rps: 50
+  - duration: 30s
+    target_rps: 500
 
   # 3. Spike — jump instantly to 200 RPS (duration: 0 = step function)
-  - duration: 0s
-    target_rps: 200
+  - duration: 10s
+    target_rps: 100
 
   # 4. Hold Spike — sustain the spike load for 10 seconds
   - duration: 10s
-    target_rps: 200
+    target_rps: 650
 
   # 5. Ramp Down — 200 → 0 RPS over 30 seconds (cool-down)
-  - duration: 30s
-    target_rps: 0
+  - duration: 20s
+    target_rps: 10

@@ -6,7 +6,6 @@ import (
 	"gopher-glide/internal/config"
 	"gopher-glide/internal/engine"
 	"gopher-glide/internal/httpreader"
-	"math"
 	"strings"
 	"time"
 
@@ -61,8 +60,7 @@ func initialModel(eng *engine.Engine, cfg *config.Config, specs []httpreader.Req
 
 func (m model) Init() tea.Cmd {
 	go func() {
-		stage := m.config.Stages[0]
-		_ = m.engine.Run(m.ctx, stage.TargetRPS, stage.Duration, m.specs)
+		_ = m.engine.RunStages(m.ctx, m.config, m.specs)
 	}()
 
 	return tea.Batch(tickCmd(), tea.EnterAltScreen)
@@ -175,44 +173,38 @@ func (m model) renderHeader() string {
 
 // ── renderTimeline ────────────────────────────────────────────────────────────
 
-// renderTimeline draws an ASCII chart of the full stage plan and a cursor
-// showing the current position in the plan.
-//
-// Example output (width=60):
-//
-//	STAGE PLAN ─────────────────────────────────────────────
-//	 200 │         ╭────────╮
-//	 100 │    ╱────╯        ╰──────╮
-//	   0 │───╯                     ╰───
-//	     └───────────────────────────────
-//	       ▲
-//	       NOW
-//	[2/5] Sustain  •  stage 18s / 1m0s  •  total 48s / 2m10s
 func (m model) renderTimeline() string {
 	stages := m.config.Stages
 	if len(stages) == 0 {
 		return ""
 	}
 
+	// ── styles ────────────────────────────────────────────────────
 	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Bold(true)
+	pastStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4"))
+	futureStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#555555"))
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD700")).Bold(true)
-	pauseStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87")).Bold(true)
+	actualStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
+	gapStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#333333"))
+	overshootStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87"))
+	targetLiveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CCBBFF")).Bold(true)
 
-	// ── chart geometry ───────────────────────────────────────────
-	chartWidth := m.width - 12 // leave room for y-axis labels + borders
+	// ── geometry ──────────────────────────────────────────────────
+	// yAxisWidth(5) + "│"(1) + chartWidth + border/padding(~6)
+	const yAxisWidth = 5
+	const chartHeight = 10
+	chartWidth := m.width - yAxisWidth - 1 - 6
 	if chartWidth < 20 {
 		chartWidth = 20
 	}
-	chartHeight := 5 // number of rows for the RPS curve
 
 	peakRPS := m.config.PeakRPS()
-	if peakRPS == 0 {
-		peakRPS = 1 // guard divide-by-zero
+	if peakRPS < 1 {
+		peakRPS = 1
 	}
 
-	// Total plan duration (unscaled — we show real wall-clock shape)
+	// ── total duration (skip zero-duration spike stages in time budget) ──
 	totalDur := time.Duration(0)
 	for _, s := range stages {
 		totalDur += s.Duration
@@ -221,108 +213,174 @@ func (m model) renderTimeline() string {
 		totalDur = 1
 	}
 
-	// ── build RPS curve: sample chartWidth points ─────────────────
-	// For each x column, compute what the RPS would be at that time
-	// using linear interpolation (lerp) between stage boundaries.
+	// ── rpsAt: step function matching what the engine actually does ───────
+	// Each stage holds its target_rps for its full duration.
+	// Zero-duration stages are instant jumps (spike) with no time width.
 	rpsAt := func(t time.Duration) float64 {
-		elapsed := time.Duration(0)
-		prevRPS := 0.0
+		acc := time.Duration(0)
 		for _, s := range stages {
-			stageEnd := elapsed + s.Duration
 			if s.Duration == 0 {
-				// instant spike — skip to target immediately
-				prevRPS = float64(s.TargetRPS)
-				continue
+				continue // spike: no time width, skip
 			}
-			if t <= stageEnd {
-				// t falls inside this stage — lerp
-				progress := float64(t-elapsed) / float64(s.Duration)
-				return prevRPS + (float64(s.TargetRPS)-prevRPS)*progress
+			end := acc + s.Duration
+			if t < end {
+				return float64(s.TargetRPS)
 			}
-			elapsed = stageEnd
-			prevRPS = float64(s.TargetRPS)
+			acc = end
 		}
-		return prevRPS
+		// past the end — return last stage's target
+		for i := len(stages) - 1; i >= 0; i-- {
+			if stages[i].Duration > 0 {
+				return float64(stages[i].TargetRPS)
+			}
+		}
+		return 0
 	}
 
+	// ── sample the plan curve into chartWidth columns ─────────────────────
 	curve := make([]float64, chartWidth)
 	for x := 0; x < chartWidth; x++ {
-		t := time.Duration(float64(totalDur) * float64(x) / float64(chartWidth-1))
+		t := time.Duration(float64(totalDur) * float64(x) / float64(chartWidth))
 		curve[x] = rpsAt(t)
 	}
 
-	// ── render the grid ───────────────────────────────────────────
-	// grid[row][col] — row 0 = top (peakRPS), row chartHeight-1 = bottom (0)
-	grid := make([][]rune, chartHeight)
-	for r := range grid {
-		grid[r] = make([]rune, chartWidth)
-		for c := range grid[r] {
-			grid[r][c] = ' '
-		}
-	}
-
-	// Plot curve points; connect consecutive columns with box-drawing chars.
-	colToRow := func(rps float64) int {
-		row := int(math.Round(float64(chartHeight-1) * (1.0 - rps/float64(peakRPS))))
-		if row < 0 {
-			row = 0
-		}
-		if row >= chartHeight {
-			row = chartHeight - 1
-		}
-		return row
-	}
-
-	for x := 0; x < chartWidth; x++ {
-		r := colToRow(curve[x])
-		if x == 0 {
-			grid[r][x] = '─'
-			continue
-		}
-		prev := colToRow(curve[x-1])
-		switch {
-		case prev == r:
-			grid[r][x] = '─'
-		case prev > r: // going up
-			grid[r][x] = '╭'
-			for fill := r + 1; fill < prev; fill++ {
-				grid[fill][x] = '│'
+	// ── stage boundary columns ────────────────────────────────────────────
+	boundaryCol := make(map[int]bool)
+	{
+		acc := time.Duration(0)
+		for i, s := range stages {
+			if s.Duration == 0 {
+				continue
 			}
-			grid[prev][x] = '╯'
-		default: // going down
-			grid[prev][x] = '╮'
-			for fill := prev + 1; fill < r; fill++ {
-				grid[fill][x] = '│'
+			acc += s.Duration
+			if i < len(stages)-1 {
+				bx := int(float64(chartWidth) * float64(acc) / float64(totalDur))
+				if bx > 0 && bx < chartWidth {
+					boundaryCol[bx] = true
+				}
 			}
-			grid[r][x] = '╰'
 		}
 	}
 
-	// ── cursor column ─────────────────────────────────────────────
-	// totalElapsed = sum of completed stages + stageElapsed in current stage
+	// ── cursor position ───────────────────────────────────────────────────
 	totalElapsed := time.Duration(0)
 	for i := 0; i < m.currentStage && i < len(stages); i++ {
 		totalElapsed += stages[i].Duration
 	}
 	totalElapsed += m.stageElapsed
 
-	cursorX := 0
-	if totalDur > 0 {
-		cursorX = int(float64(chartWidth-1) * float64(totalElapsed) / float64(totalDur))
+	cursorX := int(float64(chartWidth) * float64(totalElapsed) / float64(totalDur))
+	if cursorX < 0 {
+		cursorX = 0
 	}
 	if cursorX >= chartWidth {
 		cursorX = chartWidth - 1
 	}
 
-	// ── assemble chart rows ───────────────────────────────────────
-	yAxisWidth := 5
+	// ── height helpers ────────────────────────────────────────────────────
+	blocks := []rune{' ', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
+
+	blockChar := func(h, rowBase float64) rune {
+		if h >= rowBase+1.0 {
+			return '█'
+		}
+		if h <= rowBase {
+			return ' '
+		}
+		idx := int((h - rowBase) * float64(len(blocks)))
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= len(blocks) {
+			idx = len(blocks) - 1
+		}
+		return blocks[idx]
+	}
+
+	toHeight := func(rps float64) float64 {
+		return (rps / float64(peakRPS)) * float64(chartHeight)
+	}
+
+	// ── build rune + style grids ──────────────────────────────────────────
+	grid := make([][]rune, chartHeight)
+	sg := make([][]lipgloss.Style, chartHeight)
+	for r := range grid {
+		grid[r] = make([]rune, chartWidth)
+		sg[r] = make([]lipgloss.Style, chartWidth)
+	}
+
+	actualH := toHeight(m.metrics.Throughput)
+
+	for x := 0; x < chartWidth; x++ {
+		targetH := toHeight(curve[x])
+		isCursor := x == cursorX
+
+		for r := 0; r < chartHeight; r++ {
+			rowBase := float64(chartHeight - 1 - r)
+			var ch rune
+			var st lipgloss.Style
+
+			if isCursor {
+				// ── cursor column: show actual (green) vs target (gap / overshoot) ──
+				actualChar := blockChar(actualH, rowBase)
+				targetChar := blockChar(targetH, rowBase)
+
+				switch {
+				case actualH >= rowBase+1.0:
+					// fully filled by actual
+					ch = '█'
+					if targetH < rowBase+1.0 {
+						st = overshootStyle // actual above target
+					} else {
+						st = actualStyle
+					}
+				case actualH > rowBase:
+					// fractional actual block
+					ch = actualChar
+					st = actualStyle
+					_ = targetChar
+				case targetH >= rowBase+1.0:
+					// above actual but target fills this row — show gap
+					ch = '░'
+					st = gapStyle
+				case targetH > rowBase:
+					// fractional gap
+					ch = targetChar
+					st = gapStyle
+				default:
+					// above both — draw cursor line
+					ch = '┃'
+					st = cursorStyle
+				}
+			} else {
+				ch = blockChar(targetH, rowBase)
+				if ch == ' ' && boundaryCol[x] {
+					ch = '╎'
+				}
+				if x < cursorX {
+					st = pastStyle
+				} else {
+					st = futureStyle
+				}
+			}
+
+			grid[r][x] = ch
+			sg[r][x] = st
+		}
+	}
+
+	// ── assemble ──────────────────────────────────────────────────────────
 	var sb strings.Builder
 
-	// Title row
-	sb.WriteString(sectionStyle.Render("STAGE PLAN") + "\n")
+	// title row with live Target / Actual
+	sb.WriteString(sectionStyle.Render("STAGE PLAN"))
+	sb.WriteString(fmt.Sprintf("   TARGET: %s   ACTUAL: %s\n",
+		targetLiveStyle.Render(fmt.Sprintf("%d rps", int(m.metrics.TargetRPS))),
+		actualStyle.Render(fmt.Sprintf("%.0f rps", m.metrics.Throughput)),
+	))
 
+	// chart rows
 	for r := 0; r < chartHeight; r++ {
-		// y-axis label on first, middle and last row
 		yLabel := "     "
 		switch r {
 		case 0:
@@ -330,98 +388,87 @@ func (m model) renderTimeline() string {
 		case chartHeight / 2:
 			yLabel = fmt.Sprintf("%4d ", peakRPS/2)
 		case chartHeight - 1:
-			yLabel = fmt.Sprintf("%4d ", 0)
+			yLabel = "   0 "
 		}
 		sb.WriteString(labelStyle.Render(yLabel) + "│")
-
-		rowStr := string(grid[r])
-		sb.WriteString(valueStyle.Render(rowStr))
+		for x := 0; x < chartWidth; x++ {
+			sb.WriteString(sg[r][x].Render(string(grid[r][x])))
+		}
 		sb.WriteString("\n")
 	}
 
-	// x-axis baseline
+	// x-axis
 	sb.WriteString(strings.Repeat(" ", yAxisWidth) + "└" + strings.Repeat("─", chartWidth) + "\n")
 
-	// cursor arrow row
-	arrowRow := make([]rune, chartWidth)
-	for i := range arrowRow {
-		arrowRow[i] = ' '
+	// stage number labels centred in each stage's column span
+	labelRow := make([]rune, chartWidth)
+	for i := range labelRow {
+		labelRow[i] = ' '
 	}
-	arrowRow[cursorX] = '▲'
-	arrowStr := string(arrowRow)
-	sb.WriteString(strings.Repeat(" ", yAxisWidth+1)) // align with chart area
-	if m.planPaused {
-		sb.WriteString(pauseStyle.Render(arrowStr) + "\n")
-	} else {
-		sb.WriteString(cursorStyle.Render(arrowStr) + "\n")
-	}
-
-	// "NOW" label below cursor
-	nowRow := make([]rune, chartWidth)
-	for i := range nowRow {
-		nowRow[i] = ' '
-	}
-	nowLabel := []rune("NOW")
-	// centre the label on cursorX
-	start := cursorX - len(nowLabel)/2
-	for i, ch := range nowLabel {
-		pos := start + i
-		if pos >= 0 && pos < chartWidth {
-			nowRow[pos] = ch
+	{
+		acc := time.Duration(0)
+		for i, s := range stages {
+			if s.Duration == 0 {
+				continue
+			}
+			startX := int(float64(chartWidth) * float64(acc) / float64(totalDur))
+			acc += s.Duration
+			endX := int(float64(chartWidth) * float64(acc) / float64(totalDur))
+			if endX > chartWidth {
+				endX = chartWidth
+			}
+			w := endX - startX
+			if w < 2 {
+				continue
+			}
+			lbl := fmt.Sprintf("%d", i+1)
+			pos := startX + (w-len(lbl))/2
+			for k, c := range lbl {
+				if p := pos + k; p >= 0 && p < chartWidth {
+					labelRow[p] = c
+				}
+			}
 		}
 	}
 	sb.WriteString(strings.Repeat(" ", yAxisWidth+1))
-	if m.planPaused {
-		sb.WriteString(pauseStyle.Render(string(nowRow)) + "\n")
-	} else {
-		sb.WriteString(cursorStyle.Render(string(nowRow)) + "\n")
-	}
+	sb.WriteString(labelStyle.Render(string(labelRow)) + "\n")
 
-	// ── info bar ──────────────────────────────────────────────────
+	// info bar — safe index clamping
+	stageIdx := m.currentStage
+	if stageIdx >= len(stages) {
+		stageIdx = len(stages) - 1
+	}
 	prevRPS := 0
-	if m.currentStage > 0 {
-		prevRPS = stages[m.currentStage-1].TargetRPS
+	if stageIdx > 0 {
+		prevRPS = stages[stageIdx-1].TargetRPS
 	}
-	stageLabelStr := fmt.Sprintf("[%d/%d] %s",
-		m.currentStage+1,
-		len(stages),
-		stages[m.currentStage].Label(prevRPS),
-	)
-
-	stageDur := stages[m.currentStage].Duration
-	stageRemaining := stageDur - m.stageElapsed
-	if stageRemaining < 0 {
-		stageRemaining = 0
-	}
-
-	totalRemaining := totalDur - totalElapsed
-	if totalRemaining < 0 {
-		totalRemaining = 0
-	}
+	stageLbl := fmt.Sprintf("[%d/%d] %s", stageIdx+1, len(stages), stages[stageIdx].Label(prevRPS))
+	stageDur := stages[stageIdx].Duration
 
 	pausedStr := ""
 	if m.planPaused {
-		pausedStr = pauseStyle.Render("  ⏸ PAUSED")
+		pausedStr = "  ⏸ PAUSED"
 	}
-
 	infoBar := fmt.Sprintf("%s  •  stage %s / %s  •  total %s / %s%s",
-		stageLabelStr,
-		formatDuration(m.stageElapsed),
-		formatDuration(stageDur),
-		formatDuration(totalElapsed),
-		formatDuration(totalDur),
+		stageLbl,
+		formatDuration(m.stageElapsed), formatDuration(stageDur),
+		formatDuration(totalElapsed), formatDuration(totalDur),
 		pausedStr,
 	)
-	sb.WriteString(labelStyle.Render(infoBar))
+	sb.WriteString("\n")
+	if m.planPaused {
+		sb.WriteString(cursorStyle.Render(infoBar))
+	} else {
+		sb.WriteString(labelStyle.Render(infoBar))
+	}
 
-	boxStyle := lipgloss.NewStyle().
+	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#63")).
 		Padding(0, 1).
 		MarginTop(1).
-		Width(m.width - 4)
-
-	return boxStyle.Render(sb.String())
+		Width(m.width - 4).
+		Render(sb.String())
 }
 
 // formatDuration formats a duration as a concise human string (e.g. "1m30s", "45s").
@@ -507,14 +554,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.ready = true
 
-		// title(3) + stats(12) + timeline(~10) + debug header(2) + margins
-		headerHeight := 33
+		// title(3) + stats box(14) + timeline box(chartHeight=10 + title + axis + labels + arrow + NOW + info + borders = ~20) + debug(1) + margins(2)
+		headerHeight := 3 + 14 + 18 + 1 + 2
 
 		logWidth := msg.Width - 4
 		if logWidth < 1 {
 			logWidth = 1
 		}
-		logHeight := msg.Height - headerHeight - 3
+		logHeight := msg.Height - headerHeight - 4
 		if logHeight < 1 {
 			logHeight = 1
 		}
@@ -528,25 +575,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = m.engine.IsRunning()
 		m.metrics = m.engine.GetMetrics()
 
-		// Start stage clock on first tick the engine begins running
+		// Start overall clock on first tick the engine begins running.
 		if m.running && !wasRunning {
 			m.stageStartTime = time.Now()
 		}
 
-		// Advance stage elapsed time unless paused
-		if m.running && !m.planPaused && !m.stageStartTime.IsZero() {
-			m.stageElapsed = time.Since(m.stageStartTime)
-
-			// Advance stage index when elapsed exceeds current stage duration
-			// (placeholder — engine will drive this in Phase 2)
-			stages := m.config.Stages
-			if m.currentStage < len(stages)-1 {
-				stageDur := stages[m.currentStage].Duration
-				if stageDur > 0 && m.stageElapsed >= stageDur {
-					m.currentStage++
-					m.stageStartTime = time.Now()
-					m.stageElapsed = 0
-				}
+		// Sync currentStage from the engine (it is the authoritative source).
+		if m.running && !m.planPaused {
+			engineStage := m.metrics.CurrentStage
+			if engineStage != m.currentStage {
+				// Stage just advanced — reset the stage-elapsed clock.
+				m.currentStage = engineStage
+				m.stageStartTime = time.Now()
+				m.stageElapsed = 0
+			} else if !m.stageStartTime.IsZero() {
+				m.stageElapsed = time.Since(m.stageStartTime)
 			}
 		}
 
