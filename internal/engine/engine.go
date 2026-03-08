@@ -5,6 +5,7 @@ import (
 	"gopher-glide/internal/config"
 	"gopher-glide/internal/httpreader"
 	"io"
+	"math"
 	"math/rand"
 	"net/http"
 	"sort"
@@ -207,53 +208,78 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	g.Go(func() error {
 		defer close(work) // signals all workers to exit when stages are done
 
-		idx := 0 // round-robin across specs
+		idx := 0     // round-robin across specs
+		prevRPS := 0 // RPS at end of the previous stage (starts at 0)
 
 		for stageIdx, stage := range cfg.Stages {
-			// Skip zero-duration stages (instant jumps – just update RPS target).
+			// Zero-duration stage — instant step jump, no interpolation.
 			if stage.Duration == 0 {
+				prevRPS = stage.TargetRPS
 				e.targetRPS.Store(int64(stage.TargetRPS))
 				e.currentStage.Store(int32(stageIdx))
 				continue
 			}
 
-			// Scale the duration by TimeScale.
 			scaledDur := time.Duration(float64(stage.Duration) / timeScale)
-
-			e.targetRPS.Store(int64(stage.TargetRPS))
 			e.currentStage.Store(int32(stageIdx))
 
-			// Build a precise ticker for this stage.
-			// We track the ideal fire time and sleep to it, which eliminates
-			// drift accumulation. Jitter is applied as a ±fraction of the
-			// base interval but clamped so we never skip more than one tick.
-			baseInterval := time.Second / time.Duration(stage.TargetRPS)
-			if baseInterval < time.Millisecond {
-				baseInterval = time.Millisecond
-			}
+			stageStart := time.Now()
+			stageEnd := stageStart.Add(scaledDur)
 
-			stageEnd := time.Now().Add(scaledDur)
-			nextFire := time.Now().Add(baseInterval)
+			startRPS := float64(prevRPS)
+			endRPS := float64(stage.TargetRPS)
+
+			nextFire := stageStart
 
 			for {
 				if gCtx.Err() != nil {
 					return nil
 				}
-				if time.Now().After(stageEnd) {
+
+				now := time.Now()
+				if now.After(stageEnd) {
 					break
 				}
 
-				rps := float64(stage.TargetRPS)
-				if rps < 1 {
+				// ── LERP: compute current target RPS ──────────────────────
+				elapsed := now.Sub(stageStart)
+				pct := float64(elapsed) / float64(scaledDur)
+				if pct > 1 {
+					pct = 1
+				}
+				currentRPS := startRPS + (endRPS-startRPS)*pct
+
+				// Always publish the live interpolated target to metrics.
+				e.targetRPS.Store(int64(math.Round(currentRPS)))
+
+				if currentRPS < 1 {
+					// Interpolating through zero — idle until next tick.
 					select {
 					case <-gCtx.Done():
 						return nil
-					case <-time.After(100 * time.Millisecond):
+					case <-time.After(50 * time.Millisecond):
 					}
+					nextFire = time.Now()
 					continue
 				}
 
-				// Sleep until the next scheduled fire time.
+				// ── Drift-free ticker ─────────────────────────────────────
+				// Recalculate interval from the live LERP'd rate each tick so
+				// the fire-rate tracks the interpolation curve continuously.
+				baseInterval := time.Duration(float64(time.Second) / currentRPS)
+				if baseInterval < time.Millisecond {
+					baseInterval = time.Millisecond
+				}
+
+				// Apply jitter symmetrically so average rate is unchanged.
+				jitterOffset := time.Duration(0)
+				if jitter > 0 {
+					jitterOffset = time.Duration(float64(baseInterval) * jitter * (rand.Float64() - 0.5))
+				}
+
+				nextFire = nextFire.Add(baseInterval + jitterOffset)
+
+				// Sleep until the next fire time.
 				sleepFor := time.Until(nextFire)
 				if sleepFor > 0 {
 					timer := time.NewTimer(sleepFor)
@@ -265,16 +291,6 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 					}
 				}
 
-				// Advance ideal next-fire time by exactly one interval,
-				// then add a small jitter offset (±jitter/2 of interval).
-				// Using the ideal time as the base prevents drift accumulation.
-				jitterOffset := time.Duration(0)
-				if jitter > 0 {
-					// ±(jitter/2) so that on average the rate is unchanged.
-					jitterOffset = time.Duration(float64(baseInterval) * jitter * (rand.Float64() - 0.5))
-				}
-				nextFire = nextFire.Add(baseInterval + jitterOffset)
-
 				// Emit work (non-blocking — drop if workers are saturated).
 				select {
 				case work <- specs[idx%len(specs)]:
@@ -282,6 +298,8 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 				default:
 				}
 			}
+
+			prevRPS = stage.TargetRPS
 		}
 		return nil
 	})

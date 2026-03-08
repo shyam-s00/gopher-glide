@@ -6,30 +6,42 @@ config:
   time_scale: 1.0    # 1.0 = real-time; 2.0 = run 2x faster (warp speed)
 
 stages:
-  # name is optional — it is a display label shown in the TUI timeline.
-  # If omitted, gg infers a label from the stage shape:
+  # Stages use linear interpolation (LERP).
+  # Each stage ramps from the previous stage's end target_rps to this
+  # stage's target_rps over its duration.
+  #
+  # Special cases:
+  #   duration: 0s  → instant step jump (spike), no interpolation
+  #   target_rps: 0 → ramp down to zero (cool-down)
+  #
+  # gg infers a display label from the stage shape (shown in TUI timeline):
   #   target_rps rising  → "Ramp Up"
   #   target_rps same    → "Sustain"
-  #   duration: 0        → "Spike"
+  #   duration: 0s       → "Spike"
   #   target_rps falling → "Ramp Down"
-  # It has no effect on engine behaviour — only duration and target_rps matter.
 
-  # 1. Ramp Up — 0 → 50 RPS over 30 seconds (implicit: previous target was 0)
+  # 1. Ramp Up — 0 → 75 RPS over 10s
   - duration: 10s
     target_rps: 75
 
-  # 2. Sustain — hold at 50 RPS for 1 minute
+  # 2. Ramp Up — 75 → 500 RPS over 30s
   - duration: 30s
     target_rps: 500
 
-  # 3. Spike — jump instantly to 200 RPS (duration: 0 = step function)
+  # 3. Ramp Down — 500 → 100 RPS over 10s
   - duration: 10s
     target_rps: 100
 
-  # 4. Hold Spike — sustain the spike load for 10 seconds
-  - duration: 10s
+  # 4. Spike — 100 → 650 RPS
+  - duration: 0s
     target_rps: 650
 
-  # 5. Ramp Down — 200 → 0 RPS over 30 seconds (cool-down)
-  - duration: 20s
-    target_rps: 10
+ # 5. Sustain — hold 650 RPS for 10s
+  - duration: 10s
+    target_rps: 650
+ # 6. Ramp Down - 650 - 200 over 10s
+  - duration: 10s
+    target_rps: 200
+ # 7. Ramp Down — 200 → 0 RPS over 10 seconds (cool-down)
+  - duration: 10s
+    target_rps: 0

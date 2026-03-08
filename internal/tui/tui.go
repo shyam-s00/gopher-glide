@@ -14,47 +14,64 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// ── constants ─────────────────────────────────────────────────────────────────
+
+const (
+	// historyInterval is the time resolution of the RPS history.
+	// One sample is recorded per interval regardless of terminal width.
+	historyInterval = 500 * time.Millisecond
+
+	yAxisWidth  = 5
+	chartHeight = 10
+	minWidth    = 60
+)
+
+// ── model ─────────────────────────────────────────────────────────────────────
+
 type model struct {
-	logView      viewport.Model
-	engine       *engine.Engine
-	config       *config.Config
-	metrics      *engine.MetricsSnapshot
-	specs        []httpreader.RequestSpec
-	ctx          context.Context
-	cancel       context.CancelFunc
-	ready        bool
+	engine  *engine.Engine
+	config  *config.Config
+	specs   []httpreader.RequestSpec
+	ctx     context.Context
+	cancel  context.CancelFunc
+	logView viewport.Model
+
+	width  int
+	height int
+	ready  bool
+
 	running      bool
-	width        int
-	height       int
 	showFailures bool
-	// stage tracking
-	currentStage   int           // index into config.Stages
-	stageStartTime time.Time     // when the current stage began
-	stageElapsed   time.Duration // how long we have been in the current stage
-	planPaused     bool          // Director Mode: stage clock frozen
+	metrics      *engine.MetricsSnapshot
+
+	currentStage   int
+	stageStartTime time.Time
+	stageElapsed   time.Duration
+	planPaused     bool
+
+	// rpsHistory[slot] = actual RPS recorded at that time-slot.
+	// slot = elapsed / historyInterval — completely independent of terminal width.
+	rpsHistory []float64
+	runStart   time.Time
 }
 
 type tickMsg time.Time
 
+// ── init ──────────────────────────────────────────────────────────────────────
+
 func initialModel(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpec) model {
 	ctx, cancel := context.WithCancel(context.Background())
-
 	vp := viewport.New(0, 0)
-	vp.YPosition = 0
-
 	return model{
-		engine:         eng,
-		config:         cfg,
-		specs:          specs,
-		metrics:        &engine.MetricsSnapshot{},
-		ctx:            ctx,
-		cancel:         cancel,
-		running:        false,
-		showFailures:   true,
-		logView:        vp,
-		currentStage:   0,
-		stageStartTime: time.Time{}, // set on the first tick once the engine starts
-		planPaused:     false,
+		engine:       eng,
+		config:       cfg,
+		specs:        specs,
+		ctx:          ctx,
+		cancel:       cancel,
+		logView:      vp,
+		metrics:      &engine.MetricsSnapshot{},
+		showFailures: true,
+		rpsHistory:   make([]float64, 0, 256),
 	}
 }
 
@@ -62,7 +79,6 @@ func (m model) Init() tea.Cmd {
 	go func() {
 		_ = m.engine.RunStages(m.ctx, m.config, m.specs)
 	}()
-
 	return tea.Batch(tickCmd(), tea.EnterAltScreen)
 }
 
@@ -72,7 +88,67 @@ func tickCmd() tea.Cmd {
 	})
 }
 
-// ── renderHeader ─────────────────────────────────────────────────────────────
+// ── layout ────────────────────────────────────────────────────────────────────
+
+type layout struct {
+	chartWidth int
+	logHeight  int
+	logWidth   int
+}
+
+func (m model) computeLayout() layout {
+	w := m.width
+	if w < minWidth {
+		w = minWidth
+	}
+	cw := w - yAxisWidth - 1 - 6
+	if cw < 20 {
+		cw = 20
+	}
+	// header: title(3) + stat boxes(18) + margin(1) = 22
+	// timeline: title(1) + chart(10) + x-axis(1) + labels(1) + info(2) + border(2) + margin(1) = 18
+	// debug header: 1
+	// log border: 2
+	used := 22 + 18 + 1 + 2
+	logH := m.height - used
+	if logH < 3 {
+		logH = 3
+	}
+	return layout{
+		chartWidth: cw,
+		logHeight:  logH,
+		logWidth:   w - 4,
+	}
+}
+
+// ── time ↔ column helpers ─────────────────────────────────────────────────────
+
+func timeToCol(t, total time.Duration, chartWidth int) int {
+	if total <= 0 || chartWidth <= 0 {
+		return 0
+	}
+	c := int(float64(chartWidth) * float64(t) / float64(total))
+	if c < 0 {
+		c = 0
+	}
+	if c >= chartWidth {
+		c = chartWidth - 1
+	}
+	return c
+}
+
+func slotToCol(slot, totalSlots, chartWidth int) int {
+	if totalSlots <= 0 || chartWidth <= 0 {
+		return 0
+	}
+	c := int(float64(chartWidth) * float64(slot) / float64(totalSlots))
+	if c >= chartWidth {
+		c = chartWidth - 1
+	}
+	return c
+}
+
+// ── renderHeader ──────────────────────────────────────────────────────────────
 
 func (m model) renderHeader() string {
 	elapsed := m.engine.GetElapsedTime()
@@ -92,24 +168,11 @@ func (m model) renderHeader() string {
 		MarginRight(4).
 		Width(28)
 
-	sectionStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#7D56F4"))
-
-	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241"))
-
-	valueStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252")).
-		Bold(true)
-
-	successStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#04B575")).
-		Bold(true)
-
-	errorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FF5f87")).
-		Bold(true)
+	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Bold(true)
+	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
+	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87")).Bold(true)
 
 	statusStr := "STOPPED"
 	statusColor := lipgloss.Color("#FF5F87")
@@ -118,57 +181,75 @@ func (m model) renderHeader() string {
 		statusColor = lipgloss.Color("#04B575")
 	}
 
-	// Infer stage label for the current stage
 	stages := m.config.Stages
+	stageIdx := m.currentStage
+	if stageIdx >= len(stages) {
+		stageIdx = len(stages) - 1
+	}
 	prevRPS := 0
-	if m.currentStage > 0 {
-		prevRPS = stages[m.currentStage-1].TargetRPS
+	if stageIdx > 0 {
+		prevRPS = stages[stageIdx-1].TargetRPS
 	}
 	stageLabel := "–"
 	if len(stages) > 0 {
-		stageLabel = fmt.Sprintf("[%d/%d] %s",
-			m.currentStage+1,
-			len(stages),
-			stages[m.currentStage].Label(prevRPS),
-		)
+		stageLabel = fmt.Sprintf("[%d/%d] %s", stageIdx+1, len(stages), stages[stageIdx].Label(prevRPS))
 	}
 
 	configuration := lipgloss.JoinVertical(lipgloss.Left,
 		sectionStyle.Render("CONFIGURATION"),
-		labelStyle.Render("Status:"), lipgloss.NewStyle().Foreground(statusColor).Bold(true).Render(statusStr),
-		labelStyle.Render("Uptime:"), valueStyle.Render(fmt.Sprintf("%.2fs", elapsed)),
-		labelStyle.Render("Http File:"), valueStyle.Render(m.config.ConfigSection.HTTPFile),
-		labelStyle.Render("Active VPU:"), valueStyle.Render(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
-		labelStyle.Render("Target RPS:"), valueStyle.Render(fmt.Sprintf("%d", m.metrics.TargetRPS)),
-		labelStyle.Render("Stage:"), valueStyle.Render(stageLabel),
-		"")
+		labelStyle.Render("Status:"),
+		lipgloss.NewStyle().Foreground(statusColor).Bold(true).Render(statusStr),
+		labelStyle.Render("Uptime:"),
+		valueStyle.Render(fmt.Sprintf("%.2fs", elapsed)),
+		labelStyle.Render("Http File:"),
+		valueStyle.Render(m.config.ConfigSection.HTTPFile),
+		labelStyle.Render("Active VPU:"),
+		valueStyle.Render(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
+		labelStyle.Render("Target RPS:"),
+		valueStyle.Render(fmt.Sprintf("%d", m.metrics.TargetRPS)),
+		labelStyle.Render("Stage:"),
+		valueStyle.Render(stageLabel),
+		"",
+	)
 
 	throughput := lipgloss.JoinVertical(lipgloss.Left,
 		sectionStyle.Render("THROUGHPUT"),
-		labelStyle.Render("RPS:"), valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.Throughput)),
-		labelStyle.Render("Total Requests:"), valueStyle.Render(fmt.Sprintf("%d", m.metrics.TotalRequests)),
-		labelStyle.Render("Success:"), successStyle.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
-		labelStyle.Render("Failed:"), errorStyle.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
-		labelStyle.Render("ErrorRate:"), valueStyle.Render(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
-		"", "", "")
+		labelStyle.Render("RPS:"),
+		valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.Throughput)),
+		labelStyle.Render("Total Requests:"),
+		valueStyle.Render(fmt.Sprintf("%d", m.metrics.TotalRequests)),
+		labelStyle.Render("Success:"),
+		successStyle.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
+		labelStyle.Render("Failed:"),
+		errorStyle.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
+		labelStyle.Render("ErrorRate:"),
+		valueStyle.Render(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
+		"", "", "",
+	)
 
 	latency := lipgloss.JoinVertical(lipgloss.Left,
 		sectionStyle.Render("LATENCY"),
-		labelStyle.Render("Min:"), valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.MinLatency)),
-		labelStyle.Render("Max:"), valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.MaxLatency)),
-		labelStyle.Render("P50:"), valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P50Latency)),
-		labelStyle.Render("P95:"), valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P95Latency)),
-		labelStyle.Render("P99:"), valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P99Latency)),
-		"", "", "")
-
-	header := titleStyle.Render("Gopher Glide (GG)")
-	stats := lipgloss.JoinHorizontal(lipgloss.Top,
-		boxStyle.Render(configuration),
-		boxStyle.Render(throughput),
-		boxStyle.Render(latency),
+		labelStyle.Render("Min:"),
+		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.MinLatency)),
+		labelStyle.Render("Max:"),
+		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.MaxLatency)),
+		labelStyle.Render("P50:"),
+		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P50Latency)),
+		labelStyle.Render("P95:"),
+		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P95Latency)),
+		labelStyle.Render("P99:"),
+		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P99Latency)),
+		"", "", "",
 	)
 
-	return lipgloss.JoinVertical(lipgloss.Left, header, stats)
+	return lipgloss.JoinVertical(lipgloss.Left,
+		titleStyle.Render("Gopher Glide (GG)"),
+		lipgloss.JoinHorizontal(lipgloss.Top,
+			boxStyle.Render(configuration),
+			boxStyle.Render(throughput),
+			boxStyle.Render(latency),
+		),
+	)
 }
 
 // ── renderTimeline ────────────────────────────────────────────────────────────
@@ -179,32 +260,20 @@ func (m model) renderTimeline() string {
 		return ""
 	}
 
-	// ── styles ────────────────────────────────────────────────────
+	l := m.computeLayout()
+	chartWidth := l.chartWidth
+
 	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	pastStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4"))
 	futureStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#555555"))
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD700")).Bold(true)
 	actualStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
-	gapStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#333333"))
-	overshootStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87"))
 	targetLiveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CCBBFF")).Bold(true)
+	markerOkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
+	markerMissStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87")).Bold(true)
 
-	// ── geometry ──────────────────────────────────────────────────
-	// yAxisWidth(5) + "│"(1) + chartWidth + border/padding(~6)
-	const yAxisWidth = 5
-	const chartHeight = 10
-	chartWidth := m.width - yAxisWidth - 1 - 6
-	if chartWidth < 20 {
-		chartWidth = 20
-	}
-
-	peakRPS := m.config.PeakRPS()
-	if peakRPS < 1 {
-		peakRPS = 1
-	}
-
-	// ── total duration (skip zero-duration spike stages in time budget) ──
+	// Total plan duration
 	totalDur := time.Duration(0)
 	for _, s := range stages {
 		totalDur += s.Duration
@@ -213,38 +282,38 @@ func (m model) renderTimeline() string {
 		totalDur = 1
 	}
 
-	// ── rpsAt: step function matching what the engine actually does ───────
-	// Each stage holds its target_rps for its full duration.
-	// Zero-duration stages are instant jumps (spike) with no time width.
+	peakRPS := m.config.PeakRPS()
+	if peakRPS < 1 {
+		peakRPS = 1
+	}
+
+	// ── rpsAt: step function — plan shape matches config intent ──────────
 	rpsAt := func(t time.Duration) float64 {
 		acc := time.Duration(0)
+		prev := 0.0
 		for _, s := range stages {
 			if s.Duration == 0 {
-				continue // spike: no time width, skip
+				prev = float64(s.TargetRPS)
+				continue
 			}
 			end := acc + s.Duration
 			if t < end {
 				return float64(s.TargetRPS)
 			}
 			acc = end
+			prev = float64(s.TargetRPS)
 		}
-		// past the end — return last stage's target
-		for i := len(stages) - 1; i >= 0; i-- {
-			if stages[i].Duration > 0 {
-				return float64(stages[i].TargetRPS)
-			}
-		}
-		return 0
+		return prev
 	}
 
-	// ── sample the plan curve into chartWidth columns ─────────────────────
+	// Sample plan curve
 	curve := make([]float64, chartWidth)
 	for x := 0; x < chartWidth; x++ {
 		t := time.Duration(float64(totalDur) * float64(x) / float64(chartWidth))
 		curve[x] = rpsAt(t)
 	}
 
-	// ── stage boundary columns ────────────────────────────────────────────
+	// Stage boundary columns
 	boundaryCol := make(map[int]bool)
 	{
 		acc := time.Duration(0)
@@ -254,32 +323,43 @@ func (m model) renderTimeline() string {
 			}
 			acc += s.Duration
 			if i < len(stages)-1 {
-				bx := int(float64(chartWidth) * float64(acc) / float64(totalDur))
-				if bx > 0 && bx < chartWidth {
+				bx := timeToCol(acc, totalDur, chartWidth)
+				if bx > 0 {
 					boundaryCol[bx] = true
 				}
 			}
 		}
 	}
 
-	// ── cursor position ───────────────────────────────────────────────────
+	// Cursor — derived from elapsed time, always correct after resize
 	totalElapsed := time.Duration(0)
 	for i := 0; i < m.currentStage && i < len(stages); i++ {
 		totalElapsed += stages[i].Duration
 	}
 	totalElapsed += m.stageElapsed
+	cursorX := timeToCol(totalElapsed, totalDur, chartWidth)
 
-	cursorX := int(float64(chartWidth) * float64(totalElapsed) / float64(totalDur))
-	if cursorX < 0 {
-		cursorX = 0
+	// ── Project time-slot history onto columns ────────────────────────────
+	// totalSlots is the expected total number of slots for the whole run.
+	totalSlots := int(totalDur/historyInterval) + 1
+	// historyByCol[x] = best (highest) actual RPS seen for that column, -1 = no data
+	historyByCol := make([]float64, chartWidth)
+	for i := range historyByCol {
+		historyByCol[i] = -1
 	}
-	if cursorX >= chartWidth {
-		cursorX = chartWidth - 1
+	for slot, rps := range m.rpsHistory {
+		col := slotToCol(slot, totalSlots, chartWidth)
+		if col < chartWidth && rps > historyByCol[col] {
+			historyByCol[col] = rps
+		}
 	}
 
-	// ── height helpers ────────────────────────────────────────────────────
+	// Height helpers
 	blocks := []rune{' ', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
 
+	toHeight := func(rps float64) float64 {
+		return (rps / float64(peakRPS)) * float64(chartHeight)
+	}
 	blockChar := func(h, rowBase float64) rune {
 		if h >= rowBase+1.0 {
 			return '█'
@@ -297,23 +377,36 @@ func (m model) renderTimeline() string {
 		return blocks[idx]
 	}
 
-	toHeight := func(rps float64) float64 {
-		return (rps / float64(peakRPS)) * float64(chartHeight)
+	// Build grid
+	type cell struct {
+		ch rune
+		st lipgloss.Style
 	}
-
-	// ── build rune + style grids ──────────────────────────────────────────
-	grid := make([][]rune, chartHeight)
-	sg := make([][]lipgloss.Style, chartHeight)
+	grid := make([][]cell, chartHeight)
 	for r := range grid {
-		grid[r] = make([]rune, chartWidth)
-		sg[r] = make([]lipgloss.Style, chartWidth)
+		grid[r] = make([]cell, chartWidth)
 	}
-
-	actualH := toHeight(m.metrics.Throughput)
 
 	for x := 0; x < chartWidth; x++ {
 		targetH := toHeight(curve[x])
 		isCursor := x == cursorX
+		isPast := x < cursorX
+
+		// Compute marker row for past columns
+		markerRow := -1
+		markerOk := false
+		if isPast && historyByCol[x] >= 0 {
+			hh := toHeight(historyByCol[x])
+			mr := chartHeight - 1 - int(hh)
+			if mr < 0 {
+				mr = 0
+			}
+			if mr >= chartHeight {
+				mr = chartHeight - 1
+			}
+			markerRow = mr
+			markerOk = targetH > 0 && hh >= targetH*0.9
+		}
 
 		for r := 0; r < chartHeight; r++ {
 			rowBase := float64(chartHeight - 1 - r)
@@ -321,34 +414,13 @@ func (m model) renderTimeline() string {
 			var st lipgloss.Style
 
 			if isCursor {
-				// ── cursor column: show actual (green) vs target (gap / overshoot) ──
-				actualChar := blockChar(actualH, rowBase)
-				targetChar := blockChar(targetH, rowBase)
-
-				switch {
-				case actualH >= rowBase+1.0:
-					// fully filled by actual
+				if targetH >= rowBase+1.0 {
 					ch = '█'
-					if targetH < rowBase+1.0 {
-						st = overshootStyle // actual above target
-					} else {
-						st = actualStyle
-					}
-				case actualH > rowBase:
-					// fractional actual block
-					ch = actualChar
 					st = actualStyle
-					_ = targetChar
-				case targetH >= rowBase+1.0:
-					// above actual but target fills this row — show gap
-					ch = '░'
-					st = gapStyle
-				case targetH > rowBase:
-					// fractional gap
-					ch = targetChar
-					st = gapStyle
-				default:
-					// above both — draw cursor line
+				} else if targetH > rowBase {
+					ch = blockChar(targetH, rowBase)
+					st = actualStyle
+				} else {
 					ch = '┃'
 					st = cursorStyle
 				}
@@ -357,29 +429,37 @@ func (m model) renderTimeline() string {
 				if ch == ' ' && boundaryCol[x] {
 					ch = '╎'
 				}
-				if x < cursorX {
+				if isPast {
 					st = pastStyle
 				} else {
 					st = futureStyle
 				}
+				// Overlay ▸ marker on past columns at the actual-RPS row
+				if isPast && r == markerRow {
+					ch = '▸'
+					if markerOk {
+						st = markerOkStyle
+					} else {
+						st = markerMissStyle
+					}
+				}
 			}
 
-			grid[r][x] = ch
-			sg[r][x] = st
+			grid[r][x] = cell{ch, st}
 		}
 	}
 
-	// ── assemble ──────────────────────────────────────────────────────────
+	// Assemble
 	var sb strings.Builder
 
-	// title row with live Target / Actual
 	sb.WriteString(sectionStyle.Render("STAGE PLAN"))
-	sb.WriteString(fmt.Sprintf("   TARGET: %s   ACTUAL: %s\n",
-		targetLiveStyle.Render(fmt.Sprintf("%d rps", int(m.metrics.TargetRPS))),
+	sb.WriteString(fmt.Sprintf("   TARGET: %s   ACTUAL: %s   %s on-target  %s off-target\n",
+		targetLiveStyle.Render(fmt.Sprintf("%d rps", m.metrics.TargetRPS)),
 		actualStyle.Render(fmt.Sprintf("%.0f rps", m.metrics.Throughput)),
+		markerOkStyle.Render("▸"),
+		markerMissStyle.Render("▸"),
 	))
 
-	// chart rows
 	for r := 0; r < chartHeight; r++ {
 		yLabel := "     "
 		switch r {
@@ -392,15 +472,16 @@ func (m model) renderTimeline() string {
 		}
 		sb.WriteString(labelStyle.Render(yLabel) + "│")
 		for x := 0; x < chartWidth; x++ {
-			sb.WriteString(sg[r][x].Render(string(grid[r][x])))
+			c := grid[r][x]
+			sb.WriteString(c.st.Render(string(c.ch)))
 		}
 		sb.WriteString("\n")
 	}
 
-	// x-axis
+	// X-axis
 	sb.WriteString(strings.Repeat(" ", yAxisWidth) + "└" + strings.Repeat("─", chartWidth) + "\n")
 
-	// stage number labels centred in each stage's column span
+	// Stage number labels
 	labelRow := make([]rune, chartWidth)
 	for i := range labelRow {
 		labelRow[i] = ' '
@@ -411,9 +492,9 @@ func (m model) renderTimeline() string {
 			if s.Duration == 0 {
 				continue
 			}
-			startX := int(float64(chartWidth) * float64(acc) / float64(totalDur))
+			startX := timeToCol(acc, totalDur, chartWidth)
 			acc += s.Duration
-			endX := int(float64(chartWidth) * float64(acc) / float64(totalDur))
+			endX := timeToCol(acc, totalDur, chartWidth)
 			if endX > chartWidth {
 				endX = chartWidth
 			}
@@ -433,7 +514,7 @@ func (m model) renderTimeline() string {
 	sb.WriteString(strings.Repeat(" ", yAxisWidth+1))
 	sb.WriteString(labelStyle.Render(string(labelRow)) + "\n")
 
-	// info bar — safe index clamping
+	// Info bar
 	stageIdx := m.currentStage
 	if stageIdx >= len(stages) {
 		stageIdx = len(stages) - 1
@@ -444,7 +525,6 @@ func (m model) renderTimeline() string {
 	}
 	stageLbl := fmt.Sprintf("[%d/%d] %s", stageIdx+1, len(stages), stages[stageIdx].Label(prevRPS))
 	stageDur := stages[stageIdx].Duration
-
 	pausedStr := ""
 	if m.planPaused {
 		pausedStr = "  ⏸ PAUSED"
@@ -471,18 +551,19 @@ func (m model) renderTimeline() string {
 		Render(sb.String())
 }
 
-// formatDuration formats a duration as a concise human string (e.g. "1m30s", "45s").
+// ── formatDuration ────────────────────────────────────────────────────────────
+
 func formatDuration(d time.Duration) string {
 	if d <= 0 {
 		return "0s"
 	}
 	d = d.Round(time.Second)
-	m := d / time.Minute
-	s := (d % time.Minute) / time.Second
-	if m > 0 {
-		return fmt.Sprintf("%dm%ds", m, s)
+	mins := d / time.Minute
+	secs := (d % time.Minute) / time.Second
+	if mins > 0 {
+		return fmt.Sprintf("%dm%ds", mins, secs)
 	}
-	return fmt.Sprintf("%ds", s)
+	return fmt.Sprintf("%ds", secs)
 }
 
 // ── renderLogContent ──────────────────────────────────────────────────────────
@@ -501,31 +582,26 @@ func (m model) renderLogContent() string {
 
 	var lines []string
 	for _, log := range logs {
-		timestamp := log.Timestamp.Format("15:04:05")
-		duration := fmt.Sprintf("%dms", log.Duration.Milliseconds())
-
 		var statusStr string
-		var statusStyle lipgloss.Style
+		var ss lipgloss.Style
 		if log.Error != "" {
 			statusStr = fmt.Sprintf("[ERROR] %s", log.Error)
-			statusStyle = errorStyle
+			ss = errorStyle
 		} else if log.StatusCode >= 200 && log.StatusCode < 300 {
 			statusStr = fmt.Sprintf("[%d]", log.StatusCode)
-			statusStyle = successStyle
+			ss = successStyle
 		} else {
 			statusStr = fmt.Sprintf("[%d]", log.StatusCode)
-			statusStyle = errorStyle
+			ss = errorStyle
 		}
-
-		line := fmt.Sprintf("%s %s %s %s %s",
-			normalStyle.Render(timestamp),
+		lines = append(lines, fmt.Sprintf("%s %s %s %s %s",
+			normalStyle.Render(log.Timestamp.Format("15:04:05")),
 			normalStyle.Render(log.Method),
 			normalStyle.Render(log.Url),
-			statusStyle.Render(statusStr),
-			normalStyle.Render(duration))
-		lines = append(lines, line)
+			ss.Render(statusStr),
+			normalStyle.Render(fmt.Sprintf("%dms", log.Duration.Milliseconds())),
+		))
 	}
-
 	if len(lines) == 0 {
 		return normalStyle.Render("Waiting for traffic (or no errors found)...")
 	}
@@ -549,25 +625,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "f":
 			m.showFailures = !m.showFailures
 		}
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		m.ready = true
-
-		// title(3) + stats box(14) + timeline box(chartHeight=10 + title + axis + labels + arrow + NOW + info + borders = ~20) + debug(1) + margins(2)
-		headerHeight := 3 + 14 + 18 + 1 + 2
-
-		logWidth := msg.Width - 4
-		if logWidth < 1 {
-			logWidth = 1
-		}
-		logHeight := msg.Height - headerHeight - 4
-		if logHeight < 1 {
-			logHeight = 1
-		}
-
-		m.logView.Width = logWidth
-		m.logView.Height = logHeight
+		// Recompute layout from new dimensions — history is unaffected.
+		l := m.computeLayout()
+		m.logView.Width = l.logWidth
+		m.logView.Height = l.logHeight
 		m.logView.SetContent(m.renderLogContent())
 
 	case tickMsg:
@@ -575,21 +641,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = m.engine.IsRunning()
 		m.metrics = m.engine.GetMetrics()
 
-		// Start overall clock on first tick the engine begins running.
 		if m.running && !wasRunning {
+			m.runStart = time.Now()
 			m.stageStartTime = time.Now()
 		}
 
-		// Sync currentStage from the engine (it is the authoritative source).
+		// Sync stage index from engine atomics
 		if m.running && !m.planPaused {
 			engineStage := m.metrics.CurrentStage
 			if engineStage != m.currentStage {
-				// Stage just advanced — reset the stage-elapsed clock.
 				m.currentStage = engineStage
 				m.stageStartTime = time.Now()
 				m.stageElapsed = 0
 			} else if !m.stageStartTime.IsZero() {
 				m.stageElapsed = time.Since(m.stageStartTime)
+			}
+		}
+
+		// Record RPS by time-slot — resize-safe
+		if m.running && !m.runStart.IsZero() {
+			slot := int(time.Since(m.runStart) / historyInterval)
+			for slot >= len(m.rpsHistory) {
+				m.rpsHistory = append(m.rpsHistory, 0)
+			}
+			if m.metrics.Throughput > m.rpsHistory[slot] {
+				m.rpsHistory[slot] = m.metrics.Throughput
 			}
 		}
 
@@ -605,7 +681,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	m.logView, cmd = m.logView.Update(msg)
 	cmds = append(cmds, cmd)
-
 	return m, tea.Batch(cmds...)
 }
 
@@ -613,32 +688,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	if !m.ready {
-		return "Loading..."
+		return "\n  Loading..."
 	}
-
-	header := m.renderHeader()
-	timeline := m.renderTimeline()
+	if m.width < minWidth {
+		return fmt.Sprintf("\n  Terminal too narrow (%d cols). Please resize to at least %d cols.", m.width, minWidth)
+	}
 
 	mode := "FAILURES ONLY"
 	if !m.showFailures {
 		mode = "ALL LOGS"
 	}
 
+	l := m.computeLayout()
+
 	debugHeader := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("#7D56F4")).
-		Render(fmt.Sprintf("[DEBUG] Press 'f' to toggle log mode (Current: %s)", mode))
+		Render(fmt.Sprintf("  [f] toggle logs — showing: %s", mode))
 
 	logBox := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#63")).
 		Padding(0, 1).
 		MarginTop(1).
-		Width(m.logView.Width).
-		Height(m.logView.Height).
+		Width(l.logWidth).
+		Height(l.logHeight).
 		Render(m.logView.View())
 
-	return lipgloss.JoinVertical(lipgloss.Left, header, timeline, debugHeader, logBox)
+	return lipgloss.JoinVertical(lipgloss.Left,
+		m.renderHeader(),
+		m.renderTimeline(),
+		debugHeader,
+		logBox,
+	)
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
