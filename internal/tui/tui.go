@@ -47,12 +47,15 @@ type model struct {
 	currentStage   int
 	stageStartTime time.Time
 	stageElapsed   time.Duration
-	planPaused     bool
 
 	// rpsHistory[slot] = actual RPS recorded at that time-slot.
 	// slot = elapsed / historyInterval — completely independent of terminal width.
 	rpsHistory []float64
 	runStart   time.Time
+
+	// director mode feedback
+	directorMsg     string
+	directorMsgTime time.Time
 }
 
 type tickMsg time.Time
@@ -582,22 +585,13 @@ func (m model) renderTimeline() string {
 	}
 	stageLbl := fmt.Sprintf("[%d/%d] %s", stageIdx+1, len(stages), stages[stageIdx].Label(prevRPS))
 	stageDur := stages[stageIdx].Duration
-	pausedStr := ""
-	if m.planPaused {
-		pausedStr = "  ⏸ PAUSED"
-	}
-	infoBar := fmt.Sprintf("%s  •  stage %s / %s  •  total %s / %s%s",
+	infoBar := fmt.Sprintf("%s  •  stage %s / %s  •  total %s / %s",
 		stageLbl,
 		formatDuration(m.stageElapsed), formatDuration(stageDur),
 		formatDuration(totalElapsed), formatDuration(totalDur),
-		pausedStr,
 	)
 	sb.WriteString("\n")
-	if m.planPaused {
-		sb.WriteString(cursorStyle.Render(infoBar))
-	} else {
-		sb.WriteString(labelStyle.Render(infoBar))
-	}
+	sb.WriteString(labelStyle.Render(infoBar))
 
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -681,6 +675,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "f":
 			m.showFailures = !m.showFailures
+		case "up":
+			if m.running {
+				m.engine.ApplyBias(5)
+				m.directorMsg = fmt.Sprintf("▲  BIAS %+d RPS", m.engine.GetBias()+5)
+				m.directorMsgTime = time.Now()
+			}
+		case "down":
+			if m.running {
+				m.engine.ApplyBias(-5)
+				m.directorMsg = fmt.Sprintf("▼  BIAS %+d RPS", m.engine.GetBias()-5)
+				m.directorMsgTime = time.Now()
+			}
 		}
 
 	case tea.WindowSizeMsg:
@@ -698,13 +704,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = m.engine.IsRunning()
 		m.metrics = m.engine.GetMetrics()
 
+		// Expire director feedback message after 3s
+		if m.directorMsg != "" && time.Since(m.directorMsgTime) > 3*time.Second {
+			m.directorMsg = ""
+		}
+
 		if m.running && !wasRunning {
 			m.runStart = time.Now()
 			m.stageStartTime = time.Now()
 		}
 
 		// Sync stage index from engine atomics
-		if m.running && !m.planPaused {
+		if m.running {
 			engineStage := m.metrics.CurrentStage
 			if engineStage != m.currentStage {
 				m.currentStage = engineStage
@@ -751,17 +762,34 @@ func (m model) View() string {
 		return fmt.Sprintf("\n  Terminal too narrow (%d cols). Please resize to at least %d cols.", m.width, minWidth)
 	}
 
-	mode := "FAILURES ONLY"
-	if !m.showFailures {
-		mode = "ALL LOGS"
-	}
-
 	l := m.computeLayout()
 
-	debugHeader := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#7D56F4")).
-		Render(fmt.Sprintf("  [f] toggle logs — showing: %s", mode))
+	// ── director / hint bar ───────────────────────────────────────────────
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	biasUpStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B575"))
+	biasDownStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5F87"))
+	msgStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFD700"))
+
+	biasStr := ""
+	if bias := m.metrics.Bias; bias != 0 {
+		bs := biasUpStyle
+		if bias < 0 {
+			bs = biasDownStyle
+		}
+		biasStr = "  " + bs.Render(fmt.Sprintf("BIAS %+d RPS", bias))
+	}
+	feedbackStr := ""
+	if m.directorMsg != "" {
+		feedbackStr = "  " + msgStyle.Render(m.directorMsg)
+	}
+	logMode := "FAILURES ONLY"
+	if !m.showFailures {
+		logMode = "ALL LOGS"
+	}
+	directorBar := biasUpStyle.Render("[↑]") + hintStyle.Render(" +5 rps  ") +
+		biasDownStyle.Render("[↓]") + hintStyle.Render(" -5 rps  ") +
+		hintStyle.Render(fmt.Sprintf("[f] logs (%s)  [q] quit", logMode)) +
+		biasStr + feedbackStr
 
 	logBox := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -775,7 +803,7 @@ func (m model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left,
 		m.renderHeader(),
 		m.renderTimeline(),
-		debugHeader,
+		directorBar,
 		logBox,
 	)
 }

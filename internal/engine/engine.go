@@ -91,6 +91,8 @@ type MetricsSnapshot struct {
 	// Stage progress — updated by RunStages
 	CurrentStage int
 	TotalStages  int
+	// Director Mode
+	Bias int
 }
 
 type CallLog struct {
@@ -125,6 +127,11 @@ type Engine struct {
 	// stage progress (written by stage-runner goroutine, read by TUI)
 	currentStage atomic.Int32
 	totalStages  atomic.Int32
+
+	// rpsBias is the cumulative manual RPS adjustment set via Director Mode.
+	rpsBias atomic.Int64
+	// biasCh receives delta values from the TUI; buffered so sends never block.
+	biasCh chan int
 }
 
 func New() *Engine {
@@ -141,12 +148,27 @@ func New() *Engine {
 		callLogs:  make([]*CallLog, 0, 100),
 		errorLogs: make([]*CallLog, 0, 100),
 		maxLogs:   100,
+		biasCh:    make(chan int, 16),
 	}
 }
 
 // SetTargetRPS allows live override (Director Mode – Phase 3).
 func (e *Engine) SetTargetRPS(rps int) {
 	e.targetRPS.Store(int64(rps))
+}
+
+// ApplyBias sends a RPS delta to the stage runner (e.g. +5 or -5).
+// Non-blocking — drops silently if the channel is full (never happens with buffer=16).
+func (e *Engine) ApplyBias(delta int) {
+	select {
+	case e.biasCh <- delta:
+	default:
+	}
+}
+
+// GetBias returns the current cumulative manual RPS bias.
+func (e *Engine) GetBias() int {
+	return int(e.rpsBias.Load())
 }
 
 // RunStages runs all configured stages sequentially, updating the ticker
@@ -241,6 +263,17 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 					break
 				}
 
+				// ── Drain any pending bias deltas (non-blocking) ──────────
+			drainBias:
+				for {
+					select {
+					case delta := <-e.biasCh:
+						e.rpsBias.Add(int64(delta))
+					default:
+						break drainBias
+					}
+				}
+
 				// ── LERP: compute current target RPS ──────────────────────
 				elapsed := now.Sub(stageStart)
 				pct := float64(elapsed) / float64(scaledDur)
@@ -249,11 +282,16 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 				}
 				currentRPS := startRPS + (endRPS-startRPS)*pct
 
-				// Always publish the live interpolated target to metrics.
-				e.targetRPS.Store(int64(math.Round(currentRPS)))
+				// Apply cumulative bias; clamp to minimum 1.
+				biasedRPS := currentRPS + float64(e.rpsBias.Load())
+				if biasedRPS < 1 {
+					biasedRPS = 1
+				}
 
-				if currentRPS < 1 {
-					// Interpolating through zero — idle until next tick.
+				// Always publish the live interpolated+biased target to metrics.
+				e.targetRPS.Store(int64(math.Round(biasedRPS)))
+
+				if biasedRPS < 1 {
 					select {
 					case <-gCtx.Done():
 						return nil
@@ -264,9 +302,7 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 				}
 
 				// ── Drift-free ticker ─────────────────────────────────────
-				// Recalculate interval from the live LERP'd rate each tick so
-				// the fire-rate tracks the interpolation curve continuously.
-				baseInterval := time.Duration(float64(time.Second) / currentRPS)
+				baseInterval := time.Duration(float64(time.Second) / biasedRPS)
 				if baseInterval < time.Millisecond {
 					baseInterval = time.Millisecond
 				}
@@ -279,7 +315,7 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 
 				nextFire = nextFire.Add(baseInterval + jitterOffset)
 
-				// Sleep until the next fire time.
+				// Sleep until the next fire time; wake early if bias arrives.
 				sleepFor := time.Until(nextFire)
 				if sleepFor > 0 {
 					timer := time.NewTimer(sleepFor)
@@ -287,6 +323,12 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 					case <-gCtx.Done():
 						timer.Stop()
 						return nil
+					case delta := <-e.biasCh:
+						// Bias changed mid-sleep — absorb, reset fire clock, re-LERP.
+						timer.Stop()
+						e.rpsBias.Add(int64(delta))
+						nextFire = time.Now()
+						continue
 					case <-timer.C:
 					}
 				}
@@ -434,6 +476,7 @@ func (e *Engine) GetMetrics() *MetricsSnapshot {
 		CurrentVPUs:   0,
 		CurrentStage:  int(e.currentStage.Load()),
 		TotalStages:   int(e.totalStages.Load()),
+		Bias:          int(e.rpsBias.Load()),
 	}
 }
 
