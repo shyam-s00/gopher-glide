@@ -34,9 +34,11 @@ func Parse(content string) ([]RequestSpec, error) {
 		// Check for separator
 		if strings.HasPrefix(trimmed, "###") {
 			if currentRequest != nil {
-				// Finalize previous request
+				// Finalize previous request only if it has a valid URL
 				currentRequest.Body = strings.TrimSpace(currentRequest.Body)
-				requests = append(requests, *currentRequest)
+				if currentRequest.URL != "" {
+					requests = append(requests, *currentRequest)
+				}
 			}
 
 			// New Request
@@ -105,7 +107,7 @@ func Parse(content string) ([]RequestSpec, error) {
 		}
 	}
 
-	if currentRequest != nil {
+	if currentRequest != nil && currentRequest.URL != "" {
 		currentRequest.Body = strings.TrimSpace(currentRequest.Body)
 		requests = append(requests, *currentRequest)
 	}

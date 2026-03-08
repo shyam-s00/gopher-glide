@@ -1,18 +1,18 @@
 ### Get Users
-GET https://httpbin.org/get
+GET http://localhost:8080/fast-get
 Accept: application/json
 X-Request-ID: gg-001
 X-Client-Name: gg/1.0
 
 ### Get Post by Query Param
-GET https://httpbin.org/get?userId=1
+GET http://localhost:8080/slow-get
 Accept: application/json
 X-Request-ID: gg-002
 X-Client-Name: gg/1.0
 Cache-Control: no-cache
 
-### Create Post
-POST https://httpbin.org/post
+#### Create Post
+POST http://localhost:8080/post-bench
 Content-Type: application/json
 Accept: application/json
 X-Request-ID: gg-003
