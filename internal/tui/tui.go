@@ -212,6 +212,12 @@ func (m model) renderHeader() string {
 		"",
 	)
 
+	jitterVal := m.config.ConfigSection.Jitter
+	jitterStr := "off"
+	if jitterVal > 0 {
+		jitterStr = fmt.Sprintf("±%.0f%%", jitterVal*100)
+	}
+
 	throughput := lipgloss.JoinVertical(lipgloss.Left,
 		sectionStyle.Render("THROUGHPUT"),
 		labelStyle.Render("RPS:"),
@@ -224,7 +230,9 @@ func (m model) renderHeader() string {
 		errorStyle.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
 		labelStyle.Render("ErrorRate:"),
 		valueStyle.Render(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
-		"", "", "",
+		labelStyle.Render("Jitter:"),
+		valueStyle.Render(jitterStr),
+		"",
 	)
 
 	latency := lipgloss.JoinVertical(lipgloss.Left,

@@ -271,10 +271,10 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 					baseInterval = time.Millisecond
 				}
 
-				// Apply jitter symmetrically so average rate is unchanged.
+				// Apply jitter symmetrically so the average rate is unchanged.
 				jitterOffset := time.Duration(0)
 				if jitter > 0 {
-					jitterOffset = time.Duration(float64(baseInterval) * jitter * (rand.Float64() - 0.5))
+					jitterOffset = time.Duration(float64(baseInterval) * 2 * jitter * (rand.Float64() - 0.5))
 				}
 
 				nextFire = nextFire.Add(baseInterval + jitterOffset)
