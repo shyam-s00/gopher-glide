@@ -189,7 +189,9 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 
 	e.isRunning.Store(true)
 	e.startTime = time.Now()
+	e.latencyMu.Lock()
 	e.latencies = make([]float64, 0, 1024)
+	e.latencyMu.Unlock()
 	e.totalStages.Store(int32(len(cfg.Stages)))
 	defer func() {
 		e.endTime = time.Now()
