@@ -273,8 +273,11 @@ func (m model) renderTimeline() string {
 
 	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	pastStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4"))
-	futureStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#555555"))
+	pastBarStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4"))
+	pastEmptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#2A1F5A")) // dimmed fill above past bar
+	futureBarStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#3A3A3A")) // dark filled future bar
+	futureEmptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#222222"))
+	boundaryStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#444444"))
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD700")).Bold(true)
 	actualStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
 	targetLiveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CCBBFF")).Bold(true)
@@ -399,6 +402,7 @@ func (m model) renderTimeline() string {
 		targetH := toHeight(curve[x])
 		isCursor := x == cursorX
 		isPast := x < cursorX
+		isBoundary := boundaryCol[x]
 
 		// Compute marker row for past columns
 		markerRow := -1
@@ -421,35 +425,59 @@ func (m model) renderTimeline() string {
 			var ch rune
 			var st lipgloss.Style
 
+			inBar := targetH > rowBase // this row is within the bar height
+
 			if isCursor {
-				if targetH >= rowBase+1.0 {
-					ch = '█'
-					st = actualStyle
-				} else if targetH > rowBase {
+				if r == 0 {
+					// Playhead indicator at top of cursor column
+					ch = '▼'
+					st = cursorStyle
+				} else if inBar {
 					ch = blockChar(targetH, rowBase)
-					st = actualStyle
+					st = cursorStyle
 				} else {
-					ch = '┃'
+					ch = '│'
 					st = cursorStyle
 				}
-			} else {
-				ch = blockChar(targetH, rowBase)
-				if ch == ' ' && boundaryCol[x] {
-					ch = '╎'
-				}
-				if isPast {
-					st = pastStyle
+			} else if isBoundary {
+				// Boundary line spans full column height
+				if inBar {
+					ch = '▏'
+					st = boundaryStyle
 				} else {
-					st = futureStyle
+					ch = '▏'
+					st = boundaryStyle
 				}
-				// Overlay ▸ marker on past columns at the actual-RPS row
-				if isPast && r == markerRow {
+			} else if isPast {
+				if inBar {
+					ch = blockChar(targetH, rowBase)
+					st = pastBarStyle
+				} else {
+					// Dimmed fill above the past bar — gives a "filled area" look
+					ch = '░'
+					st = pastEmptyStyle
+				}
+				// Overlay ▸ marker at the actual-RPS row
+				if r == markerRow {
 					ch = '▸'
 					if markerOk {
 						st = markerOkStyle
 					} else {
 						st = markerMissStyle
 					}
+				}
+			} else {
+				// Future
+				if inBar {
+					ch = blockChar(targetH, rowBase)
+					st = futureBarStyle
+				} else if r == chartHeight-1 {
+					// Floor line showing the plan exists
+					ch = '▁'
+					st = futureEmptyStyle
+				} else {
+					ch = ' '
+					st = futureEmptyStyle
 				}
 			}
 
@@ -461,24 +489,37 @@ func (m model) renderTimeline() string {
 	var sb strings.Builder
 
 	sb.WriteString(sectionStyle.Render("STAGE PLAN"))
-	sb.WriteString(fmt.Sprintf("   TARGET: %s   ACTUAL: %s   %s on-target  %s off-target\n",
+	sb.WriteString(fmt.Sprintf("  %s %s · %s %s · %s on-target · %s off-target\n",
+		targetLiveStyle.Render("target"),
 		targetLiveStyle.Render(fmt.Sprintf("%d rps", m.metrics.TargetRPS)),
+		actualStyle.Render("actual"),
 		actualStyle.Render(fmt.Sprintf("%.0f rps", m.metrics.Throughput)),
 		markerOkStyle.Render("▸"),
 		markerMissStyle.Render("▸"),
 	))
 
+	// y-axis tick positions
+	yTickRows := map[int]bool{0: true, chartHeight / 2: true, chartHeight - 1: true}
+
 	for r := 0; r < chartHeight; r++ {
-		yLabel := "     "
+		var yLabel string
+		var axisChar string
 		switch r {
 		case 0:
-			yLabel = fmt.Sprintf("%4d ", peakRPS)
+			yLabel = fmt.Sprintf("%4d", peakRPS)
+			axisChar = "┤"
 		case chartHeight / 2:
-			yLabel = fmt.Sprintf("%4d ", peakRPS/2)
+			yLabel = fmt.Sprintf("%4d", peakRPS/2)
+			axisChar = "┤"
 		case chartHeight - 1:
-			yLabel = "   0 "
+			yLabel = "   0"
+			axisChar = "┤"
+		default:
+			yLabel = "    "
+			axisChar = "│"
 		}
-		sb.WriteString(labelStyle.Render(yLabel) + "│")
+		_ = yTickRows
+		sb.WriteString(labelStyle.Render(yLabel+" ") + axisChar)
 		for x := 0; x < chartWidth; x++ {
 			c := grid[r][x]
 			sb.WriteString(c.st.Render(string(c.ch)))
@@ -486,8 +527,16 @@ func (m model) renderTimeline() string {
 		sb.WriteString("\n")
 	}
 
-	// X-axis
-	sb.WriteString(strings.Repeat(" ", yAxisWidth) + "└" + strings.Repeat("─", chartWidth) + "\n")
+	// X-axis with ┴ ticks at stage boundaries
+	xAxis := make([]rune, chartWidth)
+	for i := range xAxis {
+		if boundaryCol[i] {
+			xAxis[i] = '┴'
+		} else {
+			xAxis[i] = '─'
+		}
+	}
+	sb.WriteString(labelStyle.Render(strings.Repeat(" ", yAxisWidth)) + "└" + string(xAxis) + "\n")
 
 	// Stage number labels
 	labelRow := make([]rune, chartWidth)
