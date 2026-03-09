@@ -293,16 +293,6 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 				// Always publish the live interpolated+biased target to metrics.
 				e.targetRPS.Store(int64(math.Round(biasedRPS)))
 
-				if biasedRPS < 1 {
-					select {
-					case <-gCtx.Done():
-						return nil
-					case <-time.After(50 * time.Millisecond):
-					}
-					nextFire = time.Now()
-					continue
-				}
-
 				// ── Drift-free ticker ─────────────────────────────────────
 				baseInterval := time.Duration(float64(time.Second) / biasedRPS)
 				if baseInterval < time.Millisecond {

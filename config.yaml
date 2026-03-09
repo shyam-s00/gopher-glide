@@ -24,7 +24,7 @@ stages:
   - duration: 10s
     target_rps: 75
 
-  # 2. Ramp Up — 75 → 500 RPS over 30s
+  # 2. Ramp Up — 75 → 500 RPS over 15s and sustain for 15s
   - duration: 15s
     target_rps: 500
 

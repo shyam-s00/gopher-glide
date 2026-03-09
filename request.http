@@ -11,7 +11,7 @@ X-Request-ID: gg-002
 X-Client-Name: gg/1.0
 Cache-Control: no-cache
 
-#### Create Post
+### Create Post
 POST http://localhost:8080/post-bench
 Content-Type: application/json
 Accept: application/json

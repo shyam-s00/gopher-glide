@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"gopher-glide/internal/config"
 	"testing"
 	"time"
@@ -60,7 +59,7 @@ func TestRpsAt_Stages(t *testing.T) {
 
 	for _, c := range cases {
 		got := rpsAtForTest(stages, c.t)
-		fmt.Printf("%-30s t=%-6s  want=%-7.2f  got=%.2f\n", c.label, c.t, c.want, got)
+		t.Logf("%-30s t=%-6s  want=%-7.2f  got=%.2f", c.label, c.t, c.want, got)
 		if abs(got-c.want) > 0.1 {
 			t.Errorf("%s: want %.2f got %.2f", c.label, c.want, got)
 		}

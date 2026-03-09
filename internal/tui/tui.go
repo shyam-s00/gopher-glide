@@ -345,17 +345,35 @@ func (m model) renderTimeline() string {
 		}
 	}
 
-	// Cursor — derived from elapsed time, always correct after resize
+	// Cursor — derived from elapsed time, always correct after resize.
+	// Stage durations from config are unscaled; wall-clock time runs faster
+	// when time_scale > 1. Scale each stage duration before accumulating so
+	// the cursor position is consistent with how fast the run actually moves.
+	timeScale := m.config.ConfigSection.TimeScale
+	if timeScale <= 0 {
+		timeScale = 1.0
+	}
+	scaledTotalDur := time.Duration(float64(totalDur) / timeScale)
+	if scaledTotalDur == 0 {
+		scaledTotalDur = 1
+	}
 	totalElapsed := time.Duration(0)
 	for i := 0; i < m.currentStage && i < len(stages); i++ {
-		totalElapsed += stages[i].Duration
+		totalElapsed += time.Duration(float64(stages[i].Duration) / timeScale)
 	}
 	totalElapsed += m.stageElapsed
-	cursorX := timeToCol(totalElapsed, totalDur, chartWidth)
+	cursorX := timeToCol(totalElapsed, scaledTotalDur, chartWidth)
 
 	// ── Project time-slot history onto columns ────────────────────────────
-	// totalSlots is the expected total number of slots for the whole run.
-	totalSlots := int(totalDur/historyInterval) + 1
+	// totalSlots must be based on the wall-clock duration of the run, not the
+	// unscaled plan duration. cfg.TotalDuration() applies TimeScale so that
+	// e.g. time_scale:2 halves the wall-clock duration and the history slots
+	// span the full chart width correctly.
+	wallDur := m.config.TotalDuration()
+	if wallDur == 0 {
+		wallDur = 1
+	}
+	totalSlots := int(wallDur/historyInterval) + 1
 	// historyByCol[x] = best (highest) actual RPS seen for that column, -1 = no data
 	historyByCol := make([]float64, chartWidth)
 	for i := range historyByCol {
@@ -584,11 +602,11 @@ func (m model) renderTimeline() string {
 		prevRPS = stages[stageIdx-1].TargetRPS
 	}
 	stageLbl := fmt.Sprintf("[%d/%d] %s", stageIdx+1, len(stages), stages[stageIdx].Label(prevRPS))
-	stageDur := stages[stageIdx].Duration
+	scaledStageDur := time.Duration(float64(stages[stageIdx].Duration) / timeScale)
 	infoBar := fmt.Sprintf("%s  •  stage %s / %s  •  total %s / %s",
 		stageLbl,
-		formatDuration(m.stageElapsed), formatDuration(stageDur),
-		formatDuration(totalElapsed), formatDuration(totalDur),
+		formatDuration(m.stageElapsed), formatDuration(scaledStageDur),
+		formatDuration(totalElapsed), formatDuration(scaledTotalDur),
 	)
 	sb.WriteString("\n")
 	sb.WriteString(labelStyle.Render(infoBar))
