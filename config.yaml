@@ -42,7 +42,7 @@ stages:
  # 5. Sustain — hold 650 RPS for 10s
   - duration: 10s
     target_rps: 650
- # 6. Ramp Down - 650 - 200 over 10s
+ # 6. Ramp Down — 650 → 200 RPS over 10s
   - duration: 10s
     target_rps: 200
  # 7. Ramp Down — 200 → 0 RPS over 10 seconds (cool-down)
