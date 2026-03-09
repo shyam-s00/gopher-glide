@@ -24,19 +24,6 @@ jobs:
             ext:       ""
             archive:   tar
 
-          - os_label:  linux-arm64
-            runner:    ubuntu-latest
-            goos:      linux
-            goarch:    arm64
-            ext:       ""
-            archive:   tar
-
-          - os_label:  darwin-amd64
-            runner:    macos-latest
-            goos:      darwin
-            goarch:    amd64
-            ext:       ""
-            archive:   tar
 
           - os_label:  darwin-arm64
             runner:    macos-latest

@@ -30,8 +30,8 @@ LDFLAGS := -s -w \
 # ── Targets ───────────────────────────────────────────────────────────────────
 
 .PHONY: all build build-all release clean run version \
-        build-linux-amd64 build-linux-arm64 \
-        build-darwin-amd64 build-darwin-arm64 \
+        build-linux-amd64 \
+        build-darwin-arm64 \
         build-windows-amd64
 
 all: build
@@ -47,12 +47,6 @@ build:
 build-linux-amd64:
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
 
-build-linux-arm64:
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
-
-build-darwin-amd64:
-	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
-	@codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime $(BINARY) 2>/dev/null || true
 
 build-darwin-arm64:
 	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
@@ -65,9 +59,6 @@ build-windows-amd64:
 build-all:
 	@mkdir -p $(DIST)
 	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-linux-amd64       $(CMD)
-	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-linux-arm64       $(CMD)
-	GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-darwin-amd64      $(CMD)
-	@codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime $(DIST)/$(BINARY)-darwin-amd64 2>/dev/null || true
 	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-darwin-arm64      $(CMD)
 	@codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime $(DIST)/$(BINARY)-darwin-arm64 2>/dev/null || true
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(BINARY)-windows-amd64.exe $(CMD)
@@ -76,7 +67,7 @@ build-all:
 ## release: build-all + package each platform (tar.gz unix, zip windows)
 release: build-all
 	@echo "→ Packaging release archives..."
-	@for plat in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do \
+	@for plat in linux-amd64 darwin-arm64; do \
 		PKG="$(DIST)/$(BINARY)-$(VERSION)-$$plat"; \
 		mkdir -p "$$PKG"; \
 		cp "$(DIST)/$(BINARY)-$$plat" "$$PKG/$(BINARY)"; \
