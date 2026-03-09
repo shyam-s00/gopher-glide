@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"gopher-glide/internal/config"
 	"gopher-glide/internal/httpreader"
@@ -320,7 +321,7 @@ func TestRunStages_NoSpecs(t *testing.T) {
 	e := New()
 	cfg := singleStageConfig(time.Second, 10)
 	err := e.RunStages(context.Background(), cfg, nil)
-	if err != ErrNoRequests {
+	if !errors.Is(err, ErrNoRequests) {
 		t.Errorf("want ErrNoRequests, got %v", err)
 	}
 }
@@ -329,8 +330,8 @@ func TestRunStages_NoStages(t *testing.T) {
 	e := New()
 	cfg := &config.Config{}
 	err := e.RunStages(context.Background(), cfg, specFor("http://localhost"))
-	if err != ErrNoRequests {
-		t.Errorf("want ErrNoRequests, got %v", err)
+	if !errors.Is(err, ErrNoStages) {
+		t.Errorf("want ErrNoStages, got %v", err)
 	}
 }
 

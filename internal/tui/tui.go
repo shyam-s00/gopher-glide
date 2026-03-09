@@ -515,7 +515,6 @@ func (m model) renderTimeline() string {
 	))
 
 	// y-axis tick positions
-	yTickRows := map[int]bool{0: true, chartHeight / 2: true, chartHeight - 1: true}
 
 	for r := 0; r < chartHeight; r++ {
 		var yLabel string
@@ -534,7 +533,6 @@ func (m model) renderTimeline() string {
 			yLabel = "    "
 			axisChar = "│"
 		}
-		_ = yTickRows
 		sb.WriteString(labelStyle.Render(yLabel+" ") + axisChar)
 		for x := 0; x < chartWidth; x++ {
 			c := grid[r][x]

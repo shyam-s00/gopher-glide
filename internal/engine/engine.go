@@ -178,7 +178,7 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 		return ErrNoRequests
 	}
 	if len(cfg.Stages) == 0 {
-		return ErrNoRequests
+		return ErrNoStages
 	}
 
 	timeScale := cfg.ConfigSection.TimeScale
