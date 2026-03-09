@@ -462,13 +462,8 @@ func (m model) renderTimeline() string {
 				}
 			} else if isBoundary {
 				// Boundary line spans full column height
-				if inBar {
-					ch = '▏'
-					st = boundaryStyle
-				} else {
-					ch = '▏'
-					st = boundaryStyle
-				}
+				ch = '▏'
+				st = boundaryStyle
 			} else if isPast {
 				if inBar {
 					ch = blockChar(targetH, rowBase)
@@ -696,13 +691,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up":
 			if m.running {
 				m.engine.ApplyBias(5)
-				m.directorMsg = fmt.Sprintf("▲  BIAS %+d RPS", m.engine.GetBias()+5)
+				m.directorMsg = "▲  +5 RPS"
 				m.directorMsgTime = time.Now()
 			}
 		case "down":
 			if m.running {
 				m.engine.ApplyBias(-5)
-				m.directorMsg = fmt.Sprintf("▼  BIAS %+d RPS", m.engine.GetBias()-5)
+				m.directorMsg = "▼  -5 RPS"
 				m.directorMsgTime = time.Now()
 			}
 		}
