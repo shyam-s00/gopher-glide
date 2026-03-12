@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"gopher-glide/internal/config"
-	"gopher-glide/internal/engine"
-	"gopher-glide/internal/httpreader"
-	"gopher-glide/internal/tui"
-	"gopher-glide/internal/version"
+	"github.com/shyam-s00/gopher-glide/internal/config"
+	"github.com/shyam-s00/gopher-glide/internal/engine"
+	"github.com/shyam-s00/gopher-glide/internal/httpreader"
+	"github.com/shyam-s00/gopher-glide/internal/tui"
+	"github.com/shyam-s00/gopher-glide/internal/version"
 	"os"
 )
 

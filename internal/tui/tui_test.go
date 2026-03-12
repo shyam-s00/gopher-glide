@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"gopher-glide/internal/config"
-	"gopher-glide/internal/engine"
+	"github.com/shyam-s00/gopher-glide/internal/config"
+	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"testing"
 	"time"
 

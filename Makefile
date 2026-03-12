@@ -11,7 +11,7 @@
 
 # ── Variables ─────────────────────────────────────────────────────────────────
 BINARY  := gg
-MODULE  := gopher-glide
+MODULE  := github.com/shyam-s00/gopher-glide
 CMD     := ./cmd/gg
 DIST    := dist
 ASSETS  := config.yaml request.http

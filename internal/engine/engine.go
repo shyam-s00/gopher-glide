@@ -2,8 +2,8 @@ package engine
 
 import (
 	"context"
-	"gopher-glide/internal/config"
-	"gopher-glide/internal/httpreader"
+	"github.com/shyam-s00/gopher-glide/internal/config"
+	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 	"io"
 	"math"
 	"math/rand"

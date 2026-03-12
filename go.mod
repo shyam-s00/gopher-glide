@@ -1,4 +1,4 @@
-module gopher-glide
+module github.com/shyam-s00/gopher-glide
 
 go 1.25.7
 
