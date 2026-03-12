@@ -3,6 +3,7 @@
 [![Build](https://github.com/shyam-s00/gopher-glide/actions/workflows/ci.yml/badge.svg)](https://github.com/shyam-s00/gopher-glide/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/shyam-s00/gopher-glide?sort=semver&label=release)](https://github.com/shyam-s00/gopher-glide/releases/latest)
 [![codecov](https://codecov.io/gh/shyam-s00/gopher-glide/graph/badge.svg)](https://codecov.io/gh/shyam-s00/gopher-glide)
+[![Go Report Card](https://goreportcard.com/badge/github.com/shyam-s00/gopher-glide)](https://goreportcard.com/report/github.com/shyam-s00/gopher-glide)
 
 A lightweight, terminal-based HTTP load testing tool built in Go. `gg` reads your requests from a standard `.http` file, runs them through a multi-stage load plan, and delivers a live terminal dashboard of throughput, latency, and errors — no agents, no servers, no config sprawl.
 
