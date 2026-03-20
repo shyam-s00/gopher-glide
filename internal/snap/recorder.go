@@ -191,16 +191,40 @@ type DefaultRecorder struct {
 	endpoints sync.Map // key: "METHOD:URL" → *endpointAcc
 	dropped   atomic.Int64
 	closed    atomic.Bool
+	sanitizer Sanitizer // applied in drain() before accumulation; never nil
+}
+
+// RecorderOption is a functional option for DefaultRecorder.
+type RecorderOption func(*DefaultRecorder)
+
+// WithSanitizer replaces the recorder's sanitizer.
+// Pass NoopSanitizer{} to disable scrubbing entirely.
+func WithSanitizer(s Sanitizer) RecorderOption {
+	return func(r *DefaultRecorder) { r.sanitizer = s }
+}
+
+// WithExtraHeaders extends the default sensitive-header strip-list with the
+// provided names. The built-in defaults (Authorization, Cookie, Set-Cookie,
+// X-Api-Key) are always included.
+//
+//	NewDefaultRecorder(n, WithExtraHeaders("X-Internal-Token", "X-Debug"))
+func WithExtraHeaders(headers ...string) RecorderOption {
+	return func(r *DefaultRecorder) { r.sanitizer = NewSanitizerWithExtraHeaders(headers...) }
 }
 
 // NewDefaultRecorder creates a DefaultRecorder with a buffered channel of
-// bufSize entries. A value of 0 or lesser defaults to 4096.
-func NewDefaultRecorder(bufSize int) *DefaultRecorder {
+// bufSize entries. A value of 0 or less defaults to 4096.
+// By default a DefaultSanitizer is installed; override with WithSanitizer.
+func NewDefaultRecorder(bufSize int, opts ...RecorderOption) *DefaultRecorder {
 	if bufSize <= 0 {
 		bufSize = 4096
 	}
 	r := &DefaultRecorder{
-		ch: make(chan RecordEntry, bufSize),
+		ch:        make(chan RecordEntry, bufSize),
+		sanitizer: NewDefaultSanitizer(),
+	}
+	for _, opt := range opts {
+		opt(r)
 	}
 	r.wg.Add(1)
 	go r.drain()
@@ -221,11 +245,13 @@ func (r *DefaultRecorder) Record(entry RecordEntry) {
 	}
 }
 
-// Drain is the single background goroutine that processes entries from ch.
-// It exits when the channel is closed by Finalize.
+// drain is the single background goroutine that processes entries from ch.
+// It sanitizes each entry before accumulation, then exits when the channel
+// is closed by Finalize.
 func (r *DefaultRecorder) drain() {
 	defer r.wg.Done()
 	for entry := range r.ch {
+		entry = r.sanitizer.Sanitize(entry)
 		key := entry.Method + ":" + entry.URL
 		val, _ := r.endpoints.LoadOrStore(key, newEndpointAcc())
 		val.(*endpointAcc).record(entry)
