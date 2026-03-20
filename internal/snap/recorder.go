@@ -179,11 +179,8 @@ func (a *endpointAcc) toEndpointSnap(id string) EndpointSnap {
 		Latency:     stats,
 		ErrorRate:   errRate,
 		SampleCount: a.totalCount,
-		// Schema: populated by schema.go (Phase 1, Task 2)
 	}
 }
-
-// ── DefaultRecorder ───────────────────────────────────────────────────────────
 
 // DefaultRecorder is the production Recorder implementation.
 // Entries are enqueued to a buffered channel and drained by a single background
@@ -261,6 +258,11 @@ func (r *DefaultRecorder) Finalize(meta RunMeta) (*Snapshot, error) {
 		id := key.(string)
 		acc := val.(*endpointAcc)
 		ep := acc.toEndpointSnap(id)
+		// drain goroutine has exited (r.wg.Wait() above), so bodySamples is
+		// immutable here — safe to read without the lock.
+		if len(acc.bodySamples) > 0 {
+			ep.Schema = InferSchema(acc.bodySamples)
+		}
 		snap.Endpoints = append(snap.Endpoints, ep)
 		totalRequests += ep.SampleCount
 		return true
