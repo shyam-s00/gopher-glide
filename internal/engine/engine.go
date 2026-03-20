@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
+	"github.com/shyam-s00/gopher-glide/internal/snap"
 	"io"
 	"math"
 	"math/rand"
@@ -132,10 +133,51 @@ type Engine struct {
 	rpsBias atomic.Int64
 	// biasCh receives delta values from the TUI; buffered so sends never block.
 	biasCh chan int
+
+	// recorder is the optional snap.Recorder. nil when --snap is not passed.
+	// The hot-path is a single nil-check — zero overhead when snapping is off.
+	recorder snap.Recorder
+
+	// sampleCount is incremented on every request; used to gate body reads.
+	sampleCount atomic.Int64
+	// sampleEvery controls how often a response body is captured for schema
+	// inference. 20 = 1-in-20 = 5 % (default). Set via WithSampleRate.
+	sampleEvery int
 }
 
-func New() *Engine {
-	return &Engine{
+// EngineOption is a functional option for New().
+type EngineOption func(*Engine)
+
+// WithRecorder attaches a snap.Recorder to the engine.
+// When set, every HTTP response is passed to recorder.Record() after the body
+// is drained. When nil (the default), the hot-path incurs zero overhead.
+func WithRecorder(r snap.Recorder) EngineOption {
+	return func(e *Engine) { e.recorder = r }
+}
+
+// WithSampleRate sets the fraction of responses whose body is captured for
+// schema inference (0.0–1.0). Default is 0.05 (5 %).
+// The rate is rounded to the nearest 1-in-N integer slot, so 0.05 → 1-in-20.
+func WithSampleRate(rate float64) EngineOption {
+	return func(e *Engine) {
+		if rate <= 0 {
+			e.sampleEvery = 0 // disable body capture
+			return
+		}
+		if rate >= 1 {
+			e.sampleEvery = 1 // capture every response
+			return
+		}
+		n := int(1.0 / rate)
+		if n < 1 {
+			n = 1
+		}
+		e.sampleEvery = n
+	}
+}
+
+func New(opts ...EngineOption) *Engine {
+	e := &Engine{
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
@@ -144,12 +186,17 @@ func New() *Engine {
 				IdleConnTimeout:     90 * time.Second,
 			},
 		},
-		metrics:   &Metrics{},
-		callLogs:  make([]*CallLog, 0, 100),
-		errorLogs: make([]*CallLog, 0, 100),
-		maxLogs:   100,
-		biasCh:    make(chan int, 16),
+		metrics:     &Metrics{},
+		callLogs:    make([]*CallLog, 0, 100),
+		errorLogs:   make([]*CallLog, 0, 100),
+		maxLogs:     100,
+		biasCh:      make(chan int, 16),
+		sampleEvery: 20, // 5 % default
 	}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e
 }
 
 // SetTargetRPS allows live override (Director Mode – Phase 3).
@@ -365,6 +412,15 @@ func (e *Engine) executeRequest(ctx context.Context, spec httpreader.RequestSpec
 	if err != nil {
 		duration := time.Since(start)
 		e.logCall(spec.Method, spec.URL, 0, duration, err)
+		if e.recorder != nil {
+			e.recorder.Record(snap.RecordEntry{
+				Timestamp: start,
+				Method:    spec.Method,
+				URL:       spec.URL,
+				Duration:  duration,
+				Error:     err,
+			})
+		}
 		return err
 	}
 	req = req.WithContext(ctx)
@@ -375,20 +431,50 @@ func (e *Engine) executeRequest(ctx context.Context, spec httpreader.RequestSpec
 
 	if err != nil {
 		e.logCall(spec.Method, spec.URL, 0, duration, err)
+		if e.recorder != nil {
+			e.recorder.Record(snap.RecordEntry{
+				Timestamp: start,
+				Method:    spec.Method,
+				URL:       spec.URL,
+				Duration:  duration,
+				Error:     err,
+			})
+		}
 		return err
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
 	}(resp.Body)
 
-	// drain body so the connection can be reused
-	_, _ = io.Copy(io.Discard, resp.Body)
+	// Read or discard the body.
+	// When a recorder is active and this request is within the sample window,
+	// the body is captured for schema inference; otherwise it is discarded so
+	// the TCP connection can be returned to the pool.
+	var respBody []byte
+	if e.recorder != nil && e.shouldSample() {
+		respBody, _ = io.ReadAll(resp.Body) // fully consumes — connection reusable
+	} else {
+		_, _ = io.Copy(io.Discard, resp.Body)
+	}
 
 	var callErr error
 	if resp.StatusCode >= 400 {
 		callErr = ErrHttpError
 	}
 	e.logCall(spec.Method, spec.URL, resp.StatusCode, duration, callErr)
+
+	if e.recorder != nil {
+		e.recorder.Record(snap.RecordEntry{
+			Timestamp:  start,
+			Method:     spec.Method,
+			URL:        spec.URL,
+			StatusCode: resp.StatusCode,
+			Duration:   duration,
+			Headers:    resp.Header,
+			RespBody:   respBody,
+			Error:      callErr,
+		})
+	}
 
 	if resp.StatusCode >= 400 {
 		return ErrHttpError
@@ -539,4 +625,13 @@ func (e *Engine) GetElapsedTime() float64 {
 		return time.Since(e.startTime).Seconds()
 	}
 	return e.endTime.Sub(e.startTime).Seconds()
+}
+
+// shouldSample returns true for 1-in-sampleEvery requests.
+// sampleEvery == 0 means body capture is disabled.
+func (e *Engine) shouldSample() bool {
+	if e.sampleEvery == 0 {
+		return false
+	}
+	return e.sampleCount.Add(1)%int64(e.sampleEvery) == 0
 }
