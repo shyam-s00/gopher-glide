@@ -3,11 +3,12 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
-	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -56,9 +57,24 @@ type model struct {
 	// director mode feedback
 	directorMsg     string
 	directorMsgTime time.Time
+
+	// snap indicator — set from Start() when --snap is active
+	snapping   bool
+	snapDir    string
+	snapStatus string // set once the post-run callback completes
+
+	// onRunComplete is dispatched as a background tea.Cmd exactly once when
+	// the engine stops naturally. It must not write to stdout/stderr.
+	// Returns a short status string shown in the director bar.
+	// nil when no post-run work is needed.
+	onRunComplete func() string
 }
 
 type tickMsg time.Time
+
+// snapFinalizedMsg is sent back into the model once the post-run callback
+// completes in its background goroutine.
+type snapFinalizedMsg struct{ status string }
 
 // ── init ──────────────────────────────────────────────────────────────────────
 
@@ -715,6 +731,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = m.engine.IsRunning()
 		m.metrics = m.engine.GetMetrics()
 
+		// Engine finished all stages naturally — dispatch post-run work
+		// (e.g. write snapshot) as a background tea.Cmd so the update
+		// loop is never blocked and alt-screen rendering stays clean.
+		if wasRunning && !m.running && m.onRunComplete != nil {
+			fn := m.onRunComplete
+			m.onRunComplete = nil
+			cmds = append(cmds, func() tea.Msg {
+				return snapFinalizedMsg{status: fn()}
+			})
+		}
+
 		// Expire director feedback message after 3s
 		if m.directorMsg != "" && time.Since(m.directorMsgTime) > 3*time.Second {
 			m.directorMsg = ""
@@ -756,6 +783,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		cmds = append(cmds, tickCmd())
+	case snapFinalizedMsg:
+		if msg.status != "" {
+			m.snapStatus = msg.status
+		}
+
 	}
 
 	m.logView, cmd = m.logView.Update(msg)
@@ -802,6 +834,14 @@ func (m model) View() string {
 		hintStyle.Render(fmt.Sprintf("[f] logs (%s)  [q] quit", logMode)) +
 		biasStr + feedbackStr
 
+	if m.snapStatus != "" {
+		snapStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
+		directorBar += snapStyle.Render("  " + m.snapStatus)
+	} else if m.snapping {
+		snapStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
+		directorBar += snapStyle.Render(fmt.Sprintf("  📸 Snapping → %s", m.snapDir))
+	}
+
 	logBox := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#63")).
@@ -821,9 +861,18 @@ func (m model) View() string {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-func Start(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpec) error {
+// Start launches the Bubble Tea TUI.
+//   - snapping / snapDir  → drives the 📸 indicator
+//   - onRunComplete       → called in a background goroutine once the engine
+//     finishes all stages; must not write to stdout/stderr. The returned
+//     string is shown in the director bar. nil is safe (no-op).
+func Start(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpec, snapping bool, snapDir string, onRunComplete func() string) error {
+	m := initialModel(eng, cfg, specs)
+	m.snapping = snapping
+	m.snapDir = snapDir
+	m.onRunComplete = onRunComplete
 	p := tea.NewProgram(
-		initialModel(eng, cfg, specs),
+		m,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)
