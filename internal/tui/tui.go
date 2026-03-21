@@ -61,6 +61,11 @@ type model struct {
 	// snap indicator — set from Start() when --snap is active
 	snapping bool
 	snapDir  string
+
+	// onRunComplete is called exactly once when the engine stops naturally
+	// (all stages done). It is set by Start() and nulled after first call
+	// so it cannot fire twice. nil when no post-run work is needed.
+	onRunComplete func()
 }
 
 type tickMsg time.Time
@@ -720,6 +725,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = m.engine.IsRunning()
 		m.metrics = m.engine.GetMetrics()
 
+		// Engine finished all stages naturally — fire the post-run callback
+		// (e.g. write snapshot) without closing the TUI so the user can
+		// review the final chart and logs before pressing [q].
+		if wasRunning && !m.running && m.onRunComplete != nil {
+			m.onRunComplete()
+			m.onRunComplete = nil // prevent re-entry on subsequent ticks
+		}
+
 		// Expire director feedback message after 3s
 		if m.directorMsg != "" && time.Since(m.directorMsgTime) > 3*time.Second {
 			m.directorMsg = ""
@@ -831,12 +844,16 @@ func (m model) View() string {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-// Start launches the Bubble Tea TUI. snapping and snapDir are forwarded to the
-// model so the 📸 indicator is shown when --snap is active.
-func Start(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpec, snapping bool, snapDir string) error {
+// Start launches the Bubble Tea TUI.
+//   - snapping / snapDir  → drives the 📸 indicator
+//   - onRunComplete       → called once when the engine finishes all stages;
+//     nil is safe (no-op). Use this to write snapshots or print summaries
+//     without waiting for the user to close the TUI.
+func Start(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpec, snapping bool, snapDir string, onRunComplete func()) error {
 	m := initialModel(eng, cfg, specs)
 	m.snapping = snapping
 	m.snapDir = snapDir
+	m.onRunComplete = onRunComplete
 	p := tea.NewProgram(
 		m,
 		tea.WithAltScreen(),

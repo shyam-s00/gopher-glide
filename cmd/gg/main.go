@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/shyam-s00/gopher-glide/internal/config"
@@ -97,46 +98,69 @@ func main() {
 	eng := engine.New(engineOpts...)
 
 	// ── start TUI ─────────────────────────────────────────────────────────────
+	// onRunComplete is called by the TUI exactly once when the engine finishes
+	// all stages naturally. A CAS guard ensures it also covers the early-quit
+	// path (user presses [q] before the run ends).
+	var snapDone atomic.Bool
+
+	var onRunComplete func()
+	if rec != nil {
+		onRunComplete = func() {
+			if !snapDone.CompareAndSwap(false, true) {
+				return // already handled
+			}
+			finalizeSnap(rec, eng, cfg, *snapTag, resolvedSnapDir)
+		}
+	}
+
 	fmt.Println("Starting TUI...")
-	if err := tui.Start(eng, cfg, specs, *snapEnabled, resolvedSnapDir); err != nil {
+	if err := tui.Start(eng, cfg, specs, *snapEnabled, resolvedSnapDir, onRunComplete); err != nil {
 		fmt.Printf("Error running TUI: %v\n", err)
 		os.Exit(1)
 	}
 
-	// ── finalise snapshot ─────────────────────────────────────────────────────
-	// This runs after tui.Start returns (engine has stopped, context cancelled).
-	if rec != nil {
-		fmt.Println("Finalizing snapshot...")
+	// ── early-quit fallback ───────────────────────────────────────────────────
+	// Reached when the user presses [q] before all stages completed, meaning
+	// onRunComplete was never called by the TUI.  The CAS ensures we don't
+	// double-finalise when the run completed AND the user then pressed [q].
+	if rec != nil && snapDone.CompareAndSwap(false, true) {
+		finalizeSnap(rec, eng, cfg, *snapTag, resolvedSnapDir)
+	}
+}
 
-		endTime := eng.GetEndTime()
-		if endTime.IsZero() {
-			endTime = time.Now()
-		}
+// finalizeSnap drains the recorder, aggregates stats, and writes the .snap
+// file to dir. Errors are printed to stderr; the process continues.
+func finalizeSnap(rec *snap.DefaultRecorder, eng *engine.Engine, cfg *config.Config, tag, dir string) {
+	fmt.Println("Finalizing snapshot...")
 
-		snapData, err := rec.Finalize(snap.RunMeta{
-			Tag:       *snapTag,
-			Config:    cfg,
-			StartTime: eng.GetStartTime(),
-			EndTime:   endTime,
-			PeakRPS:   cfg.PeakRPS(),
-		})
-		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Error finalizing snapshot: %v\n", err)
-			os.Exit(1)
-		}
+	endTime := eng.GetEndTime()
+	if endTime.IsZero() {
+		endTime = time.Now()
+	}
 
-		filename := snap.FileName(*snapTag, endTime)
-		outPath := filepath.Join(resolvedSnapDir, filename)
+	snapData, err := rec.Finalize(snap.RunMeta{
+		Tag:       tag,
+		Config:    cfg,
+		StartTime: eng.GetStartTime(),
+		EndTime:   endTime,
+		PeakRPS:   cfg.PeakRPS(),
+	})
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Error finalizing snapshot: %v\n", err)
+		return
+	}
 
-		if err := snap.Write(snapData, outPath); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Error writing snapshot: %v\n", err)
-			os.Exit(1)
-		}
+	filename := snap.FileName(tag, endTime)
+	outPath := filepath.Join(dir, filename)
 
-		fmt.Printf("✓ Snapshot saved → %s\n", outPath)
+	if err := snap.Write(snapData, outPath); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Error writing snapshot: %v\n", err)
+		return
+	}
 
-		if dropped := rec.Dropped(); dropped > 0 {
-			fmt.Printf("⚠  %d entries were dropped (channel full) — consider a lower --snap-sample rate\n", dropped)
-		}
+	fmt.Printf("✓ Snapshot saved → %s\n", outPath)
+
+	if dropped := rec.Dropped(); dropped > 0 {
+		fmt.Printf("⚠  %d entries were dropped (channel full) — consider a lower --snap-sample rate\n", dropped)
 	}
 }
