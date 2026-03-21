@@ -15,10 +15,10 @@ const SnapFileExt = ".snap"
 // write never leaves a corrupt .snap on disk.
 // The parent directory must already exist; use EnsureSnapDir to create it.
 func Write(snap *Snapshot, path string) (err error) {
-	// Write to a temp file in the same directory so the final rename is atomic
+	// Write to a temp file in the same directory, so the final rename is atomic
 	// on all platforms (same filesystem).
 	tmp := path + ".tmp"
-	f, err := os.Create(tmp)
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("snap: create temp file %q: %w", tmp, err)
 	}
