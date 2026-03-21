@@ -38,7 +38,7 @@ func EnsureSnapDir(override string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("snap: create directory %q: %w", dir, err)
 	}
 	return dir, nil
