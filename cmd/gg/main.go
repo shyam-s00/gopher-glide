@@ -141,9 +141,16 @@ func main() {
 	// ── early-quit fallback ───────────────────────────────────────────────────
 	// Reached when the user presses [q] before all stages completed, meaning
 	// onRunComplete was never called by the TUI.  The CAS ensures we don't
-	// double-finalise when the run is completed AND the user then pressed [q].
+	// double-finalise when the run completed AND the user then pressed [q].
+	// Printing is safe here: tui.Start has returned and the terminal is restored.
 	if rec != nil && snapDone.CompareAndSwap(false, true) {
-		finalizeSnap(rec, eng, cfg, *snapTag, resolvedSnapDir)
+		fmt.Println("Finalizing snapshot...")
+		status, finalErr := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir)
+		if finalErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", finalErr)
+		} else {
+			fmt.Println(status)
+		}
 	}
 }
 
@@ -182,18 +189,6 @@ func finalizeSnapResult(rec *snap.DefaultRecorder, eng *engine.Engine, cfg *conf
 	return status, nil
 }
 
-// finalizeSnap is the early-quit path: TUI has already exited so printing
-// to stdout/stderr is safe.
-func finalizeSnap(rec *snap.DefaultRecorder, eng *engine.Engine, cfg *config.Config, tag, dir string) {
-	fmt.Println("Finalizing snapshot...")
-	status, err := finalizeSnapResult(rec, eng, cfg, tag, dir)
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return
-	}
-	fmt.Println(status)
-}
-
 // ── snap subcommand handlers ──────────────────────────────────────────────────
 
 func runSnapCmd(args []string) {
@@ -207,10 +202,7 @@ func runSnapCmd(args []string) {
 	case "view":
 		runSnapView(args[1:])
 	default:
-		_, err := fmt.Fprintf(os.Stderr, "unknown snap subcommand %q\n\n", args[0])
-		if err != nil {
-			// error writing to stderr, exiting
-		}
+		_, _ = fmt.Fprintf(os.Stderr, "unknown snap subcommand %q\n\n", args[0])
 		snapUsage()
 		os.Exit(1)
 	}
@@ -223,19 +215,13 @@ func runSnapList(args []string) {
 
 	dir, err := snap.ResolveSnapDir(*snapDir)
 	if err != nil {
-		_, err := fmt.Fprintf(os.Stderr, "snap list: resolve directory: %v\n", err)
-		if err != nil {
-			return
-		}
+		_, _ = fmt.Fprintf(os.Stderr, "snap list: resolve directory: %v\n", err)
 		os.Exit(1)
 	}
 
 	summaries, err := snap.ListAll(dir)
 	if err != nil {
-		_, err := fmt.Fprintf(os.Stderr, "snap list: %v\n", err)
-		if err != nil {
-			return
-		}
+		_, _ = fmt.Fprintf(os.Stderr, "snap list: %v\n", err)
 		os.Exit(1)
 	}
 	if len(summaries) == 0 {
