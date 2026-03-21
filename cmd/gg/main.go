@@ -47,11 +47,14 @@ func main() {
 	snapSample := fs.Float64("snap-sample", 0.05, "fraction of responses to sample for schema inference (0.0–1.0)")
 	_ = fs.Parse(os.Args[2:])
 
-	// Passing any snap-specific flag implicitly enables snapping.
-	// Users shouldn't need to type both --snap and --snap-dir.
-	if *snapDir != "" || *snapTag != "" {
-		*snapEnabled = true
-	}
+	// Any snap-specific flag passed explicitly implicitly enables snapping,
+	// so users don't need to type both --snap and e.g. --snap-dir.
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "snap-dir", "snap-tag", "snap-sample":
+			*snapEnabled = true
+		}
+	})
 
 	// ── load config ───────────────────────────────────────────────────────────
 	cfg, err := config.Load(configPath)
@@ -109,18 +112,23 @@ func main() {
 	eng := engine.New(engineOpts...)
 
 	// ── start TUI ─────────────────────────────────────────────────────────────
-	// onRunComplete is called by the TUI exactly once when the engine finishes
-	// all stages naturally. A CAS guard ensures it also covers the early-quit
-	// path (the user presses [q] before the run ends).
+	// onRunComplete is dispatched by the TUI as a background goroutine once
+	// the engine finishes all stages naturally. It must not write to
+	// stdout/stderr (alt-screen is still active). The returned string is
+	// displayed in the director bar.
 	var snapDone atomic.Bool
 
-	var onRunComplete func()
+	var onRunComplete func() string
 	if rec != nil {
-		onRunComplete = func() {
+		onRunComplete = func() string {
 			if !snapDone.CompareAndSwap(false, true) {
-				return // already handled
+				return "" // already handled
 			}
-			finalizeSnap(rec, eng, cfg, *snapTag, resolvedSnapDir)
+			status, err := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir)
+			if err != nil {
+				return fmt.Sprintf("⚠  snap error: %v", err)
+			}
+			return status
 		}
 	}
 
@@ -139,11 +147,11 @@ func main() {
 	}
 }
 
-// finalizeSnap drains the recorder, aggregates stats, and writes the .snap
-// file to dir. Errors are printed to stderr; the process continues.
-func finalizeSnap(rec *snap.DefaultRecorder, eng *engine.Engine, cfg *config.Config, tag, dir string) {
-	fmt.Println("Finalizing snapshot...")
-
+// finalizeSnapResult drains the recorder, aggregates stats, and writes the
+// .snap file to dir. Returns a human-readable status line on success.
+// It does not write to stdout or stderr, making it safe to call while the
+// TUI alt-screen is active.
+func finalizeSnapResult(rec *snap.DefaultRecorder, eng *engine.Engine, cfg *config.Config, tag, dir string) (string, error) {
 	endTime := eng.GetEndTime()
 	if endTime.IsZero() {
 		endTime = time.Now()
@@ -157,23 +165,33 @@ func finalizeSnap(rec *snap.DefaultRecorder, eng *engine.Engine, cfg *config.Con
 		PeakRPS:   cfg.PeakRPS(),
 	})
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error finalizing snapshot: %v\n", err)
-		return
+		return "", fmt.Errorf("finalize recorder: %w", err)
 	}
 
 	filename := snap.FileName(tag, endTime)
 	outPath := filepath.Join(dir, filename)
 
 	if err := snap.Write(snapData, outPath); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error writing snapshot: %v\n", err)
+		return "", fmt.Errorf("write snapshot: %w", err)
+	}
+
+	status := fmt.Sprintf("✓ Snapshot saved → %s", outPath)
+	if dropped := rec.Dropped(); dropped > 0 {
+		status += fmt.Sprintf("  ⚠ %d dropped", dropped)
+	}
+	return status, nil
+}
+
+// finalizeSnap is the early-quit path: TUI has already exited so printing
+// to stdout/stderr is safe.
+func finalizeSnap(rec *snap.DefaultRecorder, eng *engine.Engine, cfg *config.Config, tag, dir string) {
+	fmt.Println("Finalizing snapshot...")
+	status, err := finalizeSnapResult(rec, eng, cfg, tag, dir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return
 	}
-
-	fmt.Printf("✓ Snapshot saved → %s\n", outPath)
-
-	if dropped := rec.Dropped(); dropped > 0 {
-		fmt.Printf("⚠  %d entries were dropped (channel full) — consider a lower --snap-sample rate\n", dropped)
-	}
+	fmt.Println(status)
 }
 
 // ── snap subcommand handlers ──────────────────────────────────────────────────
