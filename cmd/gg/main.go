@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"text/tabwriter"
 	"time"
@@ -28,7 +30,7 @@ func main() {
 	}
 
 	// ── snap subcommand router ────────────────────────────────────────────────
-	// Dispatched before config-load so `gg snap` works without a config file.
+	// Dispatched before the config-load so `gg snap` works without a config file.
 	if os.Args[1] == "snap" {
 		runSnapCmd(os.Args[2:])
 		return
@@ -109,7 +111,7 @@ func main() {
 	// ── start TUI ─────────────────────────────────────────────────────────────
 	// onRunComplete is called by the TUI exactly once when the engine finishes
 	// all stages naturally. A CAS guard ensures it also covers the early-quit
-	// path (user presses [q] before the run ends).
+	// path (the user presses [q] before the run ends).
 	var snapDone atomic.Bool
 
 	var onRunComplete func()
@@ -131,7 +133,7 @@ func main() {
 	// ── early-quit fallback ───────────────────────────────────────────────────
 	// Reached when the user presses [q] before all stages completed, meaning
 	// onRunComplete was never called by the TUI.  The CAS ensures we don't
-	// double-finalise when the run completed AND the user then pressed [q].
+	// double-finalise when the run is completed AND the user then pressed [q].
 	if rec != nil && snapDone.CompareAndSwap(false, true) {
 		finalizeSnap(rec, eng, cfg, *snapTag, resolvedSnapDir)
 	}
@@ -187,7 +189,10 @@ func runSnapCmd(args []string) {
 	case "view":
 		runSnapView(args[1:])
 	default:
-		_, _ = fmt.Fprintf(os.Stderr, "unknown snap subcommand %q\n\n", args[0])
+		_, err := fmt.Fprintf(os.Stderr, "unknown snap subcommand %q\n\n", args[0])
+		if err != nil {
+			// error writing to stderr, exiting
+		}
 		snapUsage()
 		os.Exit(1)
 	}
@@ -200,13 +205,19 @@ func runSnapList(args []string) {
 
 	dir, err := snap.ResolveSnapDir(*snapDir)
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "snap list: resolve directory: %v\n", err)
+		_, err := fmt.Fprintf(os.Stderr, "snap list: resolve directory: %v\n", err)
+		if err != nil {
+			return
+		}
 		os.Exit(1)
 	}
 
 	summaries, err := snap.ListAll(dir)
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "snap list: %v\n", err)
+		_, err := fmt.Fprintf(os.Stderr, "snap list: %v\n", err)
+		if err != nil {
+			return
+		}
 		os.Exit(1)
 	}
 	if len(summaries) == 0 {
@@ -231,17 +242,75 @@ func runSnapList(args []string) {
 }
 
 func runSnapView(args []string) {
-	// Phase 2, task 3 — tui.StartSnapViewer() will be wired here.
-	_, _ = fmt.Fprintln(os.Stderr, "gg snap view: not yet implemented")
-	os.Exit(1)
+	fs := flag.NewFlagSet("gg snap view", flag.ExitOnError)
+	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
+
+	// Go's flag package stops at the first non-flag argument, so
+	// `gg snap view 2 --snap-dir /tmp` would leave --snap-dir unparsed.
+	// Pull the positional target out first when it leads the arg list,
+	// then parse the remainder as flags. The fallback (flags first, then
+	// the target) is handled by fs.Args() after parsing.
+	var target string
+	var flagArgs []string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		target = args[0]
+		flagArgs = args[1:]
+	} else {
+		flagArgs = args
+	}
+	_ = fs.Parse(flagArgs)
+	if target == "" {
+		if rest := fs.Args(); len(rest) > 0 {
+			target = rest[0]
+		}
+	}
+
+	if target == "" {
+		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap view <id|tag|file> [--snap-dir DIR]")
+		os.Exit(1)
+	}
+
+	dir, err := snap.ResolveSnapDir(*snapDir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap view: resolve directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	var info *snap.SnapInfo
+	if id, atoiErr := strconv.Atoi(target); atoiErr == nil {
+		// numeric → look up by 1-based ID
+		info, err = snap.FindByID(dir, id)
+	} else if _, statErr := os.Stat(target); statErr == nil {
+		// existing path → load directly
+		si := snap.SnapInfo{Path: target, FileName: filepath.Base(target)}
+		info = &si
+	} else {
+		// fall back to tag search
+		info, err = snap.FindByTag(dir, target)
+	}
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap view: %v\n", err)
+		os.Exit(1)
+	}
+
+	s, err := snap.Read(info.Path)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap view: read %q: %v\n", info.Path, err)
+		os.Exit(1)
+	}
+
+	if err := tui.StartSnapViewer(s, *info); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap view: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func snapUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: gg snap <subcommand> [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
-	fmt.Fprintln(os.Stderr, "  list        [--snap-dir DIR]   list all saved snapshots")
-	fmt.Fprintln(os.Stderr, "  view <id>   [--snap-dir DIR]   view a single snapshot")
+	fmt.Fprintln(os.Stderr, "  list                    [--snap-dir DIR]   list all saved snapshots")
+	fmt.Fprintln(os.Stderr, "  view <id|tag|file>      [--snap-dir DIR]   view a single snapshot")
 }
 
 func snapDisplayTag(tag string) string {
