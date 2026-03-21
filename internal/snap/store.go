@@ -31,12 +31,17 @@ func ResolveSnapDir(override string) (string, error) {
 	return filepath.Join(base, "gg", "snapshots"), nil
 }
 
-// EnsureSnapDir resolves the snap directory and creates it (plus any missing
-// parents) if it does not already exist. Returns the resolved absolute path.
+// EnsureSnapDir resolves the snap directory, converts it to an absolute path,
+// and creates it (plus any missing parents) if it does not already exist.
+// Returns the resolved absolute path.
 func EnsureSnapDir(override string) (string, error) {
 	dir, err := ResolveSnapDir(override)
 	if err != nil {
 		return "", err
+	}
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		return "", fmt.Errorf("snap: resolve absolute path %q: %w", dir, err)
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("snap: create directory %q: %w", dir, err)
