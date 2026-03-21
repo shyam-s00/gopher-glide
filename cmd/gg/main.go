@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
+	"text/tabwriter"
 	"time"
 
 	"github.com/shyam-s00/gopher-glide/internal/config"
@@ -22,7 +23,15 @@ func main() {
 
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: gg <config-file> [--snap] [--snap-tag TAG] [--snap-dir DIR] [--snap-sample RATE]")
+		fmt.Println("       gg snap <list|view> [--snap-dir DIR]")
 		os.Exit(1)
+	}
+
+	// ── snap subcommand router ────────────────────────────────────────────────
+	// Dispatched before config-load so `gg snap` works without a config file.
+	if os.Args[1] == "snap" {
+		runSnapCmd(os.Args[2:])
+		return
 	}
 
 	configPath := os.Args[1]
@@ -162,5 +171,93 @@ func finalizeSnap(rec *snap.DefaultRecorder, eng *engine.Engine, cfg *config.Con
 
 	if dropped := rec.Dropped(); dropped > 0 {
 		fmt.Printf("⚠  %d entries were dropped (channel full) — consider a lower --snap-sample rate\n", dropped)
+	}
+}
+
+// ── snap subcommand handlers ──────────────────────────────────────────────────
+
+func runSnapCmd(args []string) {
+	if len(args) == 0 {
+		snapUsage()
+		os.Exit(1)
+	}
+	switch args[0] {
+	case "list":
+		runSnapList(args[1:])
+	case "view":
+		runSnapView(args[1:])
+	default:
+		_, _ = fmt.Fprintf(os.Stderr, "unknown snap subcommand %q\n\n", args[0])
+		snapUsage()
+		os.Exit(1)
+	}
+}
+
+func runSnapList(args []string) {
+	fs := flag.NewFlagSet("gg snap list", flag.ExitOnError)
+	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
+	_ = fs.Parse(args)
+
+	dir, err := snap.ResolveSnapDir(*snapDir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap list: resolve directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	summaries, err := snap.ListAll(dir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap list: %v\n", err)
+		os.Exit(1)
+	}
+	if len(summaries) == 0 {
+		fmt.Printf("No snapshots found in %s\n", dir)
+		return
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	_, _ = fmt.Fprintln(w, "ID\tTAG\tDATE\tREQUESTS\tPEAK RPS\tENDPOINTS")
+	_, _ = fmt.Fprintln(w, "--\t---\t----\t--------\t--------\t---------")
+	for _, s := range summaries {
+		_, _ = fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%d\t%d\n",
+			s.ID,
+			snapDisplayTag(s.Tag),
+			s.Date.Format("2006-01-02 15:04"),
+			snapFormatCount(s.TotalRequests),
+			s.PeakRPS,
+			s.EndpointCount,
+		)
+	}
+	_ = w.Flush()
+}
+
+func runSnapView(args []string) {
+	// Phase 2, task 3 — tui.StartSnapViewer() will be wired here.
+	_, _ = fmt.Fprintln(os.Stderr, "gg snap view: not yet implemented")
+	os.Exit(1)
+}
+
+func snapUsage() {
+	fmt.Fprintln(os.Stderr, "Usage: gg snap <subcommand> [flags]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Subcommands:")
+	fmt.Fprintln(os.Stderr, "  list        [--snap-dir DIR]   list all saved snapshots")
+	fmt.Fprintln(os.Stderr, "  view <id>   [--snap-dir DIR]   view a single snapshot")
+}
+
+func snapDisplayTag(tag string) string {
+	if tag == "" || tag == "run" {
+		return "(untagged)"
+	}
+	return tag
+}
+
+func snapFormatCount(n int64) string {
+	switch {
+	case n >= 1_000_000:
+		return fmt.Sprintf("%d,%03d,%03d", n/1_000_000, (n/1_000)%1_000, n%1_000)
+	case n >= 1_000:
+		return fmt.Sprintf("%d,%03d", n/1_000, n%1_000)
+	default:
+		return fmt.Sprintf("%d", n)
 	}
 }
