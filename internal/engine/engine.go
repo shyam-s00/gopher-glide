@@ -2,9 +2,6 @@ package engine
 
 import (
 	"context"
-	"github.com/shyam-s00/gopher-glide/internal/config"
-	"github.com/shyam-s00/gopher-glide/internal/httpreader"
-	"github.com/shyam-s00/gopher-glide/internal/snap"
 	"io"
 	"math"
 	"math/rand"
@@ -13,6 +10,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/shyam-s00/gopher-glide/internal/config"
+	"github.com/shyam-s00/gopher-glide/internal/httpreader"
+	"github.com/shyam-s00/gopher-glide/internal/snap"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -625,6 +626,21 @@ func (e *Engine) GetElapsedTime() float64 {
 		return time.Since(e.startTime).Seconds()
 	}
 	return e.endTime.Sub(e.startTime).Seconds()
+}
+
+// GetStartTime returns the wall-clock time at which RunStages began.
+// Returns a zero time if the engine has not started yet.
+func (e *Engine) GetStartTime() time.Time {
+	return e.startTime
+}
+
+// GetEndTime returns the wall-clock time at which RunStages completed.
+// Returns time.Now() if the engine has not finished yet (e.g. was cancelled).
+func (e *Engine) GetEndTime() time.Time {
+	if e.endTime.IsZero() {
+		return time.Now()
+	}
+	return e.endTime
 }
 
 // shouldSample returns true for 1-in-sampleEvery requests.

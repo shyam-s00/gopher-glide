@@ -3,11 +3,12 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
-	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -56,6 +57,10 @@ type model struct {
 	// director mode feedback
 	directorMsg     string
 	directorMsgTime time.Time
+
+	// snap indicator — set from Start() when --snap is active
+	snapping bool
+	snapDir  string
 }
 
 type tickMsg time.Time
@@ -802,6 +807,11 @@ func (m model) View() string {
 		hintStyle.Render(fmt.Sprintf("[f] logs (%s)  [q] quit", logMode)) +
 		biasStr + feedbackStr
 
+	if m.snapping {
+		snapStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
+		directorBar += snapStyle.Render(fmt.Sprintf("  📸 Snapping → %s", m.snapDir))
+	}
+
 	logBox := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#63")).
@@ -821,9 +831,14 @@ func (m model) View() string {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-func Start(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpec) error {
+// Start launches the Bubble Tea TUI. snapping and snapDir are forwarded to the
+// model so the 📸 indicator is shown when --snap is active.
+func Start(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpec, snapping bool, snapDir string) error {
+	m := initialModel(eng, cfg, specs)
+	m.snapping = snapping
+	m.snapDir = snapDir
 	p := tea.NewProgram(
-		initialModel(eng, cfg, specs),
+		m,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)

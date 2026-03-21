@@ -1,24 +1,47 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
+	"github.com/shyam-s00/gopher-glide/internal/snap"
 	"github.com/shyam-s00/gopher-glide/internal/tui"
 	"github.com/shyam-s00/gopher-glide/internal/version"
-	"os"
 )
 
 func main() {
-	fmt.Printf("gg (Gopher Glide) %s (commit:%s) built %s\n", version.Version, version.GitCommit, version.GetBuildDate())
+	fmt.Printf("gg (Gopher Glide) %s (commit:%s) built %s\n",
+		version.Version, version.GitCommit, version.GetBuildDate())
 
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: gg <config-file>")
+		fmt.Println("Usage: gg <config-file> [--snap] [--snap-tag TAG] [--snap-dir DIR] [--snap-sample RATE]")
 		os.Exit(1)
 	}
 
 	configPath := os.Args[1]
+
+	// ── snap flags ────────────────────────────────────────────────────────────
+	// Parsed from os.Args[2:] so <config-file> always stays as the first arg.
+	fs := flag.NewFlagSet("gg", flag.ExitOnError)
+	snapEnabled := fs.Bool("snap", false, "capture a behavioral snapshot after the run")
+	snapTag := fs.String("snap-tag", "", "tag to attach to the snapshot (e.g. v1.2.0-pre)")
+	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
+	snapSample := fs.Float64("snap-sample", 0.05, "fraction of responses to sample for schema inference (0.0–1.0)")
+	_ = fs.Parse(os.Args[2:])
+
+	// Passing any snap-specific flag implicitly enables snapping.
+	// Users shouldn't need to type both --snap and --snap-dir.
+	if *snapDir != "" || *snapTag != "" {
+		*snapEnabled = true
+	}
+
+	// ── load config ───────────────────────────────────────────────────────────
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
@@ -33,7 +56,7 @@ func main() {
 		fmt.Printf("    [%d] duration=%s targetRPS=%d\n", i+1, s.Duration, s.TargetRPS)
 	}
 
-	// Parse the .http file — resolved to the same directory as config.yaml
+	// ── parse .http file ──────────────────────────────────────────────────────
 	specs, err := httpreader.ParseFile(cfg.ConfigSection.HTTPFilePath)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error parsing http file: %v\n", err)
@@ -49,11 +72,71 @@ func main() {
 		fmt.Printf("  [%d] %s %s\n", i+1, s.Method, s.URL)
 	}
 
-	eng := engine.New()
+	// ── set up recorder (optional) ────────────────────────────────────────────
+	var rec *snap.DefaultRecorder
+	var resolvedSnapDir string
 
+	if *snapEnabled {
+		resolvedSnapDir, err = snap.EnsureSnapDir(*snapDir)
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error setting up snap directory: %v\n", err)
+			os.Exit(1)
+		}
+		rec = snap.NewDefaultRecorder(0)
+		fmt.Printf("📸 Snapping → %s\n", resolvedSnapDir)
+	}
+
+	// ── build engine ──────────────────────────────────────────────────────────
+	var engineOpts []engine.EngineOption
+	if rec != nil {
+		engineOpts = append(engineOpts,
+			engine.WithRecorder(rec),
+			engine.WithSampleRate(*snapSample),
+		)
+	}
+	eng := engine.New(engineOpts...)
+
+	// ── start TUI ─────────────────────────────────────────────────────────────
 	fmt.Println("Starting TUI...")
-	if err := tui.Start(eng, cfg, specs); err != nil {
+	if err := tui.Start(eng, cfg, specs, *snapEnabled, resolvedSnapDir); err != nil {
 		fmt.Printf("Error running TUI: %v\n", err)
 		os.Exit(1)
+	}
+
+	// ── finalise snapshot ─────────────────────────────────────────────────────
+	// This runs after tui.Start returns (engine has stopped, context cancelled).
+	if rec != nil {
+		fmt.Println("Finalizing snapshot...")
+
+		endTime := eng.GetEndTime()
+		if endTime.IsZero() {
+			endTime = time.Now()
+		}
+
+		snapData, err := rec.Finalize(snap.RunMeta{
+			Tag:       *snapTag,
+			Config:    cfg,
+			StartTime: eng.GetStartTime(),
+			EndTime:   endTime,
+			PeakRPS:   cfg.PeakRPS(),
+		})
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error finalizing snapshot: %v\n", err)
+			os.Exit(1)
+		}
+
+		filename := snap.FileName(*snapTag, endTime)
+		outPath := filepath.Join(resolvedSnapDir, filename)
+
+		if err := snap.Write(snapData, outPath); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error writing snapshot: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("✓ Snapshot saved → %s\n", outPath)
+
+		if dropped := rec.Dropped(); dropped > 0 {
+			fmt.Printf("⚠  %d entries were dropped (channel full) — consider a lower --snap-sample rate\n", dropped)
+		}
 	}
 }
