@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"net/http"
 	"sort"
 	"sync"
@@ -99,6 +100,11 @@ type FieldSchema struct {
 	Stability string  `json:"stability"` // STABLE / VOLATILE / RARE
 }
 
+// DefaultMaxBodySamples is the per-endpoint reservoir cap used when neither
+// a CLI flag nor a config.yaml value overrides it. 200 samples gives presence
+// fractions accurate to ±2 %, which is sufficient for stable schema inference.
+const DefaultMaxBodySamples = 200
+
 // endpointAcc accumulates raw observations for a single endpoint key.
 // All methods are safe for concurrent use via its internal mutex.
 type endpointAcc struct {
@@ -107,14 +113,15 @@ type endpointAcc struct {
 	latenciesMs []float64
 	errorCount  int64
 	totalCount  int64
-	bodySamples [][]byte // retained for schema inference (schema.go)
-}
 
-func newEndpointAcc() *endpointAcc {
-	return &endpointAcc{
-		statusCodes: make(map[int]int64),
-		latenciesMs: make([]float64, 0, 64),
-	}
+	// Body-sample reservoir (Knuth Algorithm R).
+	bodySamples     [][]byte // fixed-capacity slice; len ≤ maxBodySamples
+	bodyCount       int64    // total bodies seen (drives reservoir probability)
+	bodyBytesStored int64    // bytes currently held across bodySamples
+
+	// Limits set once at creation; never mutated afterwards.
+	maxBodySamples int   // reservoir capacity, always > 0
+	maxBodyBytes   int64 // per-endpoint byte budget; 0 = no byte-based limit
 }
 
 func (a *endpointAcc) record(entry RecordEntry) {
@@ -132,11 +139,46 @@ func (a *endpointAcc) record(entry RecordEntry) {
 		a.errorCount++
 	}
 
-	// Retain a copy of sampled bodies for schema inference.
 	if len(entry.RespBody) > 0 {
-		body := make([]byte, len(entry.RespBody))
-		copy(body, entry.RespBody)
-		a.bodySamples = append(a.bodySamples, body)
+		a.recordBody(entry.RespBody)
+	}
+}
+
+// recordBody adds body to the reservoir using Knuth Algorithm R, subject to
+// an optional byte budget. Must be called with a.mu held.
+func (a *endpointAcc) recordBody(body []byte) {
+	newLen := int64(len(body))
+
+	// Byte-budget guard: freeze the reservoir once the budget is exhausted.
+	if a.maxBodyBytes > 0 && a.bodyBytesStored >= a.maxBodyBytes {
+		return
+	}
+
+	a.bodyCount++
+
+	if int(a.bodyCount) <= a.maxBodySamples {
+		// Reservoir not yet full — append directly.
+		cp := make([]byte, len(body))
+		copy(cp, body)
+		a.bodySamples = append(a.bodySamples, cp)
+		a.bodyBytesStored += newLen
+		return
+	}
+
+	// Reservoir full: replace a uniformly-random existing slot with probability
+	// maxBodySamples/bodyCount. This keeps every body in the stream equally
+	// likely to appear in the final set, regardless of run length.
+	j := rand.Int64N(a.bodyCount)
+	if j < int64(a.maxBodySamples) {
+		oldLen := int64(len(a.bodySamples[j]))
+		// Byte-budget check: ensure the swap itself doesn't bust the budget.
+		if a.maxBodyBytes > 0 && (a.bodyBytesStored-oldLen+newLen) > a.maxBodyBytes {
+			return
+		}
+		cp := make([]byte, len(body))
+		copy(cp, body)
+		a.bodyBytesStored = a.bodyBytesStored - oldLen + newLen
+		a.bodySamples[j] = cp
 	}
 }
 
@@ -186,12 +228,14 @@ func (a *endpointAcc) toEndpointSnap(id string) EndpointSnap {
 // Entries are enqueued to a buffered channel and drained by a single background
 // goroutine, keeping Record() non-blocking in the engine hot-path.
 type DefaultRecorder struct {
-	ch        chan RecordEntry
-	wg        sync.WaitGroup
-	endpoints sync.Map // key: "METHOD:URL" → *endpointAcc
-	dropped   atomic.Int64
-	closed    atomic.Bool
-	sanitizer Sanitizer // applied in drain() before accumulation; never nil
+	ch             chan RecordEntry
+	wg             sync.WaitGroup
+	endpoints      sync.Map // key: "METHOD:URL" → *endpointAcc
+	dropped        atomic.Int64
+	closed         atomic.Bool
+	sanitizer      Sanitizer // applied in drain() before accumulation; never nil
+	maxBodySamples int       // reservoir cap passed to new endpointAcc instances; 0 = use default
+	maxBodyBytes   int64     // byte budget passed to new endpointAcc instances; 0 = no limit
 }
 
 // RecorderOption is a functional option for DefaultRecorder.
@@ -212,6 +256,22 @@ func WithExtraHeaders(headers ...string) RecorderOption {
 	return func(r *DefaultRecorder) { r.sanitizer = NewSanitizerWithExtraHeaders(headers...) }
 }
 
+// WithMaxBodySamples sets the per-endpoint reservoir cap for body samples used
+// in schema inference. Reservoir sampling (Knuth Algorithm R) ensures the
+// stored set is statistically unbiased regardless of run length.
+// Values ≤ 0 fall back to DefaultMaxBodySamples (200).
+func WithMaxBodySamples(n int) RecorderOption {
+	return func(r *DefaultRecorder) { r.maxBodySamples = n }
+}
+
+// WithMaxBodyBytes sets the per-endpoint byte budget for stored body samples.
+// Once an endpoint's stored bytes reach this limit, no further bodies (or
+// reservoir replacements) are accepted for that endpoint.
+// 0 means no byte-based limit; the reservoir sample count is the primary guard.
+func WithMaxBodyBytes(n int64) RecorderOption {
+	return func(r *DefaultRecorder) { r.maxBodyBytes = n }
+}
+
 // NewDefaultRecorder creates a DefaultRecorder with a buffered channel of
 // bufSize entries. A value of 0 or less defaults to 4096.
 // By default a DefaultSanitizer is installed; override with WithSanitizer.
@@ -229,6 +289,22 @@ func NewDefaultRecorder(bufSize int, opts ...RecorderOption) *DefaultRecorder {
 	r.wg.Add(1)
 	go r.drain()
 	return r
+}
+
+// newAcc creates a fresh endpointAcc pre-configured with this recorder's
+// body-sample limits. Called from drain() via LoadOrStore.
+func (r *DefaultRecorder) newAcc() *endpointAcc {
+	maxSamples := r.maxBodySamples
+	if maxSamples <= 0 {
+		maxSamples = DefaultMaxBodySamples
+	}
+	return &endpointAcc{
+		statusCodes:    make(map[int]int64),
+		latenciesMs:    make([]float64, 0, 64),
+		bodySamples:    make([][]byte, 0, maxSamples),
+		maxBodySamples: maxSamples,
+		maxBodyBytes:   r.maxBodyBytes,
+	}
 }
 
 // Record enqueues an entry for background processing.
@@ -253,7 +329,7 @@ func (r *DefaultRecorder) drain() {
 	for entry := range r.ch {
 		entry = r.sanitizer.Sanitize(entry)
 		key := entry.Method + ":" + entry.URL
-		val, _ := r.endpoints.LoadOrStore(key, newEndpointAcc())
+		val, _ := r.endpoints.LoadOrStore(key, r.newAcc())
 		val.(*endpointAcc).record(entry)
 	}
 }

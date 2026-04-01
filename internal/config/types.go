@@ -3,8 +3,9 @@ package config
 import "time"
 
 type Config struct {
-	ConfigSection Section `yaml:"config"`
-	Stages        []Stage `yaml:"stages"`
+	ConfigSection Section     `yaml:"config"`
+	Snap          SnapSection `yaml:"snap"`
+	Stages        []Stage     `yaml:"stages"`
 }
 
 type Section struct {
@@ -19,6 +20,31 @@ type Section struct {
 	// TimeScale speeds up or slows down the stage clock.
 	// 1.0 is real-time (default). 2.0 runs twice as fast. 0.5 runs at half speed.
 	TimeScale float64 `yaml:"time_scale"`
+}
+
+// SnapSection holds test-plan-level snap settings that control memory usage
+// and schema inference quality.
+//
+// All fields are optional — omitting the snap: block from config.yaml causes
+// the application defaults to apply. CLI flags always take precedence over
+// values set here, which in turn take precedence over the hard defaults.
+type SnapSection struct {
+	// SampleRate is the fraction of responses whose body is retained for
+	// schema inference. Valid range: 0.0–1.0.
+	// 0 means "not set" — the application default (0.05) will be used.
+	SampleRate float64 `yaml:"sample_rate"`
+
+	// MaxSamples is the per-endpoint reservoir cap for body samples used in
+	// schema inference. Reservoir sampling ensures the set is statistically
+	// unbiased regardless of when during the run bodies were collected.
+	// 0 means "not set" — the application default (200) will be used.
+	MaxSamples int `yaml:"max_samples"`
+
+	// MaxBodyKB is the per-endpoint byte budget for stored body samples, in
+	// kilobytes. Once the budget is reached no further bodies are stored for
+	// that endpoint. 0 means no byte-based limit (MaxSamples is the primary
+	// guard). Default: 0.
+	MaxBodyKB int `yaml:"max_body_kb"`
 }
 
 // Stage represents a single load phase in the test plan.
@@ -71,6 +97,16 @@ func (c *Config) Validate() error {
 
 	if c.ConfigSection.TimeScale < 0 {
 		return ErrInvalidTimeScale
+	}
+
+	if c.Snap.SampleRate < 0 || c.Snap.SampleRate > 1 {
+		return ErrInvalidSnapSampleRate
+	}
+	if c.Snap.MaxSamples < 0 {
+		return ErrInvalidSnapMaxSamples
+	}
+	if c.Snap.MaxBodyKB < 0 {
+		return ErrInvalidSnapMaxBodyKB
 	}
 
 	if len(c.Stages) == 0 {
