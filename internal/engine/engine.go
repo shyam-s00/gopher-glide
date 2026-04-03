@@ -606,6 +606,12 @@ func (e *Engine) getRecentFromBuffer(buffer []*CallLog, count int) []CallLog {
 	return logs
 }
 
+// LogCallForTest is an exported shim so tests in other packages (e.g. tui)
+// can inject call-log entries without needing access to the unexported logCall.
+func (e *Engine) LogCallForTest(method, url string, statusCode int, duration time.Duration, err error) {
+	e.logCall(method, url, statusCode, duration, err)
+}
+
 func (e *Engine) GetRecentLogs(count int) []CallLog {
 	e.callLogsMu.RLock()
 	defer e.callLogsMu.RUnlock()
