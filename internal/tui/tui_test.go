@@ -589,30 +589,64 @@ func TestRenderLogContent_NonSuccessStatus(t *testing.T) {
 
 // ── Update: onRunComplete dispatch ───────────────────────────────────────────
 
+// TestUpdate_Tick_DispatchesOnRunComplete verifies that when the engine
+// transitions from running→stopped during a tick, onRunComplete is:
+//
+//	(a) cleared from the model (consumed exactly once, never re-fired), and
+//	(b) actually invoked when the returned Cmd is executed by the event loop.
+//
+// The engine never starts in tests so engine.IsRunning() is always false;
+// priming m.running=true makes the tick handler observe wasRunning=true →
+// running=false, triggering the dispatch.
 func TestUpdate_Tick_DispatchesOnRunComplete(t *testing.T) {
 	m := newTestModel()
-	m.running = false // start as not-running
 	called := false
 	m.onRunComplete = func() string {
 		called = true
 		return "snap saved"
 	}
+	m.running = true // simulate "was running"
 
-	// Simulate: wasRunning=true → m.running=false triggers dispatch.
-	// Manually set the "was running" by flipping wasRunning in the tick handler.
-	// The easiest approach: set running=true first, then send a tick that observes it stopped.
-	m.running = true
+	m2, cmd := m.Update(tickMsg(time.Now()))
+	result := m2.(model)
 
-	// First tick: engine is not running (isRunning() returns false), so wasRunning=true → running=false.
-	m2, _ := m.Update(tickMsg(timeNow()))
-	_ = m2
-	// called will only be true if wasRunning=true and !running, AND onRunComplete != nil.
-	// Since the engine isn't actually running, IsRunning() returns false, so the flip happens.
-	// We can only verify no panic occurred and the model is valid.
-	_ = called
+	// (a) The callback must be cleared from the model after dispatch.
+	if result.onRunComplete != nil {
+		t.Error("onRunComplete should be nil after running→stopped transition (dispatched once)")
+	}
+	if cmd == nil {
+		t.Fatal("expected a non-nil Cmd after running→stopped transition")
+	}
+
+	// (b) Execute the returned batch to drive onRunComplete to completion.
+	// tea.Batch returns a BatchMsg holding the individual commands; running
+	// each one here mirrors what the Bubble Tea event loop would do. tickCmd()
+	// adds ~100 ms of latency, which is acceptable for a unit test.
+	batchMsg, ok := cmd().(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("expected tea.BatchMsg from the returned Cmd, got %T", cmd())
+	}
+	for _, innerCmd := range batchMsg {
+		if innerCmd != nil {
+			innerCmd()
+		}
+	}
+
+	if !called {
+		t.Error("onRunComplete was not called when the dispatched Cmd was executed")
+	}
 }
 
-// timeNow is a helper to avoid import cycle issues in tests.
-func timeNow() time.Time {
-	return time.Now()
+// TestUpdate_Tick_NoDispatchWhenAlreadyStopped verifies that onRunComplete is
+// not dispatched on a tick where the engine was already stopped before the
+// tick fired — i.e. when no running→stopped transition occurred.
+func TestUpdate_Tick_NoDispatchWhenAlreadyStopped(t *testing.T) {
+	m := newTestModel()
+	m.running = false // was NOT running — wasRunning && !m.running is false
+	m.onRunComplete = func() string { return "should not be called" }
+
+	m2, _ := m.Update(tickMsg(time.Now()))
+	if m2.(model).onRunComplete == nil {
+		t.Error("onRunComplete should not be cleared when there was no running→stopped transition")
+	}
 }

@@ -214,7 +214,7 @@ func renderEndpointPanel(ep snap.EndpointSnap, width int) string {
 		fmt.Sprintf("%s  %s", labelStyle.Render("Max:"), valueStyle.Render(fmt.Sprintf("%.1f ms", ep.Latency.Max))),
 	)
 
-	// Error rate + sample count
+	// Error rate + request count
 	erStyle := successStyle
 	if ep.ErrorRate >= 0.05 {
 		erStyle = errorStyle
