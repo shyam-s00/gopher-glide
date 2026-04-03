@@ -176,7 +176,8 @@ func main() {
 			if !snapDone.CompareAndSwap(false, true) {
 				return "" // already handled
 			}
-			status, err := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir)
+			status, err := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir,
+				effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB)
 			if err != nil {
 				return fmt.Sprintf("⚠  snap error: %v", err)
 			}
@@ -197,7 +198,8 @@ func main() {
 	// Printing is safe here: tui.Start has returned and the terminal is restored.
 	if rec != nil && snapDone.CompareAndSwap(false, true) {
 		fmt.Println("Finalizing snapshot...")
-		status, finalErr := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir)
+		status, finalErr := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir,
+			effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB)
 		if finalErr != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", finalErr)
 		} else {
@@ -210,18 +212,22 @@ func main() {
 // .snap file to dir. Returns a human-readable status line on success.
 // It does not write to stdout or stderr, making it safe to call while the
 // TUI alt-screen is active.
-func finalizeSnapResult(rec *snap.DefaultRecorder, eng *engine.Engine, cfg *config.Config, tag, dir string) (string, error) {
+func finalizeSnapResult(rec *snap.DefaultRecorder, eng *engine.Engine, cfg *config.Config,
+	tag, dir string, sampleRate float64, maxSamples, maxBodyKB int) (string, error) {
 	endTime := eng.GetEndTime()
 	if endTime.IsZero() {
 		endTime = time.Now()
 	}
 
 	snapData, err := rec.Finalize(snap.RunMeta{
-		Tag:       tag,
-		Config:    cfg,
-		StartTime: eng.GetStartTime(),
-		EndTime:   endTime,
-		PeakRPS:   cfg.PeakRPS(),
+		Tag:        tag,
+		Config:     cfg,
+		StartTime:  eng.GetStartTime(),
+		EndTime:    endTime,
+		PeakRPS:    cfg.PeakRPS(),
+		SampleRate: sampleRate,
+		MaxSamples: maxSamples,
+		MaxBodyKB:  maxBodyKB,
 	})
 	if err != nil {
 		return "", fmt.Errorf("finalize recorder: %w", err)

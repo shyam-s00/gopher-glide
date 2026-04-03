@@ -44,11 +44,14 @@ type RecordEntry struct {
 // RunMeta carries top-level context about the load test run, supplied at
 // Finalize time once the engine has completed all stages.
 type RunMeta struct {
-	Tag       string         // value of --snap-tag flag
-	Config    *config.Config // full run config (used for config hash)
-	StartTime time.Time
-	EndTime   time.Time
-	PeakRPS   int
+	Tag        string         // value of --snap-tag flag
+	Config     *config.Config // full run config (used for config hash)
+	StartTime  time.Time
+	EndTime    time.Time
+	PeakRPS    int
+	SampleRate float64 // effective body-sample rate used for this run
+	MaxSamples int     // effective per-endpoint reservoir cap (0 = DefaultMaxBodySamples)
+	MaxBodyKB  int     // effective per-endpoint byte budget in KB (0 = unlimited)
 }
 
 // ── Snapshot types (written by format.go, read by diff.go, etc.) ─────────────
@@ -62,22 +65,34 @@ type Snapshot struct {
 
 // SnapMeta holds run-level metadata stored in the snapshot file.
 type SnapMeta struct {
-	Tag           string    `json:"tag"`
-	StartTime     time.Time `json:"start_time"`
-	EndTime       time.Time `json:"end_time"`
-	PeakRPS       int       `json:"peak_rps"`
-	TotalRequests int64     `json:"total_requests"`
-	ConfigHash    string    `json:"config_hash"`
+	Tag           string       `json:"tag"`
+	StartTime     time.Time    `json:"start_time"`
+	EndTime       time.Time    `json:"end_time"`
+	PeakRPS       int          `json:"peak_rps"`
+	TotalRequests int64        `json:"total_requests"`
+	ConfigHash    string       `json:"config_hash"`
+	SnapSettings  SnapSettings `json:"snap_settings"` // tuning values used to produce this snap
+}
+
+// SnapSettings records the effective tuning parameters used when producing
+// a snapshot. Stored in meta so the file is self-describing and two snaps
+// taken with different settings can be trivially distinguished.
+type SnapSettings struct {
+	SampleRate float64 `json:"sample_rate"` // fraction of responses body-sampled (e.g. 0.05)
+	MaxSamples int     `json:"max_samples"` // per-endpoint reservoir cap used
+	MaxBodyKB  int     `json:"max_body_kb"` // per-endpoint byte budget in KB; 0 = unlimited
 }
 
 // EndpointSnap captures the behavioral profile of a single endpoint.
 type EndpointSnap struct {
-	ID          string             `json:"id"`          // "METHOD:/path"
-	StatusDist  map[string]float64 `json:"status_dist"` // "200": 0.97, …
-	Latency     LatencyStats       `json:"latency"`
-	ErrorRate   float64            `json:"error_rate"`
-	SampleCount int64              `json:"sample_count"`
-	Schema      *SchemaSnapshot    `json:"schema,omitempty"` // populated by schema.go
+	ID                  string             `json:"id"`          // "METHOD:/path"
+	StatusDist          map[string]float64 `json:"status_dist"` // "200": 0.97, …
+	Latency             LatencyStats       `json:"latency"`
+	ErrorRate           float64            `json:"error_rate"`
+	RequestCount        int64              `json:"request_count"`         // total HTTP requests observed for this endpoint
+	BodySamplesObserved int64              `json:"body_samples_observed"` // bodies that entered the reservoir (sample_rate × requests)
+	BodySamplesStored   int64              `json:"body_samples_stored"`   // bodies actually kept (≤ max_samples / byte budget)
+	Schema              *SchemaSnapshot    `json:"schema,omitempty"`      // populated when stored bodies are valid JSON
 }
 
 // LatencyStats holds response-time percentiles in milliseconds.
@@ -90,7 +105,8 @@ type LatencyStats struct {
 
 // SchemaSnapshot is the inferred JSON response schema for an endpoint.
 type SchemaSnapshot struct {
-	Fields map[string]FieldSchema `json:"fields"`
+	SampleCount int                    `json:"sample_count"` // number of body samples used for inference
+	Fields      map[string]FieldSchema `json:"fields"`
 }
 
 // FieldSchema describes a single JSON field observed across response bodies.
@@ -216,11 +232,13 @@ func (a *endpointAcc) toEndpointSnap(id string) EndpointSnap {
 	}
 
 	return EndpointSnap{
-		ID:          id,
-		StatusDist:  statusDist,
-		Latency:     stats,
-		ErrorRate:   errRate,
-		SampleCount: a.totalCount,
+		ID:                  id,
+		StatusDist:          statusDist,
+		Latency:             stats,
+		ErrorRate:           errRate,
+		RequestCount:        a.totalCount,
+		BodySamplesObserved: a.bodyCount,
+		BodySamplesStored:   int64(len(a.bodySamples)),
 	}
 }
 
@@ -352,6 +370,11 @@ func (r *DefaultRecorder) Finalize(meta RunMeta) (*Snapshot, error) {
 			EndTime:    meta.EndTime,
 			PeakRPS:    meta.PeakRPS,
 			ConfigHash: configHash(meta.Config),
+			SnapSettings: SnapSettings{
+				SampleRate: meta.SampleRate,
+				MaxSamples: resolveMaxSamples(meta.MaxSamples),
+				MaxBodyKB:  meta.MaxBodyKB,
+			},
 		},
 	}
 
@@ -366,7 +389,7 @@ func (r *DefaultRecorder) Finalize(meta RunMeta) (*Snapshot, error) {
 			ep.Schema = InferSchema(acc.bodySamples)
 		}
 		snap.Endpoints = append(snap.Endpoints, ep)
-		totalRequests += ep.SampleCount
+		totalRequests += ep.RequestCount
 		return true
 	})
 	snap.Meta.TotalRequests = totalRequests
@@ -411,6 +434,15 @@ func configHash(cfg *config.Config) string {
 		return ""
 	}
 	return fmt.Sprintf("sha256:%x", h.Sum(nil))
+}
+
+// resolveMaxSamples returns the effective max-samples value for recording in
+// SnapSettings. When n is 0 the recorder uses DefaultMaxBodySamples.
+func resolveMaxSamples(n int) int {
+	if n <= 0 {
+		return DefaultMaxBodySamples
+	}
+	return n
 }
 
 // percentile computes the p-th percentile of a pre-sorted float64 slice

@@ -25,11 +25,11 @@ func TestWrite_Read_RoundTrip(t *testing.T) {
 		},
 		Endpoints: []EndpointSnap{
 			{
-				ID:          "GET:/api/users",
-				StatusDist:  map[string]float64{"200": 0.97, "500": 0.03},
-				Latency:     LatencyStats{P50: 12.3, P95: 48.1, P99: 120.4, Max: 3200},
-				ErrorRate:   0.03,
-				SampleCount: 45000,
+				ID:           "GET:/api/users",
+				StatusDist:   map[string]float64{"200": 0.97, "500": 0.03},
+				Latency:      LatencyStats{P50: 12.3, P95: 48.1, P99: 120.4, Max: 3200},
+				ErrorRate:    0.03,
+				RequestCount: 45000,
 			},
 		},
 	}

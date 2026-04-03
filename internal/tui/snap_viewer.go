@@ -224,7 +224,7 @@ func renderEndpointPanel(ep snap.EndpointSnap, width int) string {
 	statsBlock := lipgloss.JoinVertical(lipgloss.Left,
 		sectionStyle.Render("Stats"),
 		fmt.Sprintf("%s  %s", labelStyle.Render("Error Rate:"), erStyle.Render(fmt.Sprintf("%.2f%%", ep.ErrorRate*100))),
-		fmt.Sprintf("%s  %s", labelStyle.Render("Samples:   "), valueStyle.Render(svFormatCount(ep.SampleCount))),
+		fmt.Sprintf("%s  %s", labelStyle.Render("Requests:  "), valueStyle.Render(svFormatCount(ep.RequestCount))),
 	)
 
 	colWidth := (width - 10) / 3
