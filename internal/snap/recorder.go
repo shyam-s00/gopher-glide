@@ -342,12 +342,22 @@ func (r *DefaultRecorder) Record(entry RecordEntry) {
 // drain is the single background goroutine that processes entries from ch.
 // It sanitizes each entry before accumulation, then exits when the channel
 // is closed by Finalize.
+//
+// The load-then-store pattern avoids calling newAcc() (which pre-allocates
+// several slices including a [][]byte of cap=maxBodySamples) on every entry.
+// In steady state, the endpoint key already exists and Load returns immediately
+// with zero allocation. newAcc() is only invoked on a genuine first-seen key,
+// and LoadOrStore is used for that store to guard against concurrent readers
+// (e.g. BodySamples) that may be racing on the same key.
 func (r *DefaultRecorder) drain() {
 	defer r.wg.Done()
 	for entry := range r.ch {
 		entry = r.sanitizer.Sanitize(entry)
 		key := entry.Method + ":" + entry.URL
-		val, _ := r.endpoints.LoadOrStore(key, r.newAcc())
+		val, ok := r.endpoints.Load(key)
+		if !ok {
+			val, _ = r.endpoints.LoadOrStore(key, r.newAcc())
+		}
 		val.(*endpointAcc).record(entry)
 	}
 }
