@@ -10,6 +10,11 @@ var (
 	ErrNoStagesDefined         = fmt.Errorf("at least one stage must be defined")
 	ErrInvalidJitter           = fmt.Errorf("jitter must be between 0 and 1 (e.g. 0.1 for ±10%%)")
 	ErrInvalidTimeScale        = fmt.Errorf("time_scale must be greater than or equal to 0")
+
+	// Snap section validation errors.
+	ErrInvalidSnapSampleRate = fmt.Errorf("snap.sample_rate must be between 0.0 and 1.0")
+	ErrInvalidSnapMaxSamples = fmt.Errorf("snap.max_samples must be >= 0 (0 = use application default of 200)")
+	ErrInvalidSnapMaxBodyKB  = fmt.Errorf("snap.max_body_kb must be >= 0 (0 = no byte-based limit)")
 )
 
 func NewErrInvalidStageDuration(index int) error {

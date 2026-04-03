@@ -5,6 +5,33 @@ config:
   jitter: 0.1        # ±10% organic noise on the RPS ticker
   time_scale: 1.0    # 1.0 = real-time; 2.0 = run 2x faster (warp speed)
 
+# ── Snap memory & inference tuning ───────────────────────────────────────────
+# ⚠  CAUTION: These settings directly affect memory consumption and the
+#    statistical accuracy of schema inference. Incorrect values can cause:
+#      - Too low  max_samples → unreliable schema field presence fractions
+#      - Too high max_samples or max_body_kb on high-RPS runs → excessive
+#        memory growth (the very problem these limits are designed to prevent)
+#
+#    Only change these from defaults when you have a specific reason to do so.
+#    All fields are optional — omit this block entirely to use the application
+#    defaults (sample_rate: 0.05, max_samples: 200, max_body_kb: 0).
+#    CLI flags (--snap-sample, --snap-max-samples, --snap-max-body-kb) always
+#    take precedence over values set here.
+#
+# snap:
+#   sample_rate: 0.05   # Fraction of responses to body-sample (0.0–1.0).
+#                       # Default: 0.05 (5%). Lower = less memory, less schema
+#                       # coverage. Raise only on low-RPS runs where you need
+#                       # higher schema confidence.
+#   max_samples: 200    # Reservoir cap (per endpoint) for stored body samples.
+#                       # Default: 200. Presence fractions are accurate to ±2%
+#                       # at this level. Lowering below 50 degrades accuracy.
+#   max_body_kb: 0      # Per-endpoint byte budget for stored bodies, in KB.
+#                       # Default: 0 (no byte-based limit — max_samples is the
+#                       # primary guard). Set this when individual response
+#                       # bodies are large (e.g. > 50 KB) and max_samples alone
+#                       # is insufficient to bound memory.
+
 stages:
   # Stages use linear interpolation (LERP).
   # Each stage ramps from the previous stage's end target_rps to this

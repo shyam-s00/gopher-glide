@@ -1,10 +1,11 @@
 package tui
 
 import (
-	"github.com/shyam-s00/gopher-glide/internal/config"
-	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"testing"
 	"time"
+
+	"github.com/shyam-s00/gopher-glide/internal/config"
+	"github.com/shyam-s00/gopher-glide/internal/engine"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -428,5 +429,224 @@ func TestUpdate_WindowSize(t *testing.T) {
 	}
 	if !got.ready {
 		t.Error("ready should be true after WindowSizeMsg")
+	}
+}
+
+// ── renderLogContent ──────────────────────────────────────────────────────────
+
+func TestRenderLogContent_EmptyLogs(t *testing.T) {
+	m := newTestModel()
+	m.showFailures = false // show all logs
+	content := m.renderLogContent()
+	if content == "" {
+		t.Error("renderLogContent should return non-empty string even with no logs")
+	}
+}
+
+func TestRenderLogContent_ShowFailuresOnlyMode(t *testing.T) {
+	m := newTestModel()
+	m.showFailures = true
+
+	// No error logs → should return the waiting message.
+	content := m.renderLogContent()
+	if content == "" {
+		t.Error("renderLogContent with no errors should return waiting string")
+	}
+}
+
+func TestRenderLogContent_WithSuccessLogs(t *testing.T) {
+	m := newTestModel()
+	m.showFailures = false // all-logs mode
+
+	// Inject a success log directly.
+	m.engine.LogCallForTest("GET", "http://example.com/api", 200, 10*time.Millisecond, nil)
+
+	content := m.renderLogContent()
+	if content == "" {
+		t.Error("renderLogContent should return non-empty string with logs present")
+	}
+}
+
+// ── renderHeader ──────────────────────────────────────────────────────────────
+
+func TestRenderHeader_WithJitter(t *testing.T) {
+	m := newTestModel()
+	m.config.ConfigSection.Jitter = 0.1 // ±10% jitter enabled
+	h := m.renderHeader()
+	if h == "" {
+		t.Error("renderHeader with jitter should return non-empty string")
+	}
+}
+
+func TestRenderHeader_Stopped(t *testing.T) {
+	m := newTestModel()
+	m.running = false
+	h := m.renderHeader()
+	if h == "" {
+		t.Error("renderHeader when stopped should return non-empty string")
+	}
+}
+
+func TestRenderHeader_Running(t *testing.T) {
+	m := newTestModel()
+	m.running = true
+	h := m.renderHeader()
+	if h == "" {
+		t.Error("renderHeader when running should return non-empty string")
+	}
+}
+
+// ── View branches ─────────────────────────────────────────────────────────────
+
+func TestView_WithPositiveBias(t *testing.T) {
+	m := newTestModel()
+	m.ready = true
+	m.metrics.Bias = 15
+	out := m.View()
+	if out == "" {
+		t.Error("View with positive bias should return non-empty string")
+	}
+}
+
+func TestView_WithNegativeBias(t *testing.T) {
+	m := newTestModel()
+	m.ready = true
+	m.metrics.Bias = -10
+	out := m.View()
+	if out == "" {
+		t.Error("View with negative bias should return non-empty string")
+	}
+}
+
+func TestView_WithDirectorMsg(t *testing.T) {
+	m := newTestModel()
+	m.ready = true
+	m.directorMsg = "▲  +5 RPS"
+	out := m.View()
+	if out == "" {
+		t.Error("View with director message should return non-empty string")
+	}
+}
+
+func TestView_AllLogsMode(t *testing.T) {
+	m := newTestModel()
+	m.ready = true
+	m.showFailures = false // ALL LOGS mode
+	out := m.View()
+	if out == "" {
+		t.Error("View in all-logs mode should return non-empty string")
+	}
+}
+
+func TestView_WithSnapStatus(t *testing.T) {
+	m := newTestModel()
+	m.ready = true
+	m.snapStatus = "saved to /tmp/snap.snap"
+	out := m.View()
+	if out == "" {
+		t.Error("View with snapStatus should return non-empty string")
+	}
+}
+
+func TestView_Snapping(t *testing.T) {
+	m := newTestModel()
+	m.ready = true
+	m.snapping = true
+	m.snapDir = "/tmp/snaps"
+	out := m.View()
+	if out == "" {
+		t.Error("View in snapping mode should return non-empty string")
+	}
+}
+
+// ── renderLogContent with error logs ─────────────────────────────────────────
+
+func TestRenderLogContent_WithErrorLogs(t *testing.T) {
+	m := newTestModel()
+	m.showFailures = true // failures only mode
+
+	// Inject an error log (status 500).
+	m.engine.LogCallForTest("POST", "http://example.com/api/fail", 500, 5*time.Millisecond, nil)
+
+	content := m.renderLogContent()
+	if content == "" {
+		t.Error("renderLogContent with error logs should return non-empty string")
+	}
+}
+
+func TestRenderLogContent_NonSuccessStatus(t *testing.T) {
+	m := newTestModel()
+	m.showFailures = false // all logs
+
+	// Inject a 404 log (non-2xx, non-error).
+	m.engine.LogCallForTest("GET", "http://example.com/api/missing", 404, 3*time.Millisecond, nil)
+
+	content := m.renderLogContent()
+	if content == "" {
+		t.Error("renderLogContent with non-2xx status should return non-empty string")
+	}
+}
+
+// ── Update: onRunComplete dispatch ───────────────────────────────────────────
+
+// TestUpdate_Tick_DispatchesOnRunComplete verifies that when the engine
+// transitions from running→stopped during a tick, onRunComplete is:
+//
+//	(a) cleared from the model (consumed exactly once, never re-fired), and
+//	(b) actually invoked when the returned Cmd is executed by the event loop.
+//
+// The engine never starts in tests so engine.IsRunning() is always false;
+// priming m.running=true makes the tick handler observe wasRunning=true →
+// running=false, triggering the dispatch.
+func TestUpdate_Tick_DispatchesOnRunComplete(t *testing.T) {
+	m := newTestModel()
+	called := false
+	m.onRunComplete = func() string {
+		called = true
+		return "snap saved"
+	}
+	m.running = true // simulate "was running"
+
+	m2, cmd := m.Update(tickMsg(time.Now()))
+	result := m2.(model)
+
+	// (a) The callback must be cleared from the model after dispatch.
+	if result.onRunComplete != nil {
+		t.Error("onRunComplete should be nil after running→stopped transition (dispatched once)")
+	}
+	if cmd == nil {
+		t.Fatal("expected a non-nil Cmd after running→stopped transition")
+	}
+
+	// (b) Execute the returned batch to drive onRunComplete to completion.
+	// tea.Batch returns a BatchMsg holding the individual commands; running
+	// each one here mirrors what the Bubble Tea event loop would do. tickCmd()
+	// adds ~100 ms of latency, which is acceptable for a unit test.
+	batchMsg, ok := cmd().(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("expected tea.BatchMsg from the returned Cmd, got %T", cmd())
+	}
+	for _, innerCmd := range batchMsg {
+		if innerCmd != nil {
+			innerCmd()
+		}
+	}
+
+	if !called {
+		t.Error("onRunComplete was not called when the dispatched Cmd was executed")
+	}
+}
+
+// TestUpdate_Tick_NoDispatchWhenAlreadyStopped verifies that onRunComplete is
+// not dispatched on a tick where the engine was already stopped before the
+// tick fired — i.e. when no running→stopped transition occurred.
+func TestUpdate_Tick_NoDispatchWhenAlreadyStopped(t *testing.T) {
+	m := newTestModel()
+	m.running = false // was NOT running — wasRunning && !m.running is false
+	m.onRunComplete = func() string { return "should not be called" }
+
+	m2, _ := m.Update(tickMsg(time.Now()))
+	if m2.(model).onRunComplete == nil {
+		t.Error("onRunComplete should not be cleared when there was no running→stopped transition")
 	}
 }

@@ -236,8 +236,8 @@ func TestWithSanitizer_DefaultScrubsBeforeAccumulation(t *testing.T) {
 	if len(snap.Endpoints) != 1 {
 		t.Fatalf("expected 1 endpoint, got %d", len(snap.Endpoints))
 	}
-	if snap.Endpoints[0].SampleCount != 1 {
-		t.Errorf("expected SampleCount 1, got %d", snap.Endpoints[0].SampleCount)
+	if snap.Endpoints[0].RequestCount != 1 {
+		t.Errorf("expected RequestCount 1, got %d", snap.Endpoints[0].RequestCount)
 	}
 }
 

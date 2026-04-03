@@ -56,8 +56,8 @@ func TestDefaultRecorder_SingleEndpoint(t *testing.T) {
 	if ep.ID != "GET:/api/users" {
 		t.Errorf("unexpected endpoint ID %q", ep.ID)
 	}
-	if ep.SampleCount != 2 {
-		t.Errorf("expected SampleCount 2, got %d", ep.SampleCount)
+	if ep.RequestCount != 2 {
+		t.Errorf("expected RequestCount 2, got %d", ep.RequestCount)
 	}
 	if ep.ErrorRate != 0.5 {
 		t.Errorf("expected ErrorRate 0.5, got %f", ep.ErrorRate)
@@ -122,7 +122,7 @@ func TestDefaultRecorder_ConcurrentSafety(t *testing.T) {
 		t.Fatalf("expected 1 endpoint, got %d", len(snap.Endpoints))
 	}
 
-	total := snap.Endpoints[0].SampleCount + r.Dropped()
+	total := snap.Endpoints[0].RequestCount + r.Dropped()
 	expected := int64(goroutines * entriesEach)
 	if total != expected {
 		t.Errorf("expected %d total (recorded+dropped), got %d", expected, total)

@@ -144,7 +144,8 @@ func (m *schemaMerger) finalize() *SchemaSnapshot {
 	}
 
 	snap := &SchemaSnapshot{
-		Fields: make(map[string]FieldSchema, len(m.fields)),
+		SampleCount: m.sampleCount,
+		Fields:      make(map[string]FieldSchema, len(m.fields)),
 	}
 	for path, obs := range m.fields {
 		presence := float64(obs.seenCount) / float64(m.sampleCount)

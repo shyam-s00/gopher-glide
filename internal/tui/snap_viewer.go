@@ -214,7 +214,7 @@ func renderEndpointPanel(ep snap.EndpointSnap, width int) string {
 		fmt.Sprintf("%s  %s", labelStyle.Render("Max:"), valueStyle.Render(fmt.Sprintf("%.1f ms", ep.Latency.Max))),
 	)
 
-	// Error rate + sample count
+	// Error rate + request count
 	erStyle := successStyle
 	if ep.ErrorRate >= 0.05 {
 		erStyle = errorStyle
@@ -224,7 +224,7 @@ func renderEndpointPanel(ep snap.EndpointSnap, width int) string {
 	statsBlock := lipgloss.JoinVertical(lipgloss.Left,
 		sectionStyle.Render("Stats"),
 		fmt.Sprintf("%s  %s", labelStyle.Render("Error Rate:"), erStyle.Render(fmt.Sprintf("%.2f%%", ep.ErrorRate*100))),
-		fmt.Sprintf("%s  %s", labelStyle.Render("Samples:   "), valueStyle.Render(svFormatCount(ep.SampleCount))),
+		fmt.Sprintf("%s  %s", labelStyle.Render("Requests:  "), valueStyle.Render(svFormatCount(ep.RequestCount))),
 	)
 
 	colWidth := (width - 10) / 3

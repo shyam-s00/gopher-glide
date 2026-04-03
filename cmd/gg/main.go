@@ -40,19 +40,35 @@ func main() {
 
 	// ── snap flags ────────────────────────────────────────────────────────────
 	// Parsed from os.Args[2:] so <config-file> always stays as the first arg.
+	// 0 is the sentinel for "not explicitly set on CLI"; effective values are
+	// resolved after config.yaml is loaded (CLI > config.yaml > hard default).
 	fs := flag.NewFlagSet("gg", flag.ExitOnError)
 	snapEnabled := fs.Bool("snap", false, "capture a behavioral snapshot after the run")
 	snapTag := fs.String("snap-tag", "", "tag to attach to the snapshot (e.g. v1.2.0-pre)")
 	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
-	snapSample := fs.Float64("snap-sample", 0.05, "fraction of responses to sample for schema inference (0.0–1.0)")
+	snapSample := fs.Float64("snap-sample", 0, "fraction of responses to body-sample for schema inference (0 = use config/default of 5%)")
+	snapMaxSamples := fs.Int("snap-max-samples", 0, "max body samples retained per endpoint via reservoir sampling (0 = use config/default of 200)")
+	snapMaxBodyKB := fs.Int("snap-max-body-kb", 0, "per-endpoint byte budget for stored body samples in KB (0 = no byte-based limit)")
 	_ = fs.Parse(os.Args[2:])
+
+	// Track which flags were explicitly provided so we can apply the correct
+	// precedence: CLI (explicit) > config.yaml > hard default.
+	var cliSnapSampleSet, cliMaxSamplesSet, cliMaxBodyKBSet bool
 
 	// Any snap-specific flag passed explicitly implicitly enables snapping,
 	// so users don't need to type both --snap and e.g. --snap-dir.
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
-		case "snap-dir", "snap-tag", "snap-sample":
+		case "snap-dir", "snap-tag", "snap-sample", "snap-max-samples", "snap-max-body-kb":
 			*snapEnabled = true
+		}
+		switch f.Name {
+		case "snap-sample":
+			cliSnapSampleSet = true
+		case "snap-max-samples":
+			cliMaxSamplesSet = true
+		case "snap-max-body-kb":
+			cliMaxBodyKBSet = true
 		}
 	})
 
@@ -69,6 +85,40 @@ func main() {
 	fmt.Printf("  Stages: %d stage(s)\n", len(cfg.Stages))
 	for i, s := range cfg.Stages {
 		fmt.Printf("    [%d] duration=%s targetRPS=%d\n", i+1, s.Duration, s.TargetRPS)
+	}
+
+	// ── resolve effective snap tuning values ──────────────────────────────────
+	// Precedence: explicit CLI flag > config.yaml snap: block > hard default.
+	// 0 is the sentinel for "not set at this level".
+	effectiveSampleRate := 0.05 // hard default: 5 %
+	if cliSnapSampleSet {
+		effectiveSampleRate = *snapSample
+	} else if cfg.Snap.SampleRate > 0 {
+		effectiveSampleRate = cfg.Snap.SampleRate
+	}
+
+	effectiveMaxSamples := 0 // 0 → recorder uses DefaultMaxBodySamples (200)
+	if cliMaxSamplesSet {
+		effectiveMaxSamples = *snapMaxSamples
+	} else if cfg.Snap.MaxSamples > 0 {
+		effectiveMaxSamples = cfg.Snap.MaxSamples
+	}
+
+	effectiveMaxBodyKB := 0 // 0 → no byte-based limit
+	if cliMaxBodyKBSet {
+		effectiveMaxBodyKB = *snapMaxBodyKB
+	} else if cfg.Snap.MaxBodyKB > 0 {
+		effectiveMaxBodyKB = cfg.Snap.MaxBodyKB
+	}
+
+	// ── validate snap tuning values ───────────────────────────────────────────
+	// Done before any I/O so bad input is caught as early as possible.
+	// Covers both explicit CLI flags and values sourced from config.yaml.
+	if *snapEnabled {
+		if err := validateSnapTuning(effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "snap flag error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// ── parse .http file ──────────────────────────────────────────────────────
@@ -97,8 +147,20 @@ func main() {
 			_, _ = fmt.Fprintf(os.Stderr, "Error setting up snap directory: %v\n", err)
 			os.Exit(1)
 		}
-		rec = snap.NewDefaultRecorder(0)
-		fmt.Printf("📸 Snapping → %s\n", resolvedSnapDir)
+		recOpts := []snap.RecorderOption{}
+		if effectiveMaxSamples > 0 {
+			recOpts = append(recOpts, snap.WithMaxBodySamples(effectiveMaxSamples))
+		}
+		if effectiveMaxBodyKB > 0 {
+			recOpts = append(recOpts, snap.WithMaxBodyBytes(int64(effectiveMaxBodyKB)*1024))
+		}
+		rec = snap.NewDefaultRecorder(0, recOpts...)
+		fmt.Printf("📸 Snapping → %s  (sample=%.0f%%, max-samples=%d, max-body-kb=%d)\n",
+			resolvedSnapDir,
+			effectiveSampleRate*100,
+			resolveDisplayMaxSamples(effectiveMaxSamples),
+			effectiveMaxBodyKB,
+		)
 	}
 
 	// ── build engine ──────────────────────────────────────────────────────────
@@ -106,7 +168,7 @@ func main() {
 	if rec != nil {
 		engineOpts = append(engineOpts,
 			engine.WithRecorder(rec),
-			engine.WithSampleRate(*snapSample),
+			engine.WithSampleRate(effectiveSampleRate),
 		)
 	}
 	eng := engine.New(engineOpts...)
@@ -124,7 +186,8 @@ func main() {
 			if !snapDone.CompareAndSwap(false, true) {
 				return "" // already handled
 			}
-			status, err := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir)
+			status, err := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir,
+				effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB)
 			if err != nil {
 				return fmt.Sprintf("⚠  snap error: %v", err)
 			}
@@ -145,7 +208,8 @@ func main() {
 	// Printing is safe here: tui.Start has returned and the terminal is restored.
 	if rec != nil && snapDone.CompareAndSwap(false, true) {
 		fmt.Println("Finalizing snapshot...")
-		status, finalErr := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir)
+		status, finalErr := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir,
+			effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB)
 		if finalErr != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", finalErr)
 		} else {
@@ -158,18 +222,22 @@ func main() {
 // .snap file to dir. Returns a human-readable status line on success.
 // It does not write to stdout or stderr, making it safe to call while the
 // TUI alt-screen is active.
-func finalizeSnapResult(rec *snap.DefaultRecorder, eng *engine.Engine, cfg *config.Config, tag, dir string) (string, error) {
+func finalizeSnapResult(rec *snap.DefaultRecorder, eng *engine.Engine, cfg *config.Config,
+	tag, dir string, sampleRate float64, maxSamples, maxBodyKB int) (string, error) {
 	endTime := eng.GetEndTime()
 	if endTime.IsZero() {
 		endTime = time.Now()
 	}
 
 	snapData, err := rec.Finalize(snap.RunMeta{
-		Tag:       tag,
-		Config:    cfg,
-		StartTime: eng.GetStartTime(),
-		EndTime:   endTime,
-		PeakRPS:   cfg.PeakRPS(),
+		Tag:        tag,
+		Config:     cfg,
+		StartTime:  eng.GetStartTime(),
+		EndTime:    endTime,
+		PeakRPS:    cfg.PeakRPS(),
+		SampleRate: sampleRate,
+		MaxSamples: maxSamples,
+		MaxBodyKB:  maxBodyKB,
 	})
 	if err != nil {
 		return "", fmt.Errorf("finalize recorder: %w", err)
@@ -310,11 +378,11 @@ func runSnapView(args []string) {
 }
 
 func snapUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: gg snap <subcommand> [flags]")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Subcommands:")
-	fmt.Fprintln(os.Stderr, "  list                    [--snap-dir DIR]   list all saved snapshots")
-	fmt.Fprintln(os.Stderr, "  view <id|tag|file>      [--snap-dir DIR]   view a single snapshot")
+	_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap <subcommand> [flags]")
+	_, _ = fmt.Fprintln(os.Stderr, "")
+	_, _ = fmt.Fprintln(os.Stderr, "Subcommands:")
+	_, _ = fmt.Fprintln(os.Stderr, "  list                    [--snap-dir DIR]   list all saved snapshots")
+	_, _ = fmt.Fprintln(os.Stderr, "  view <id|tag|file>      [--snap-dir DIR]   view a single snapshot")
 }
 
 func snapDisplayTag(tag string) string {
@@ -322,6 +390,15 @@ func snapDisplayTag(tag string) string {
 		return "(untagged)"
 	}
 	return tag
+}
+
+// resolveDisplayMaxSamples returns the effective max-samples value for display.
+// When effectiveMaxSamples is 0 the recorder will use DefaultMaxBodySamples.
+func resolveDisplayMaxSamples(effectiveMaxSamples int) int {
+	if effectiveMaxSamples <= 0 {
+		return snap.DefaultMaxBodySamples
+	}
+	return effectiveMaxSamples
 }
 
 func snapFormatCount(n int64) string {
@@ -333,4 +410,24 @@ func snapFormatCount(n int64) string {
 	default:
 		return fmt.Sprintf("%d", n)
 	}
+}
+
+// validateSnapTuning returns an error if any effective snap tuning value falls
+// outside its legal range. Called before the recorder is constructed so that
+// invalid CLI or config.yaml input is caught early with a clear message.
+//
+//   - sampleRate must be in [0, 1]  (0 = disable body sampling entirely)
+//   - maxSamples must be >= 0       (0 = use DefaultMaxBodySamples)
+//   - maxBodyKB  must be >= 0       (0 = no byte-based limit)
+func validateSnapTuning(sampleRate float64, maxSamples, maxBodyKB int) error {
+	if sampleRate < 0 || sampleRate > 1 {
+		return fmt.Errorf("--snap-sample must be in [0, 1], got %g", sampleRate)
+	}
+	if maxSamples < 0 {
+		return fmt.Errorf("--snap-max-samples must be >= 0, got %d", maxSamples)
+	}
+	if maxBodyKB < 0 {
+		return fmt.Errorf("--snap-max-body-kb must be >= 0, got %d", maxBodyKB)
+	}
+	return nil
 }
