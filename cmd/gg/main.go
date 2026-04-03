@@ -368,11 +368,11 @@ func runSnapView(args []string) {
 }
 
 func snapUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: gg snap <subcommand> [flags]")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Subcommands:")
-	fmt.Fprintln(os.Stderr, "  list                    [--snap-dir DIR]   list all saved snapshots")
-	fmt.Fprintln(os.Stderr, "  view <id|tag|file>      [--snap-dir DIR]   view a single snapshot")
+	_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap <subcommand> [flags]")
+	_, _ = fmt.Fprintln(os.Stderr, "")
+	_, _ = fmt.Fprintln(os.Stderr, "Subcommands:")
+	_, _ = fmt.Fprintln(os.Stderr, "  list                    [--snap-dir DIR]   list all saved snapshots")
+	_, _ = fmt.Fprintln(os.Stderr, "  view <id|tag|file>      [--snap-dir DIR]   view a single snapshot")
 }
 
 func snapDisplayTag(tag string) string {
