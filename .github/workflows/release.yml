@@ -72,9 +72,9 @@ jobs:
         shell: bash
         run: |
           LDFLAGS="-s -w \
-            -X 'gopher-glide/internal/version.Version=${{ steps.meta.outputs.version }}' \
-            -X 'gopher-glide/internal/version.GitCommit=${{ steps.meta.outputs.commit }}' \
-            -X 'gopher-glide/internal/version.BuildDate=${{ steps.meta.outputs.build_date }}'"
+            -X 'github.com/shyam-s00/gopher-glide/internal/version.Version=${{ steps.meta.outputs.version }}' \
+            -X 'github.com/shyam-s00/gopher-glide/internal/version.GitCommit=${{ steps.meta.outputs.commit }}' \
+            -X 'github.com/shyam-s00/gopher-glide/internal/version.BuildDate=${{ steps.meta.outputs.build_date }}'"
           go build -ldflags "${LDFLAGS}" -o "gg${{ matrix.ext }}" ./cmd/gg
 
       # ── macOS: ad-hoc code sign to satisfy Gatekeeper ────────────────────
