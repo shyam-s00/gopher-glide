@@ -33,7 +33,7 @@ A lightweight, terminal-based HTTP API load testing tool built in Go. `gg` reads
   - Scrollable call log — toggle between all calls and errors only with `f`
 - **Snapshots (`gg snap`)** — record and view behavioral snapshots (latency, status distribution, and inferred JSON schemas) for all endpoints hit during a run.
 - **Stamped binaries** — version, git commit, and build date embedded at compile time via `-ldflags`
-- **Cross-platform** — pre-built binaries for Linux (amd64/arm64), macOS (amd64/arm64), and Windows (amd64)
+- **Cross-platform** — pre-built binaries for Linux (amd64), macOS (arm64), and Windows (amd64)
 - **JetBrains Plugin** — a dedicated IDE plugin is available in beta for integrating Gopher Glide runs into your workflow
 
 ---
