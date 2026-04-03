@@ -172,7 +172,7 @@ func (a *endpointAcc) recordBody(body []byte) {
 
 	a.bodyCount++
 
-	if int(a.bodyCount) <= a.maxBodySamples {
+	if a.bodyCount <= int64(a.maxBodySamples) {
 		// Reservoir not yet full — append directly.
 		cp := make([]byte, len(body))
 		copy(cp, body)
