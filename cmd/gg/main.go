@@ -111,6 +111,16 @@ func main() {
 		effectiveMaxBodyKB = cfg.Snap.MaxBodyKB
 	}
 
+	// ── validate snap tuning values ───────────────────────────────────────────
+	// Done before any I/O so bad input is caught as early as possible.
+	// Covers both explicit CLI flags and values sourced from config.yaml.
+	if *snapEnabled {
+		if err := validateSnapTuning(effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "snap flag error: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
 	// ── parse .http file ──────────────────────────────────────────────────────
 	specs, err := httpreader.ParseFile(cfg.ConfigSection.HTTPFilePath)
 	if err != nil {
@@ -400,4 +410,24 @@ func snapFormatCount(n int64) string {
 	default:
 		return fmt.Sprintf("%d", n)
 	}
+}
+
+// validateSnapTuning returns an error if any effective snap tuning value falls
+// outside its legal range. Called before the recorder is constructed so that
+// invalid CLI or config.yaml input is caught early with a clear message.
+//
+//   - sampleRate must be in [0, 1]  (0 = disable body sampling entirely)
+//   - maxSamples must be >= 0       (0 = use DefaultMaxBodySamples)
+//   - maxBodyKB  must be >= 0       (0 = no byte-based limit)
+func validateSnapTuning(sampleRate float64, maxSamples, maxBodyKB int) error {
+	if sampleRate < 0 || sampleRate > 1 {
+		return fmt.Errorf("--snap-sample must be in [0, 1], got %g", sampleRate)
+	}
+	if maxSamples < 0 {
+		return fmt.Errorf("--snap-max-samples must be >= 0, got %d", maxSamples)
+	}
+	if maxBodyKB < 0 {
+		return fmt.Errorf("--snap-max-body-kb must be >= 0, got %d", maxBodyKB)
+	}
+	return nil
 }
