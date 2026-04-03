@@ -4,6 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/shyam-s00/gopher-glide?sort=semver&label=release)](https://github.com/shyam-s00/gopher-glide/releases/latest)
 [![codecov](https://codecov.io/gh/shyam-s00/gopher-glide/graph/badge.svg)](https://codecov.io/gh/shyam-s00/gopher-glide)
 [![Go Report Card](https://goreportcard.com/badge/github.com/shyam-s00/gopher-glide)](https://goreportcard.com/report/github.com/shyam-s00/gopher-glide)
+<!--[![JetBrains Plugin](https://img.shields.io/badge/JetBrains_Plugin-gopher--glide-000000.svg?logo=intellij-idea&logoColor=white)](https://plugins.jetbrains.com/plugin/gopher-glide) -->
 
 A lightweight, terminal-based HTTP load testing tool built in Go. `gg` reads your requests from a standard `.http` file, runs them through a multi-stage load plan, and delivers a live terminal dashboard of throughput, latency, and errors — no agents, no servers, no config sprawl.
 
@@ -30,8 +31,19 @@ A lightweight, terminal-based HTTP load testing tool built in Go. `gg` reads you
   - Three stat panels — Configuration, Throughput, Latency
   - Stage timeline graph — visual representation of all stages with a live cursor showing current position and achieved RPS marker per block
   - Scrollable call log — toggle between all calls and errors only with `f`
+- **Snapshots (`gg snap`)** — record and view behavioral snapshots (latency, status distribution, and inferred JSON schemas) for all endpoints hit during a run.
 - **Stamped binaries** — version, git commit, and build date embedded at compile time via `-ldflags`
 - **Cross-platform** — pre-built binaries for Linux (amd64/arm64), macOS (amd64/arm64), and Windows (amd64)
+- **JetBrains Plugin** — a dedicated IDE plugin is available in beta for integrating Gopher Glide runs into your workflow
+
+---
+
+## JetBrains Plugin (Beta)
+
+Gopher Glide now has an official [JetBrains plugin](https://plugins.jetbrains.com/plugin/30983-gopher-glide/versions/beta). The plugin bridges the gap between the IDE workspace and the TUI-based CLI, providing:
+- **Smart YAML editing** — auto-complete, validation, and JSON Schema integration for `config.yaml`.
+- **Clickable File References** — jump instantly from your config to your `.http` files.
+- **Terminal-First Execution** — execute your load tests directly into the IDE’s built-in tool window, complete with full TUI support.
 
 ---
 
@@ -297,7 +309,7 @@ time_scale: 10   # a 10-minute plan finishes in 1 minute
 
 ## Multi-stage load profiles
 
-`gg` uses **implicit ramping** — each stage defines a `target_rps` and `duration`. The engine automatically interpolates (LERP) from the previous stage's rate to the new target. You never specify the "ramp type" explicitly; it is inferred from the numbers.
+`gg` uses **implicit ramping** — stage defines a `target_rps` and `duration`. The engine automatically interpolates (LERP) from the previous stage's rate to the new target. You never specify the "ramp type" explicitly; it is inferred from the numbers.
 
 ```yaml
 stages:
@@ -332,6 +344,55 @@ While a run is in progress, use `↑` / `↓` to apply a live **RPS bias** on to
 
 ---
 
+## Snapshots
+
+`gg snap` is a tool suite for capturing, listing, and viewing test behavior records. It records detailed post-run telemetry per-endpoint without the overhead of heavy logging.
+
+### Capture a Snapshot
+
+To take a snapshot after the run, pass the `--snap` flag. You can also optionally tag your snapshot using `--snap-tag <tag>` to identify specific changes.
+
+```bash
+# Capture and tag the snapshot
+gg config.yaml --snap --snap-tag "v1-baseline"
+```
+
+A `.snap` file is written to your system's default snapshot directory (or a custom one defined by `--snap-dir <dir>`).
+
+### List Snapshots
+
+List all saved snapshots with `gg snap list`:
+
+```bash
+gg snap list
+```
+
+This presents a summary table with columns such as Date, Tag, Endpoint Count, Peak RPS, and Total Requests.
+
+### View a Snapshot
+
+To view the detailed snapshot (status distribution, latency per endpoint, and inferred JSON schema), use `gg snap view`:
+
+```bash
+# View by exact Tag
+gg snap view v1-baseline
+```
+
+It opens a rich TUI visualizing the endpoint data alongside schemas for the request payloads, giving you insights into status distributions, errors, and what the body contained.
+
+### Snap Configuration Limits
+
+In `config.yaml`, you can also configure options for the schema inference behavior:
+```yaml
+snap:
+  sample_rate: 0.05       # 5% of responses analyzed for schema building
+  max_samples: 200        # Store up to 200 JSON body samples per-endpoint
+  max_body_kb: 500        # Byte limit (500 KB) for total samples stored per-endpoint
+```
+All snap values can also be overridden by command-line flags (e.g. `--snap-sample 0.1`).
+
+---
+
 ## Project structure
 
 ```
@@ -344,6 +405,7 @@ While a run is in progress, use `↑` / `↓` to apply a live **RPS bias** on to
 │   ├── httpreader/             .http file parser
 │   ├── engine/                 load engine — LERP scheduler + worker pool + metrics
 │   ├── tui/                    Bubble Tea TUI — dashboard, timeline, log panel
+│   ├── snap/                   Snapshot logic: capturing, formatting, schema inferring
 │   └── version/                build-time version info
 └── Makefile
 ```
@@ -362,4 +424,3 @@ While a run is in progress, use `↑` / `↓` to apply a live **RPS bias** on to
 ## License
 
 [MIT](LICENSE)
-
