@@ -6,7 +6,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/shyam-s00/gopher-glide)](https://goreportcard.com/report/github.com/shyam-s00/gopher-glide)
 <!--[![JetBrains Plugin](https://img.shields.io/badge/JetBrains_Plugin-gopher--glide-000000.svg?logo=intellij-idea&logoColor=white)](https://plugins.jetbrains.com/plugin/gopher-glide) -->
 
-A lightweight, terminal-based HTTP load testing tool built in Go. `gg` reads your requests from a standard `.http` file, runs them through a multi-stage load plan, and delivers a live terminal dashboard of throughput, latency, and errors — no agents, no servers, no config sprawl.
+A lightweight, terminal-based HTTP API load testing tool built in Go. `gg` reads your requests from a standard `.http` file, runs them through a multi-stage load plan, and delivers a live terminal dashboard of throughput, latency, and errors — no agents, no servers, no config sprawl.
 
 ---
 
