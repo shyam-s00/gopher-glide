@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/shyam-s00/gopher-glide?sort=semver&label=release)](https://github.com/shyam-s00/gopher-glide/releases/latest)
 [![codecov](https://codecov.io/gh/shyam-s00/gopher-glide/graph/badge.svg)](https://codecov.io/gh/shyam-s00/gopher-glide)
 [![Go Report Card](https://goreportcard.com/badge/github.com/shyam-s00/gopher-glide)](https://goreportcard.com/report/github.com/shyam-s00/gopher-glide)
-<!--[![JetBrains Plugin](https://img.shields.io/badge/JetBrains_Plugin-gopher--glide-000000.svg?logo=intellij-idea&logoColor=white)](https://plugins.jetbrains.com/plugin/gopher-glide) -->
+[![JetBrains Plugin Version](https://img.shields.io/jetbrains/plugin/v/dev.gopherglide.gg-plugin)](https://plugins.jetbrains.com/plugin/30983-gopher-glide)
 
 A lightweight, terminal-based HTTP API load testing tool built in Go. `gg` reads your requests from a standard `.http` file, runs them through a multi-stage load plan, and delivers a live terminal dashboard of throughput, latency, and errors — no agents, no servers, no config sprawl.
 
@@ -38,9 +38,9 @@ A lightweight, terminal-based HTTP API load testing tool built in Go. `gg` reads
 
 ---
 
-## JetBrains Plugin (Beta)
+## JetBrains Plugin
 
-Gopher Glide now has an official [JetBrains plugin](https://plugins.jetbrains.com/plugin/30983-gopher-glide/versions/beta). The plugin bridges the gap between the IDE workspace and the TUI-based CLI, providing:
+Gopher Glide now has an official [JetBrains plugin](https://plugins.jetbrains.com/plugin/30983-gopher-glide). The plugin bridges the gap between the IDE workspace and the TUI-based CLI, providing:
 - **Smart YAML editing** — auto-complete, validation, and JSON Schema integration for `config.yaml`.
 - **Clickable File References** — jump instantly from your config to your `.http` files.
 - **Terminal-First Execution** — execute your load tests directly into the IDE’s built-in tool window, complete with full TUI support.
