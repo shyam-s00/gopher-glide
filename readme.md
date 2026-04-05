@@ -1,4 +1,4 @@
-# gg — Gopher Glide
+# Gopher Glide (gg) — High-Performance API Load Testing Tool Built in Go 🚀
 
 [![Build](https://github.com/shyam-s00/gopher-glide/actions/workflows/ci.yml/badge.svg)](https://github.com/shyam-s00/gopher-glide/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/shyam-s00/gopher-glide?sort=semver&label=release)](https://github.com/shyam-s00/gopher-glide/releases/latest)
@@ -6,7 +6,9 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/shyam-s00/gopher-glide)](https://goreportcard.com/report/github.com/shyam-s00/gopher-glide)
 [![JetBrains Plugin Version](https://img.shields.io/jetbrains/plugin/v/dev.gopherglide.gg-plugin)](https://plugins.jetbrains.com/plugin/30983-gopher-glide)
 
-A lightweight, terminal-based HTTP API load testing tool built in Go. `gg` reads your requests from a standard `.http` file, runs them through a multi-stage load plan, and delivers a live terminal dashboard of throughput, latency, and errors — no agents, no servers, no config sprawl.
+**Gopher Glide (gg)** is an open-source, lightweight **CLI load testing tool** and **API benchmarking** utility built in Go. It simplifies performance testing by reading your requests from a standard `.http` file, running them through a multi-stage load plan, and delivering a live terminal dashboard of throughput, latency, and errors. 
+
+Generate high-concurrency traffic with minimal overhead — no agents, no servers, no config sprawl.
 
 ---
 
@@ -37,15 +39,13 @@ A lightweight, terminal-based HTTP API load testing tool built in Go. `gg` reads
 - **JetBrains Plugin** — a dedicated IDE plugin is available in beta for integrating Gopher Glide runs into your workflow
 
 ---
+## 🔌 JetBrains IDE Integration 
 
-## JetBrains Plugin
+Gopher Glide features an official [JetBrains plugin](https://plugins.jetbrains.com/plugin/30983-gopher-glide) that brings **load testing** directly into your IDE. The plugin bridges the gap between your workspace and the TUI-based CLI, providing:
 
-Gopher Glide now has an official [JetBrains plugin](https://plugins.jetbrains.com/plugin/30983-gopher-glide). The plugin bridges the gap between the IDE workspace and the TUI-based CLI, providing:
-- **Smart YAML editing** — auto-complete, validation, and JSON Schema integration for `config.yaml`.
-- **Clickable File References** — jump instantly from your config to your `.http` files.
-- **Terminal-First Execution** — execute your load tests directly into the IDE’s built-in tool window, complete with full TUI support.
-
----
+* **Smart YAML editing** — auto-complete, validation, and JSON Schema integration for your `config.yaml` load plans.
+* **Clickable File References** — jump instantly from your config to your `.http` files.
+* **Terminal-First Execution** — execute your API benchmarking directly into the IDE’s built-in tool window, complete with full TUI support.
 
 ## Quick Start — pre-built binary
 
