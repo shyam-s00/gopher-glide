@@ -458,6 +458,16 @@ func (e *Engine) executeRequest(ctx context.Context, spec httpreader.RequestSpec
 		_, _ = io.Copy(io.Discard, resp.Body)
 	}
 
+	// Determine body size for payload-size tracking.
+	// Prefer Content-Length (available for all requests); fall back to the
+	// actual read length for sampled responses where Content-Length is absent.
+	var bodySize int64
+	if resp.ContentLength >= 0 {
+		bodySize = resp.ContentLength
+	} else if len(respBody) > 0 {
+		bodySize = int64(len(respBody))
+	}
+
 	var callErr error
 	if resp.StatusCode >= 400 {
 		callErr = ErrHttpError
@@ -473,6 +483,7 @@ func (e *Engine) executeRequest(ctx context.Context, spec httpreader.RequestSpec
 			Duration:   duration,
 			Headers:    resp.Header,
 			RespBody:   respBody,
+			BodySize:   bodySize,
 			Error:      callErr,
 		})
 	}
