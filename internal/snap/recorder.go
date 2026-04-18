@@ -41,7 +41,7 @@ type RecordEntry struct {
 	Error      error
 	// BodySize is the response body byte count.
 	// Set from Content-Length when available; from len(RespBody) for sampled
-	// responses when Content-Length is absent; 0 when unknown.
+	// responses when Content-Length is absent; -1 when unknown.
 	BodySize int64
 }
 
@@ -174,8 +174,8 @@ func (a *endpointAcc) record(entry RecordEntry) {
 		a.errorCount++
 	}
 
-	// Track payload size whenever we have a known body size (> 0).
-	if entry.BodySize > 0 {
+	// Track payload size whenever we have a known body size (>= 0).
+	if entry.BodySize >= 0 {
 		a.payloadSizes = append(a.payloadSizes, float64(entry.BodySize))
 	}
 
