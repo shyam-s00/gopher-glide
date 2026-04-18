@@ -395,7 +395,7 @@ func runSnapDiff(args []string) {
 		break
 	}
 
-	if len(positional) < 2 {
+	if len(positional) != 2 {
 		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR]")
 		os.Exit(1)
 	}
