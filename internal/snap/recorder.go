@@ -39,6 +39,10 @@ type RecordEntry struct {
 	RespBody   []byte // populated only when the sample-rate trigger fires
 	Headers    http.Header
 	Error      error
+	// BodySize is the response body byte count.
+	// Set from Content-Length when available; from len(RespBody) for sampled
+	// responses when Content-Length is absent; -1 when unknown.
+	BodySize int64
 }
 
 // RunMeta carries top-level context about the load test run, supplied at
@@ -88,11 +92,21 @@ type EndpointSnap struct {
 	ID                  string             `json:"id"`          // "METHOD:/path"
 	StatusDist          map[string]float64 `json:"status_dist"` // "200": 0.97, …
 	Latency             LatencyStats       `json:"latency"`
+	PayloadSize         PayloadSizeStats   `json:"payload_size"` // response body size statistics in bytes
 	ErrorRate           float64            `json:"error_rate"`
 	RequestCount        int64              `json:"request_count"`         // total HTTP requests observed for this endpoint
 	BodySamplesObserved int64              `json:"body_samples_observed"` // bodies that entered the reservoir (sample_rate × requests)
 	BodySamplesStored   int64              `json:"body_samples_stored"`   // bodies actually kept (≤ max_samples / byte budget)
 	Schema              *SchemaSnapshot    `json:"schema,omitempty"`      // populated when stored bodies are valid JSON
+}
+
+// PayloadSizeStats holds response body size statistics in bytes.
+// Populated from Content-Length headers (all requests) and actual body reads
+// (sampled requests), so accuracy improves with higher sample rates.
+type PayloadSizeStats struct {
+	Avg float64 `json:"avg"` // mean body size across observed responses
+	P95 float64 `json:"p95"` // 95th-percentile body size
+	Max float64 `json:"max"` // largest body seen
 }
 
 // LatencyStats holds response-time percentiles in milliseconds.
@@ -130,6 +144,11 @@ type endpointAcc struct {
 	errorCount  int64
 	totalCount  int64
 
+	// payloadSizes tracks the byte size of each response where size is known
+	// (from Content-Length or from a sampled body read). Used to compute
+	// PayloadSizeStats: avg, p95, and max.
+	payloadSizes []float64
+
 	// Body-sample reservoir (Knuth Algorithm R).
 	bodySamples     [][]byte // fixed-capacity slice; len ≤ maxBodySamples
 	bodyCount       int64    // total bodies seen (drives reservoir probability)
@@ -153,6 +172,11 @@ func (a *endpointAcc) record(entry RecordEntry) {
 
 	if entry.Error != nil || entry.StatusCode >= 400 {
 		a.errorCount++
+	}
+
+	// Track payload size whenever we have a known body size (>= 0).
+	if entry.BodySize >= 0 {
+		a.payloadSizes = append(a.payloadSizes, float64(entry.BodySize))
 	}
 
 	if len(entry.RespBody) > 0 {
@@ -199,7 +223,6 @@ func (a *endpointAcc) recordBody(body []byte) {
 }
 
 // toEndpointSnap computes aggregated statistics and returns an EndpointSnap.
-// The Schema field is left nil; schema.go will populate it in Task 2.
 func (a *endpointAcc) toEndpointSnap(id string) EndpointSnap {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -226,6 +249,23 @@ func (a *endpointAcc) toEndpointSnap(id string) EndpointSnap {
 		}
 	}
 
+	// Payload size statistics from all responses with a known body size.
+	var payloadStats PayloadSizeStats
+	if len(a.payloadSizes) > 0 {
+		sorted := make([]float64, len(a.payloadSizes))
+		copy(sorted, a.payloadSizes)
+		sort.Float64s(sorted)
+		var sum float64
+		for _, s := range sorted {
+			sum += s
+		}
+		payloadStats = PayloadSizeStats{
+			Avg: sum / float64(len(sorted)),
+			P95: percentile(sorted, 95),
+			Max: sorted[len(sorted)-1],
+		}
+	}
+
 	var errRate float64
 	if a.totalCount > 0 {
 		errRate = float64(a.errorCount) / float64(a.totalCount)
@@ -235,6 +275,7 @@ func (a *endpointAcc) toEndpointSnap(id string) EndpointSnap {
 		ID:                  id,
 		StatusDist:          statusDist,
 		Latency:             stats,
+		PayloadSize:         payloadStats,
 		ErrorRate:           errRate,
 		RequestCount:        a.totalCount,
 		BodySamplesObserved: a.bodyCount,

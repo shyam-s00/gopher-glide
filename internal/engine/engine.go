@@ -452,10 +452,22 @@ func (e *Engine) executeRequest(ctx context.Context, spec httpreader.RequestSpec
 	// the body is captured for schema inference; otherwise it is discarded so
 	// the TCP connection can be returned to the pool.
 	var respBody []byte
+	sampled := false
 	if e.recorder != nil && e.shouldSample() {
+		sampled = true
 		respBody, _ = io.ReadAll(resp.Body) // fully consumes — connection reusable
 	} else {
 		_, _ = io.Copy(io.Discard, resp.Body)
+	}
+
+	// Determine body size for payload-size tracking.
+	// Prefer Content-Length (available for all requests); fall back to the
+	// actual read length for sampled responses where Content-Length is absent.
+	bodySize := int64(-1)
+	if resp.ContentLength >= 0 {
+		bodySize = resp.ContentLength
+	} else if sampled {
+		bodySize = int64(len(respBody))
 	}
 
 	var callErr error
@@ -473,6 +485,7 @@ func (e *Engine) executeRequest(ctx context.Context, spec httpreader.RequestSpec
 			Duration:   duration,
 			Headers:    resp.Header,
 			RespBody:   respBody,
+			BodySize:   bodySize,
 			Error:      callErr,
 		})
 	}

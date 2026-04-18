@@ -25,7 +25,7 @@ func main() {
 
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: gg <config-file> [--snap] [--snap-tag TAG] [--snap-dir DIR] [--snap-sample RATE]")
-		fmt.Println("       gg snap <list|view> [--snap-dir DIR]")
+		fmt.Println("       gg snap <list|view|diff> [--snap-dir DIR]")
 		os.Exit(1)
 	}
 
@@ -269,6 +269,8 @@ func runSnapCmd(args []string) {
 		runSnapList(args[1:])
 	case "view":
 		runSnapView(args[1:])
+	case "diff":
+		runSnapDiff(args[1:])
 	default:
 		_, _ = fmt.Fprintf(os.Stderr, "unknown snap subcommand %q\n\n", args[0])
 		snapUsage()
@@ -348,18 +350,7 @@ func runSnapView(args []string) {
 		os.Exit(1)
 	}
 
-	var info *snap.SnapInfo
-	if id, atoiErr := strconv.Atoi(target); atoiErr == nil {
-		// numeric → look up by 1-based ID
-		info, err = snap.FindByID(dir, id)
-	} else if _, statErr := os.Stat(target); statErr == nil {
-		// existing path → load directly
-		si := snap.SnapInfo{Path: target, FileName: filepath.Base(target)}
-		info = &si
-	} else {
-		// fall back to tag search
-		info, err = snap.FindByTag(dir, target)
-	}
+	info, err := resolveSnapTarget(target, dir)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap view: %v\n", err)
 		os.Exit(1)
@@ -377,12 +368,95 @@ func runSnapView(args []string) {
 	}
 }
 
+func runSnapDiff(args []string) {
+	fs := flag.NewFlagSet("gg snap diff", flag.ExitOnError)
+	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
+
+	// Extract the two positional args before any flags, following the same
+	// pattern as runSnapView.  Accepts: IDs, tag names, or file paths.
+	var positional []string
+	flagStart := len(args)
+	for i, a := range args {
+		if strings.HasPrefix(a, "-") {
+			flagStart = i
+			break
+		}
+		positional = append(positional, a)
+	}
+	_ = fs.Parse(args[flagStart:])
+	// If both positionals weren't found before the first flag, pick up
+	// whatever remains after flag parsing (handles: --snap-dir /x id1 id2).
+	for len(positional) < 2 {
+		rest := fs.Args()
+		if len(rest) == 0 {
+			break
+		}
+		positional = append(positional, rest...)
+		break
+	}
+
+	if len(positional) != 2 {
+		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR]")
+		os.Exit(1)
+	}
+
+	dir, err := snap.ResolveSnapDir(*snapDir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap diff: resolve directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	baseInfo, err := resolveSnapTarget(positional[0], dir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap diff: baseline %q: %v\n", positional[0], err)
+		os.Exit(1)
+	}
+	currInfo, err := resolveSnapTarget(positional[1], dir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap diff: current %q: %v\n", positional[1], err)
+		os.Exit(1)
+	}
+
+	baseSnap, err := snap.Read(baseInfo.Path)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap diff: read baseline %q: %v\n", baseInfo.Path, err)
+		os.Exit(1)
+	}
+	currSnap, err := snap.Read(currInfo.Path)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap diff: read current %q: %v\n", currInfo.Path, err)
+		os.Exit(1)
+	}
+
+	result := snap.Diff(baseSnap, currSnap, snap.DefaultDiffOptions())
+
+	if err := tui.StartSnapDiff(result, *baseInfo, *currInfo); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap diff: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// resolveSnapTarget resolves a snapshot target string (numeric ID, tag name, or
+// file path) to a SnapInfo. This shared helper is used by both runSnapView and
+// runSnapDiff to avoid duplicating lookup logic.
+func resolveSnapTarget(target, dir string) (*snap.SnapInfo, error) {
+	if id, err := strconv.Atoi(target); err == nil {
+		return snap.FindByID(dir, id)
+	}
+	if _, err := os.Stat(target); err == nil {
+		si := snap.SnapInfo{Path: target, FileName: filepath.Base(target)}
+		return &si, nil
+	}
+	return snap.FindByTag(dir, target)
+}
+
 func snapUsage() {
 	_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap <subcommand> [flags]")
 	_, _ = fmt.Fprintln(os.Stderr, "")
 	_, _ = fmt.Fprintln(os.Stderr, "Subcommands:")
-	_, _ = fmt.Fprintln(os.Stderr, "  list                    [--snap-dir DIR]   list all saved snapshots")
-	_, _ = fmt.Fprintln(os.Stderr, "  view <id|tag|file>      [--snap-dir DIR]   view a single snapshot")
+	_, _ = fmt.Fprintln(os.Stderr, "  list                                   [--snap-dir DIR]   list all saved snapshots")
+	_, _ = fmt.Fprintln(os.Stderr, "  view <id|tag|file>                     [--snap-dir DIR]   view a single snapshot")
+	_, _ = fmt.Fprintln(os.Stderr, "  diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR]   diff two snapshots")
 }
 
 func snapDisplayTag(tag string) string {
