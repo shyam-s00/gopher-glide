@@ -390,13 +390,17 @@ func renderSizeDelta(pct float64) string {
 // renderStatusDelta colours the per-status-code distribution change.
 // 2xx improvements are green; increases in 4xx/5xx codes are red.
 func renderStatusDelta(code string, delta float64) string {
-	s := fmtPct(delta * 100) // delta is in [0,1] range → display as pp
+	s := fmt.Sprintf("%+.1f pp", delta*100) // delta is a fraction → display as pp
 	switch {
-	case strings.HasPrefix(code, "2") && delta > 0:
-		return diffPassStyle.Render(s)
-	case (strings.HasPrefix(code, "4") || strings.HasPrefix(code, "5")) && delta > 0:
+	case strings.HasPrefix(code, "2"):
+		if delta > 0 {
+			return diffPassStyle.Render(s)
+		}
 		return diffRegrStyle.Render(s)
-	case delta < 0:
+	case strings.HasPrefix(code, "4") || strings.HasPrefix(code, "5"):
+		if delta > 0 {
+			return diffRegrStyle.Render(s)
+		}
 		return diffPassStyle.Render(s)
 	default:
 		return diffDimStyle.Render(s)
