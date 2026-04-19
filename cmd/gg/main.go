@@ -16,6 +16,7 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 	"github.com/shyam-s00/gopher-glide/internal/tui"
+	"github.com/shyam-s00/gopher-glide/internal/ui"
 	"github.com/shyam-s00/gopher-glide/internal/version"
 )
 
@@ -49,6 +50,8 @@ func main() {
 	snapSample := fs.Float64("snap-sample", 0, "fraction of responses to body-sample for schema inference (0 = use config/default of 5%)")
 	snapMaxSamples := fs.Int("snap-max-samples", 0, "max body samples retained per endpoint via reservoir sampling (0 = use config/default of 200)")
 	snapMaxBodyKB := fs.Int("snap-max-body-kb", 0, "per-endpoint byte budget for stored body samples in KB (0 = no byte-based limit)")
+	headless := fs.Bool("headless", false, "run without interactive TUI — emits structured heartbeat logs (for CI)")
+	reporter := fs.String("reporter", "text", "output format in headless mode: text | json")
 	_ = fs.Parse(os.Args[2:])
 
 	// Track which flags were explicitly provided so we can apply the correct
@@ -195,9 +198,19 @@ func main() {
 		}
 	}
 
-	fmt.Println("Starting TUI...")
-	if err := tui.Start(eng, cfg, specs, *snapEnabled, resolvedSnapDir, onRunComplete); err != nil {
-		fmt.Printf("Error running TUI: %v\n", err)
+	fmt.Println("Starting...")
+	renderer := ui.New(*headless)
+	if *headless {
+		if hr, ok := renderer.(*ui.HeadlessRenderer); ok {
+			hr.Reporter = *reporter
+		}
+	}
+	if err := renderer.Run(eng, cfg, specs, ui.RunOptions{
+		Snapping:      *snapEnabled,
+		SnapDir:       resolvedSnapDir,
+		OnRunComplete: onRunComplete,
+	}); err != nil {
+		fmt.Printf("Error running: %v\n", err)
 		os.Exit(1)
 	}
 
