@@ -16,22 +16,22 @@ Generate high-concurrency traffic with minimal overhead — no agents, no server
 
 - **`.http` file support** — define requests (with headers and bodies) using the familiar `.http` / REST Client format; point `gg` at your existing file and go
 - **Multi-stage load engine** — define any number of stages; the engine linearly interpolates (LERP) RPS between stages automatically
-  - **Ramp Up** — smoothly increase load to a target RPS
+  - **Ramp Up** — smoothly increase the load to a target RPS
   - **Sustain** — hold a fixed RPS for a duration
   - **Spike** — instant step jump (`duration: 0s`) with no interpolation
-  - **Ramp Down** — smoothly reduce load back to zero (cool-down)
+  - **Ramp Down** — smoothly reduce the load back to zero (cool-down)
   - **Named stages** — optional `name:` field used in the TUI timeline label
 - **RPS-based scheduler** — drift-free ticker dispatches requests at the configured rate; never accumulates lag across second boundaries
 - **Concurrent worker pool** — powered by `errgroup` + channels; worker count scales to peak RPS across all stages; minimal memory footprint
 - **Jitter** — configurable `±N%` organic noise on the RPS ticker so load patterns look realistic rather than mechanical
-- **Time scale** — `time_scale` compresses or stretches the stage clock for fast local iteration (e.g. `time_scale: 10` runs a 10-minute plan in 60 seconds)
+- **Timescale** — `time_scale` compresses or stretches the stage clock for fast local iteration (e.g. `time_scale: 10` runs a 10-minute plan in 60 seconds)
 - **Director Mode** — live RPS bias while a run is in progress:
   - `↑` / `↓` keys adjust the running RPS by ±5 in real-time
   - Bias is applied on top of the LERP'd stage target and shown in the TUI
 - **Live TUI dashboard** — rendered with Bubble Tea & Lip Gloss:
   - Status header — version, run state (Running / Stopped), uptime
   - Three stat panels — Configuration, Throughput, Latency
-  - Stage timeline graph — visual representation of all stages with a live cursor showing current position and achieved RPS marker per block
+  - Stage timeline graph — visual representation of all stages with a live cursor showing the current position and achieved RPS marker per block
   - Scrollable call log — toggle between all calls and errors only with `f`
 - **Snapshots (`gg snap`)** — record and view behavioral snapshots (latency, status distribution, and inferred JSON schemas) for all endpoints hit during a run.
 - **Stamped binaries** — version, git commit, and build date embedded at compile time via `-ldflags`
@@ -53,11 +53,11 @@ Gopher Glide features an official [JetBrains plugin](https://plugins.jetbrains.c
 
 Go to the [Releases](https://github.com/shyam-s00/gopher-glide/releases) page and download the archive for your platform:
 
-| Platform | Archive |
-|---|---|
+| Platform              | Archive                            |
+|-----------------------|------------------------------------|
 | macOS (Apple Silicon) | `gg-<version>-darwin-arm64.tar.gz` |
-| Linux (x86-64) | `gg-<version>-linux-amd64.tar.gz` |
-| Windows (x86-64) | `gg-<version>-windows-amd64.zip` |
+| Linux (x86-64)        | `gg-<version>-linux-amd64.tar.gz`  |
+| Windows (x86-64)      | `gg-<version>-windows-amd64.zip`   |
 
 ### 2. Extract
 
@@ -168,14 +168,14 @@ Produces versioned `.tar.gz` (Unix) and `.zip` (Windows) archives in `dist/`, ea
 
 ### Other make targets
 
-| Target | Description |
-|---|---|
-| `make build` | Compile for current OS/ARCH |
-| `make build-all` | Cross-compile all platforms into `dist/` |
-| `make release` | `build-all` + package archives |
-| `make run` | Build + run with `config.yaml` |
-| `make clean` | Remove `dist/` and local binary |
-| `make version` | Print version, git commit, and build date |
+| Target           | Description                               |
+|------------------|-------------------------------------------|
+| `make build`     | Compile for current OS/ARCH               |
+| `make build-all` | Cross-compile all platforms into `dist/`  |
+| `make release`   | `build-all` + package archives            |
+| `make run`       | Build + run with `config.yaml`            |
+| `make clean`     | Remove `dist/` and local binary           |
+| `make version`   | Print version, git commit, and build date |
 
 ---
 
@@ -245,13 +245,13 @@ stages:
 
 When `name` is omitted, `gg` infers the display label from the stage shape:
 
-| Shape | Inferred label |
-|---|---|
-| `target_rps` higher than previous | **Ramp Up** |
-| `target_rps` same as previous | **Sustain** |
-| `target_rps` lower than previous | **Ramp Down** |
-| `duration: 0s` | **Spike** |
-| `target_rps: 0` | **Ramp Down** |
+| Shape                             | Inferred label |
+|-----------------------------------|----------------|
+| `target_rps` higher than previous | **Ramp Up**    |
+| `target_rps` same as previous     | **Sustain**    |
+| `target_rps` lower than previous  | **Ramp Down**  |
+| `duration: 0s`                    | **Spike**      |
+| `target_rps: 0`                   | **Ramp Down**  |
 
 ### `jitter`
 
@@ -298,12 +298,12 @@ time_scale: 10   # a 10-minute plan finishes in 1 minute
 
 ### Keybindings
 
-| Key | Action |
-|---|---|
-| `↑` | Increase live RPS by +5 (Director Mode bias) |
-| `↓` | Decrease live RPS by -5 (Director Mode bias) |
-| `f` | Toggle call log between all calls and errors only |
-| `q` / `Ctrl+C` | Quit |
+| Key            | Action                                            |
+|----------------|---------------------------------------------------|
+| `↑`            | Increase live RPS by +5 (Director Mode bias)      |
+| `↓`            | Decrease live RPS by -5 (Director Mode bias)      |
+| `f`            | Toggle call log between all calls and errors only |
+| `q` / `Ctrl+C` | Quit                                              |
 
 ---
 
@@ -334,62 +334,28 @@ stages:
     target_rps: 0
 ```
 
-The TUI timeline visualises the entire plan before and during the run, with a live cursor showing current position and an RPS marker per block showing the actual throughput achieved.
+The TUI timeline visualizes the entire plan before and during the run, with a live cursor showing the current position and an RPS marker per block showing the actual throughput achieved.
 
 ---
 
 ## Director Mode
 
-While a run is in progress, use `↑` / `↓` to apply a live **RPS bias** on top of the configured stage target. The bias accumulates (e.g. three `↑` presses = +15 RPS) and is shown in the TUI and reflected in `GetMetrics()`. The bias is applied on top of the LERP'd value — the stage plan continues to run unaffected.
+While a run is in progress, use `↑` / `↓` to apply a live **RPS bias** on top of the configured stage target. The bias accumulates (e.g., three `↑` presses = +15 RPS) and is shown in the TUI and reflected in `GetMetrics()`. The bias is applied on top of the LERP'd value — the stage plan continues to run unaffected.
 
 ---
 
-## Snapshots
+## Snapshots & CI Integrations
 
-`gg snap` is a tool suite for capturing, listing, and viewing test behavior records. It records detailed post-run telemetry per-endpoint without the overhead of heavy logging.
+`gg snap` is a unique feature that sets Gopher Glide apart from traditional load testing tools like k6 or Locust. Instead of just returning standard end-of-run metrics, `gg` captures a replayable **Behavioral Profiling Snapshot** of your API under load. 
 
-### Capture a Snapshot
+By intelligently sampling your API's responses, it builds accurate JSON schemas and tracks payload sizes alongside latency and status distributions. This powers **Semantic Diffing** and **Time-Travel Regression Triage**. 
 
-To take a snapshot after the run, pass the `--snap` flag. You can also optionally tag your snapshot using `--snap-tag <tag>` to identify specific changes.
+You can diff two runs and explicitly see what changed—for example, *Did P99 latency jump 38% because a new database field was unexpectedly injected into the payload?*
 
-```bash
-# Capture and tag the snapshot
-gg config.yaml --snap --snap-tag "v1-baseline"
-```
+Finally, using the `--headless` mode and `gg snap assert`, you can integrate `gg` directly into your Continuous Integration pipelines to act as an automated regression gate, failing your build if thresholds are breached.
 
-A `.snap` file is written to your system's default snapshot directory (or a custom one defined by `--snap-dir <dir>`).
+👉 **[Read the full Snap Feature Documentation here](docs/snap.md)**
 
-### List Snapshots
-
-List all saved snapshots with `gg snap list`:
-
-```bash
-gg snap list
-```
-
-This presents a summary table with columns such as Date, Tag, Endpoint Count, Peak RPS, and Total Requests.
-
-### View a Snapshot
-
-To view the detailed snapshot (status distribution, latency per endpoint, and inferred JSON schema), use `gg snap view`:
-
-```bash
-# View by exact Tag
-gg snap view v1-baseline
-```
-
-It opens a rich TUI visualizing the endpoint data alongside schemas for the request payloads, giving you insights into status distributions, errors, and what the body contained.
-
-### Snap Configuration Limits
-
-In `config.yaml`, you can also configure options for the schema inference behavior:
-```yaml
-snap:
-  sample_rate: 0.05       # 5% of responses analyzed for schema building
-  max_samples: 200        # Store up to 200 JSON body samples per-endpoint
-  max_body_kb: 500        # Byte limit (500 KB) for total samples stored per-endpoint
-```
-All snap values can also be overridden by command-line flags (e.g. `--snap-sample 0.1`).
 
 ---
 
@@ -413,9 +379,9 @@ All snap values can also be overridden by command-line flags (e.g. `--snap-sampl
 ---
 
 ## Roadmap
-
+- [x] Snap – Behavioral Profiling
 - [ ] VPU mode — fixed virtual users instead of fixed RPS
-- [ ] Circuit breaker — auto-stop on configurable error-rate threshold
+- [ ] Circuit breaker — auto-stop on a configurable error-rate threshold
 - [ ] Prometheus `/metrics` endpoint
 - [ ] HTML / JSON result export
 
