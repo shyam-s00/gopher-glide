@@ -284,6 +284,8 @@ func runSnapCmd(args []string) {
 		runSnapView(args[1:])
 	case "diff":
 		runSnapDiff(args[1:])
+	case "assert":
+		runSnapAssert(args[1:])
 	default:
 		_, _ = fmt.Fprintf(os.Stderr, "unknown snap subcommand %q\n\n", args[0])
 		snapUsage()
@@ -463,6 +465,88 @@ func resolveSnapTarget(target, dir string) (*snap.SnapInfo, error) {
 	return snap.FindByTag(dir, target)
 }
 
+func runSnapAssert(args []string) {
+	fs := flag.NewFlagSet("gg snap assert", flag.ExitOnError)
+	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
+	baseline := fs.String("baseline", "", "baseline snapshot: numeric ID, tag name, or file path (required)")
+	current := fs.String("current", "", "current snapshot: numeric ID, tag name, or file path (required)")
+	latencyReg := fs.Float64("latency-regression", 20, "P99 latency % increase that triggers REGRESSION")
+	errorDelta := fs.Float64("error-rate-delta", 0.05, "error rate absolute increase (0–1) that triggers REGRESSION")
+	payloadPct := fs.Float64("payload-size-delta", 50, "avg payload size % increase that triggers WARN")
+	denyRemoved := fs.Bool("deny-removed-fields", false, "treat removed schema fields as REGRESSION (default: WARN)")
+	failOnWarn := fs.Bool("fail-on-warn", false, "exit non-zero on WARN verdicts in addition to REGRESSION")
+	reporter := fs.String("reporter", "text", "output format: text | json | md")
+	out := fs.String("out", "", "write report to this file path instead of stdout")
+	_ = fs.Parse(args)
+
+	if *baseline == "" || *current == "" {
+		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap assert --baseline <id|tag|file> --current <id|tag|file> [flags]")
+		_, _ = fmt.Fprintln(os.Stderr, "")
+		fs.PrintDefaults()
+		os.Exit(1)
+	}
+
+	dir, err := snap.ResolveSnapDir(*snapDir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap assert: resolve directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	baseInfo, err := resolveSnapTarget(*baseline, dir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap assert: baseline %q: %v\n", *baseline, err)
+		os.Exit(1)
+	}
+	currInfo, err := resolveSnapTarget(*current, dir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap assert: current %q: %v\n", *current, err)
+		os.Exit(1)
+	}
+
+	baseSnap, err := snap.Read(baseInfo.Path)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap assert: read baseline %q: %v\n", baseInfo.Path, err)
+		os.Exit(1)
+	}
+	currSnap, err := snap.Read(currInfo.Path)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap assert: read current %q: %v\n", currInfo.Path, err)
+		os.Exit(1)
+	}
+
+	opts := snap.AssertOptions{
+		DiffOptions: snap.DiffOptions{
+			LatencyP99RegressionPct:    *latencyReg,
+			ErrorRateDeltaThreshold:    *errorDelta,
+			PayloadSizeAvgPctThreshold: *payloadPct,
+			DenyRemovedFields:          *denyRemoved,
+		},
+		FailOnWarn: *failOnWarn,
+	}
+
+	result := snap.Assert(baseSnap, currSnap, opts)
+
+	report, err := snap.FormatAssertResult(result, *reporter)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap assert: format report: %v\n", err)
+		os.Exit(1)
+	}
+
+	if *out != "" {
+		if err := os.WriteFile(*out, []byte(report), 0644); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "snap assert: write output file %q: %v\n", *out, err)
+			os.Exit(1)
+		}
+		fmt.Printf("Report written to %s\n", *out)
+	} else {
+		fmt.Print(report)
+	}
+
+	if !result.Passed {
+		os.Exit(1)
+	}
+}
+
 func snapUsage() {
 	_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap <subcommand> [flags]")
 	_, _ = fmt.Fprintln(os.Stderr, "")
@@ -470,6 +554,7 @@ func snapUsage() {
 	_, _ = fmt.Fprintln(os.Stderr, "  list                                   [--snap-dir DIR]   list all saved snapshots")
 	_, _ = fmt.Fprintln(os.Stderr, "  view <id|tag|file>                     [--snap-dir DIR]   view a single snapshot")
 	_, _ = fmt.Fprintln(os.Stderr, "  diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR]   diff two snapshots")
+	_, _ = fmt.Fprintln(os.Stderr, "  assert --baseline <id> --current <id>  [--snap-dir DIR]   CI regression gate (exits 1 on failure)")
 }
 
 func snapDisplayTag(tag string) string {
