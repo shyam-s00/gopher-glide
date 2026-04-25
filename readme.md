@@ -6,15 +6,27 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/shyam-s00/gopher-glide)](https://goreportcard.com/report/github.com/shyam-s00/gopher-glide)
 [![JetBrains Plugin Version](https://img.shields.io/jetbrains/plugin/v/dev.gopherglide.gg-plugin)](https://plugins.jetbrains.com/plugin/30983-gopher-glide)
 
-**Gopher Glide (gg)** is an open-source, lightweight **CLI load testing tool** and **API benchmarking** utility built in Go. It simplifies performance testing by reading your requests from a standard `.http` file, running them through a multi-stage load plan, and delivering a live terminal dashboard of throughput, latency, and errors. 
+**Gopher Glide (gg)** is a modern, zero-scripting **API load testing** and **performance benchmarking** CLI built in Go. Designed as a lightweight open-source alternative to other load testers like k6, Gatling, or Locust, `gg` runs standard `.http` files right out of the box. 
 
-Generate high-concurrency traffic with minimal overhead — no agents, no servers, no config sprawl.
+Generate high-concurrency traffic with a dynamic terminal UI, adjust RPS in real-time, and catch API regressions using built-in semantic JSON snapshotting. No agents, no servers, no boilerplate code.
+
+---
+
+## Why Gopher Glide? (vs k6, Locust, JMeter)
+
+Developers frequently look for a **lightweight alternative** to traditional tools. Most load testers require you to translate your API requests into JavaScript, Python, or heavy XML configs. 
+
+**Gopher Glide** offers a **scriptless load testing** experience:
+1. **Zero-Scripting:** Reuse your existing VS Code or JetBrains IDE `.http` REST Client files directly.
+2. **Behavioral Profiling:** Not just metrics, `gg` captures payload sizes and infers JSON schemas for **API schema regression testing** and **semantic API diffing**.
+3. **Interactive Load Generation:** The live Director Mode allows you to bias RPS up or down in real-time.
+4. **CI/CD Ready:** Use the built-in `--headless` mode and `gg snap assert` command to act as an automated performance and regression gate in your test pipelines.
 
 ---
 
 ## Features
 
-- **`.http` file support** — define requests (with headers and bodies) using the familiar `.http` / REST Client format; point `gg` at your existing file and go
+- **Native `.http` file support** — define requests (with headers and bodies) using the familiar REST Client format; point `gg` at your existing file and go
 - **Multi-stage load engine** — define any number of stages; the engine linearly interpolates (LERP) RPS between stages automatically
   - **Ramp Up** — smoothly increase the load to a target RPS
   - **Sustain** — hold a fixed RPS for a duration
@@ -33,7 +45,7 @@ Generate high-concurrency traffic with minimal overhead — no agents, no server
   - Three stat panels — Configuration, Throughput, Latency
   - Stage timeline graph — visual representation of all stages with a live cursor showing the current position and achieved RPS marker per block
   - Scrollable call log — toggle between all calls and errors only with `f`
-- **Snapshots (`gg snap`)** — record and view behavioral snapshots (latency, status distribution, and inferred JSON schemas) for all endpoints hit during a run.
+- **Semantic Snapshots (`gg snap`)** — record and view behavioral snapshots (latency, status distribution, and inferred JSON schemas) for **semantic API diffing** and regression testing.
 - **Stamped binaries** — version, git commit, and build date embedded at compile time via `-ldflags`
 - **Cross-platform** — pre-built binaries for Linux (amd64), macOS (arm64), and Windows (amd64)
 - **JetBrains Plugin** — a dedicated IDE plugin is available in beta for integrating Gopher Glide runs into your workflow
@@ -46,6 +58,8 @@ Gopher Glide features an official [JetBrains plugin](https://plugins.jetbrains.c
 * **Smart YAML editing** — auto-complete, validation, and JSON Schema integration for your `config.yaml` load plans.
 * **Clickable File References** — jump instantly from your config to your `.http` files.
 * **Terminal-First Execution** — execute your API benchmarking directly into the IDE’s built-in tool window, complete with full TUI support.
+* **Snap UI Tool Window** — a dedicated panel to list all behavioural snapshots, view detailed schema distributions, and natively run semantic diffs right in the IDE terminal view.
+* **Custom Snap Configuration** — smoothly point the plugin to custom snapshot directory paths matching your project structure.
 
 ## Quick Start — pre-built binary
 
