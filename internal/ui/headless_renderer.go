@@ -106,6 +106,11 @@ func (r *HeadlessRenderer) Run(eng *engine.Engine, cfg *config.Config, specs []h
 	ticker := time.NewTicker(r.heartbeatInterval())
 	defer ticker.Stop()
 
+	// engineFinished tracks whether we already consumed the engineDone value
+	// inside the select loop. If false after the loop we must drain the channel
+	// so that no engine worker is still active when we finalize the snapshot.
+	engineFinished := false
+
 loop:
 	for {
 		select {
@@ -115,6 +120,7 @@ loop:
 			break loop
 
 		case err := <-engineDone:
+			engineFinished = true
 			if err != nil && !errors.Is(err, context.Canceled) {
 				return fmt.Errorf("engine: %w", err)
 			}
@@ -140,6 +146,19 @@ loop:
 				P95Ms:        m.P95Latency,
 				P99Ms:        m.P99Latency,
 			})
+		}
+	}
+
+	// If the loop exited via the signal or ticker path (not engineDone), wait
+	// here until RunStages actually returns. This guarantees that no engine
+	// worker is still calling recorder.Record() when we call OnRunComplete /
+	// finalizeSnapResult below — preventing a recorder data-race on early quit.
+	if !engineFinished {
+		if err := <-engineDone; err != nil && !errors.Is(err, context.Canceled) {
+			// Engine returned an unexpected error after cancellation; log it
+			// but still proceed with snapshot finalization so partial data is
+			// not lost entirely.
+			r.emitMessage("error", fmt.Sprintf("engine exited with error: %v", err))
 		}
 	}
 
