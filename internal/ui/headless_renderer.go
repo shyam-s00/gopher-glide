@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -45,8 +46,8 @@ func (r *HeadlessRenderer) heartbeatInterval() time.Duration {
 
 // reporter returns the effective reporter name (lower-cased, default "text").
 func (r *HeadlessRenderer) reporter() string {
-	if r.Reporter != "" {
-		return r.Reporter
+	if norm := strings.ToLower(strings.TrimSpace(r.Reporter)); norm != "" {
+		return norm
 	}
 	return "text"
 }
