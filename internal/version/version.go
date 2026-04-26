@@ -8,7 +8,7 @@ import "time"
 var (
 	// Version is the semver release tag, e.g. v1.2.3.
 	// Set via: -X 'gopher-glide/internal/version.Version=v1.2.3'
-	Version = "v0.5.9-dev"
+	Version = "v0.6.0-dev"
 
 	// GitCommit is the short SHA of the commit the binary was built from.
 	// Set via: -X 'gopher-glide/internal/version.GitCommit=abc1234'
