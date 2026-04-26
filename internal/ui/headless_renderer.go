@@ -111,11 +111,17 @@ func (r *HeadlessRenderer) Run(eng *engine.Engine, cfg *config.Config, specs []h
 	// inside the select loop. If false after the loop we must drain the channel
 	// so that no engine worker is still active when we finalize the snapshot.
 	engineFinished := false
+	// interrupted is set when the user/OS explicitly canceled the run via a
+	// signal. It changes how we treat a non-canceled error from the engine
+	// after the loop: on an explicit interrupt we log and still finalize
+	// (preserving partial data); on a natural stop we propagate the error.
+	interrupted := false
 
 loop:
 	for {
 		select {
 		case <-sigCh:
+			interrupted = true
 			cancel()
 			r.emitMessage("interrupted", "Run interrupted by signal")
 			break loop
@@ -130,6 +136,8 @@ loop:
 		case <-ticker.C:
 			m := eng.GetMetrics()
 			if !eng.IsRunning() {
+				// Engine stopped naturally between heartbeats — fall through to
+				// the engineDone drain below so its return value is not lost.
 				break loop
 			}
 			r.emit(HeartbeatPayload{
@@ -156,10 +164,17 @@ loop:
 	// finalizeSnapResult below — preventing a recorder data-race on early quit.
 	if !engineFinished {
 		if err := <-engineDone; err != nil && !errors.Is(err, context.Canceled) {
-			// Engine returned an unexpected error after cancellation; log it
-			// but still proceed with snapshot finalization so partial data is
-			// not lost entirely.
-			r.emitMessage("error", fmt.Sprintf("engine exited with error: %v", err))
+			if interrupted {
+				// The run was explicitly aborted — log the unexpected error but
+				// still proceed with snapshot finalization so partial data is
+				// not lost entirely.
+				r.emitMessage("error", fmt.Sprintf("engine exited with error: %v", err))
+			} else {
+				// The engine stopped naturally (detected via IsRunning) and
+				// returned a real error. Propagate it so the caller sees a
+				// non-zero exit; do not finalize a potentially corrupt snapshot.
+				return fmt.Errorf("engine: %w", err)
+			}
 		}
 	}
 
