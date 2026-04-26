@@ -554,7 +554,7 @@ func snapUsage() {
 	_, _ = fmt.Fprintln(os.Stderr, "  list                                   [--snap-dir DIR]   list all saved snapshots")
 	_, _ = fmt.Fprintln(os.Stderr, "  view <id|tag|file>                     [--snap-dir DIR]   view a single snapshot")
 	_, _ = fmt.Fprintln(os.Stderr, "  diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR]   diff two snapshots")
-	_, _ = fmt.Fprintln(os.Stderr, "  assert --baseline <id> --current <id>  [--snap-dir DIR]   CI regression gate (exits 1 on failure)")
+	_, _ = fmt.Fprintln(os.Stderr, "  assert --baseline <id|tag|file> --current <id|tag|file> [flags] [--snap-dir DIR]   CI regression gate (exits 1 on failure)")
 }
 
 func snapDisplayTag(tag string) string {

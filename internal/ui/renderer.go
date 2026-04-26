@@ -22,10 +22,17 @@ type RunOptions struct {
 	// SnapDir is the resolved snapshot directory (shown in the indicator).
 	SnapDir string
 
-	// OnRunComplete is called exactly once in a background goroutine after the
-	// engine finishes all stages. It must not write to stdout/stderr while the
-	// TUI alt-screen is active. The returned string is surfaced to the user
-	// after the run ends. nil is safe (no-op).
+	// OnRunComplete is called exactly once after the engine finishes all stages
+	// (or is interrupted). The returned string is surfaced to the user after
+	// the run ends. nil is safe (no-op).
+	//
+	// Calling convention differs by renderer:
+	//   - TUIRenderer: invoked in a background goroutine while the alt-screen
+	//     is still active. Must not write to stdout/stderr directly; use the
+	//     returned string to surface status through the director bar instead.
+	//   - HeadlessRenderer: invoked synchronously after the engine goroutine
+	//     has fully exited and before Run returns. Writing to stdout/stderr is
+	//     safe here because there is no alt-screen constraint.
 	OnRunComplete func() string
 }
 
