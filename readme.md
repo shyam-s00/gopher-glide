@@ -195,7 +195,7 @@ Produces versioned `.tar.gz` (Unix) and `.zip` (Windows) archives in `dist/`, ea
 
 ## .http file format
 
-`gg` uses the standard `.http` / REST Client file format. Requests are separated by `###`.
+`gg` uses the standard `.http` / REST Client file format. Requests are separated by `###`. Complete spec can be found [here](https://github.com/JetBrains/http-request-in-editor-spec/blob/master/spec.md)
 
 ```http
 ### Simple GET
