@@ -58,7 +58,7 @@ Gopher Glide features an official [JetBrains plugin](https://plugins.jetbrains.c
 * **Smart YAML editing** — auto-complete, validation, and JSON Schema integration for your `config.yaml` load plans.
 * **Clickable File References** — jump instantly from your config to your `.http` files.
 * **Terminal-First Execution** — execute your API benchmarking directly into the IDE’s built-in tool window, complete with full TUI support.
-* **Snap UI Tool Window** — a dedicated panel to list all behavioural snapshots, view detailed schema distributions, and natively run semantic diffs right in the IDE terminal view.
+* **Snap UI Tool Window** — a dedicated panel to list all behavioral snapshots, view detailed schema distributions, and natively run semantic diffs right in the IDE terminal view.
 * **Custom Snap Configuration** — smoothly point the plugin to custom snapshot directory paths matching your project structure.
 
 ## Quick Start — pre-built binary
