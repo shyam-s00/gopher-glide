@@ -30,12 +30,13 @@ const (
 // ── model ─────────────────────────────────────────────────────────────────────
 
 type model struct {
-	engine  *engine.Engine
-	config  *config.Config
-	specs   []httpreader.RequestSpec
-	ctx     context.Context
-	cancel  context.CancelFunc
-	logView viewport.Model
+	engine     *engine.Engine
+	config     *config.Config
+	specs      []httpreader.RequestSpec
+	ctx        context.Context
+	cancel     context.CancelFunc
+	engineDone chan struct{} // closed by Init's goroutine once RunStages returns
+	logView    viewport.Model
 
 	width  int
 	height int
@@ -87,6 +88,7 @@ func initialModel(eng *engine.Engine, cfg *config.Config, specs []httpreader.Req
 		specs:        specs,
 		ctx:          ctx,
 		cancel:       cancel,
+		engineDone:   make(chan struct{}),
 		logView:      vp,
 		metrics:      &engine.MetricsSnapshot{},
 		showFailures: true,
@@ -97,6 +99,7 @@ func initialModel(eng *engine.Engine, cfg *config.Config, specs []httpreader.Req
 func (m model) Init() tea.Cmd {
 	go func() {
 		_ = m.engine.RunStages(m.ctx, m.config, m.specs)
+		close(m.engineDone) // unblocks Start() so it can return only after the engine is fully stopped
 	}()
 	return tea.Batch(tickCmd(), tea.EnterAltScreen)
 }
@@ -877,5 +880,13 @@ func Start(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpe
 		tea.WithMouseCellMotion(),
 	)
 	_, err := p.Run()
+
+	// Block until the engine goroutine has fully exited.
+	// This guarantees that when Start returns — whether because the run
+	// completed naturally or the user pressed [q] — no engine worker is
+	// still calling recorder.Record(), making it safe for the caller to
+	// invoke finalizeSnapResult immediately afterwards.
+	<-m.engineDone
+
 	return err
 }
