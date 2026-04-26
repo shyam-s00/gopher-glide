@@ -486,6 +486,11 @@ func runSnapAssert(args []string) {
 		os.Exit(1)
 	}
 
+	if err := validateAssertFlags(*latencyReg, *errorDelta, *payloadPct); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap assert: invalid flag: %v\n", err)
+		os.Exit(1)
+	}
+
 	dir, err := snap.ResolveSnapDir(*snapDir)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap assert: resolve directory: %v\n", err)
@@ -600,6 +605,25 @@ func validateSnapTuning(sampleRate float64, maxSamples, maxBodyKB int) error {
 	}
 	if maxBodyKB < 0 {
 		return fmt.Errorf("--snap-max-body-kb must be >= 0, got %d", maxBodyKB)
+	}
+	return nil
+}
+
+// validateAssertFlags returns an error if any snap assert threshold is outside
+// its legal range. Called before any snapshot I/O so bad input is caught early.
+//
+//   - latencyReg  must be > 0   (a % increase; 0 would always trigger, negative is nonsensical)
+//   - errorDelta  must be in [0, 1]  (absolute rate change; 0 would always trigger, >1 is impossible)
+//   - payloadPct  must be > 0   (a % increase; same rationale as latencyReg)
+func validateAssertFlags(latencyReg, errorDelta, payloadPct float64) error {
+	if latencyReg <= 0 {
+		return fmt.Errorf("--latency-regression must be > 0, got %g", latencyReg)
+	}
+	if errorDelta <= 0 || errorDelta > 1 {
+		return fmt.Errorf("--error-rate-delta must be in [0, 1], got %g", errorDelta)
+	}
+	if payloadPct <= 0 {
+		return fmt.Errorf("--payload-size-delta must be > 0, got %g", payloadPct)
 	}
 	return nil
 }
