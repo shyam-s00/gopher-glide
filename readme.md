@@ -48,7 +48,7 @@ Developers frequently look for a **lightweight alternative** to traditional tool
 - **Semantic Snapshots (`gg snap`)** — record and view behavioral snapshots (latency, status distribution, and inferred JSON schemas) for **semantic API diffing** and regression testing.
 - **Stamped binaries** — version, git commit, and build date embedded at compile time via `-ldflags`
 - **Cross-platform** — pre-built binaries for Linux (amd64), macOS (arm64), and Windows (amd64)
-- **JetBrains Plugin** — a dedicated IDE plugin is available in beta for integrating Gopher Glide runs into your workflow
+- **JetBrains Plugin** — a dedicated IDE plugin is available for integrating Gopher Glide runs into your workflow
 
 ---
 ## 🔌 JetBrains IDE Integration 
