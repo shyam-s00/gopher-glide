@@ -1,6 +1,6 @@
 site_name: Gopher Glide (gg)
 site_description: High-Performance API Load Testing Tool Built in Go
-site_url: https://shyam-s00.github.io/gopher-glide/
+site_url: https://gopherglide.dev
 repo_url: https://github.com/shyam-s00/gopher-glide
 
 theme:
