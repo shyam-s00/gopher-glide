@@ -1,49 +1,44 @@
 name: Release
 
-# Triggers on a pushed version tag, e.g. v1.0.0, v1.2.3-beta
+# Triggers on a pushed version tag, e.g. v1.0.0, v1.2.3-beta.
+# Can also be triggered manually via workflow_dispatch to re-run specific
+# publish steps (Docker, Homebrew) against an already-released tag without
+# creating a new one.
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to re-release (e.g. v1.2.3) — must already exist in the repo"
+        required: true
+      skip:
+        description: |
+          Comma-separated GoReleaser publishers to skip.
+          Valid values: docker, homebrew, publish (skips GitHub Release upload + brew + docker)
+          Example: "docker" — rebuilds + re-publishes everything except Docker
+          Leave blank to run everything.
+        required: false
+        default: ""
 
 permissions:
-  contents: write   # needed to create a GitHub Release and upload assets
+  contents: write   # create GitHub Release and upload assets
+  packages: write   # push Docker image to ghcr.io
+  id-token: write   # future: OIDC attestation support
 
 jobs:
-  build:
-    name: Build — ${{ matrix.os_label }}
-    runs-on: ${{ matrix.runner }}
-
-    strategy:
-      matrix:
-        include:
-          - os_label:  linux-amd64
-            runner:    ubuntu-latest
-            goos:      linux
-            goarch:    amd64
-            ext:       ""
-            archive:   tar
-
-
-          - os_label:  darwin-arm64
-            runner:    macos-latest
-            goos:      darwin
-            goarch:    arm64
-            ext:       ""
-            archive:   tar
-
-          - os_label:  windows-amd64
-            runner:    windows-latest
-            goos:      windows
-            goarch:    amd64
-            ext:       ".exe"
-            archive:   zip
+  goreleaser:
+    name: GoReleaser
+    runs-on: ubuntu-latest
 
     steps:
+      # ── For workflow_dispatch: check out the specified tag instead of HEAD ──
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history so git describe works for version
+          fetch-depth: 0   # full history required by GoReleaser for changelog + version resolution
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -51,118 +46,38 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Resolve version metadata
-        id: meta
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Build the --skip flag string ────────────────────────────────────────
+      # On a normal tag push the skip input is empty → no --skip flag added.
+      # On workflow_dispatch the user-supplied skip value is forwarded as-is.
+      - name: Resolve GoReleaser args
+        id: gr_args
         shell: bash
         run: |
-          VERSION="${{ github.ref_name }}"
-          COMMIT=$(git rev-parse --short HEAD)
-          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          PACKAGE_NAME="gg-${VERSION}-${{ matrix.os_label }}"
-          echo "version=${VERSION}"        >> $GITHUB_OUTPUT
-          echo "commit=${COMMIT}"          >> $GITHUB_OUTPUT
-          echo "build_date=${BUILD_DATE}"  >> $GITHUB_OUTPUT
-          echo "package=${PACKAGE_NAME}"   >> $GITHUB_OUTPUT
+          BASE="release --clean"
+          SKIP="${{ inputs.skip }}"
+          if [[ -n "$SKIP" ]]; then
+            # GoReleaser accepts: --skip=docker,homebrew  (comma-separated, no spaces)
+            SKIP_NORMALIZED=$(echo "$SKIP" | tr -d ' ')
+            BASE="$BASE --skip=$SKIP_NORMALIZED"
+          fi
+          echo "args=$BASE" >> $GITHUB_OUTPUT
 
-      - name: Build binary
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: ${{ steps.gr_args.outputs.args }}
         env:
-          GOOS:   ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: "0"
-        shell: bash
-        run: |
-          LDFLAGS="-s -w \
-            -X 'github.com/shyam-s00/gopher-glide/internal/version.Version=${{ steps.meta.outputs.version }}' \
-            -X 'github.com/shyam-s00/gopher-glide/internal/version.GitCommit=${{ steps.meta.outputs.commit }}' \
-            -X 'github.com/shyam-s00/gopher-glide/internal/version.BuildDate=${{ steps.meta.outputs.build_date }}'"
-          go build -ldflags "${LDFLAGS}" -o "gg${{ matrix.ext }}" ./cmd/gg
-
-      # ── macOS: ad-hoc code sign to satisfy Gatekeeper ────────────────────
-      # Ad-hoc signing (-) is free — no Apple Developer account needed.
-      # It removes the "Apple could not verify" block for unsigned binaries
-      # downloaded from the internet. Without this, macOS quarantines the
-      # binary and users must run: xattr -d com.apple.quarantine ./gg
-      - name: Ad-hoc codesign (macOS only)
-        if: matrix.goos == 'darwin'
-        shell: bash
-        run: codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime gg
-
-      # ── Unix: tar.gz ──────────────────────────────────────────────────────
-      - name: Package (tar.gz)
-        if: matrix.archive == 'tar'
-        shell: bash
-        run: |
-          PKG="${{ steps.meta.outputs.package }}"
-          mkdir -p "${PKG}"
-          cp gg "${PKG}/"
-          cp config.yaml request.http "${PKG}/"
-          tar -czf "${PKG}.tar.gz" "${PKG}"
-          echo "ASSET=${PKG}.tar.gz" >> $GITHUB_ENV
-
-      # ── Windows: zip ──────────────────────────────────────────────────────
-      - name: Package (zip)
-        if: matrix.archive == 'zip'
-        shell: pwsh
-        run: |
-          $PKG = "${{ steps.meta.outputs.package }}"
-          New-Item -ItemType Directory -Force -Path $PKG | Out-Null
-          Copy-Item "gg.exe"        "$PKG/"
-          Copy-Item "config.yaml"   "$PKG/"
-          Copy-Item "request.http"  "$PKG/"
-          Compress-Archive -Path "$PKG" -DestinationPath "$PKG.zip"
-          "ASSET=$PKG.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.meta.outputs.package }}
-          path: ${{ env.ASSET }}
-          retention-days: 1
-
-  release:
-    name: Create GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: List assets
-        run: ls -lh artifacts/
-
-      - name: Create Release and upload assets
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name:   ${{ github.ref_name }}
-          name:       "gg ${{ github.ref_name }}"
-          draft:      false
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          body: |
-            ## gg (Gopher Glide) ${{ github.ref_name }}
-
-            ### What's included in each package
-            | File | Purpose |
-            |---|---|
-            | `gg` / `gg.exe` | Compiled binary |
-            | `config.yaml` | Default configuration — edit before running |
-            | `request.http` | Sample HTTP request definitions |
-
-            ### Quick start
-            ```bash
-            # Extract the archive for your platform, then:
-            ./gg config.yaml
-            ```
-
-            ### macOS — "Apple could not verify" warning
-            The binary is **ad-hoc signed** (free signing, no Apple Developer account).
-            Most macOS systems will run it without any prompt.
-            If you still see a Gatekeeper warning, run once to clear the quarantine flag:
-            ```bash
-            xattr -d com.apple.quarantine ./gg
-            ```
-          files: artifacts/*
-
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

@@ -2,12 +2,16 @@
 ## Local build script. Mirrors exactly what the GHA release workflow does.
 ##
 ## Usage:
-##   make build              → build for current platform (dev build)
-##   make build-all          → cross-compile for all platforms into dist/
-##   make release            → build-all + package each into dist/
-##   make clean              → remove dist/ and local binary
-##   make run                → build and run with config.yaml
-##   make version            → print version info
+##   make build                → build for current platform (dev build)
+##   make build-all            → cross-compile for all platforms into dist/
+##   make release              → build-all + package each into dist/
+##   make clean                → remove dist/ and local binary
+##   make run                  → build and run with config.yaml
+##   make version              → print version info
+##
+## GoReleaser wrappers (requires: brew install goreleaser):
+##   make goreleaser-check     → validate .goreleaser.yaml (no build)
+##   make goreleaser-snapshot  → local multi-platform snapshot build into dist/ (no publish)
 
 # ── Variables ─────────────────────────────────────────────────────────────────
 BINARY  := gg
@@ -32,7 +36,9 @@ LDFLAGS := -s -w \
 .PHONY: all build build-all release clean run version \
         build-linux-amd64 \
         build-darwin-arm64 \
-        build-windows-amd64
+        build-windows-amd64 \
+        goreleaser-check \
+        goreleaser-snapshot
 
 all: build
 
@@ -100,3 +106,14 @@ version:
 	@echo "Version:    $(VERSION)"
 	@echo "GitCommit:  $(GIT_COMMIT)"
 	@echo "BuildDate:  $(BUILD_DATE)"
+
+# ── GoReleaser wrappers ───────────────────────────────────────────────────────
+
+## goreleaser-check: validate .goreleaser.yaml without building anything
+goreleaser-check:
+	goreleaser check
+
+## goreleaser-snapshot: full local multi-platform build + archives into dist/ (no publish, no tag required)
+goreleaser-snapshot:
+	goreleaser release --snapshot --clean
+

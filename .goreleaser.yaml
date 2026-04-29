@@ -1,0 +1,162 @@
+# .goreleaser.yaml — GoReleaser v2 configuration for gopher-glide (gg)
+# Docs: https://goreleaser.com/customization/
+version: 2
+
+project_name: gg
+
+# ── Builds ────────────────────────────────────────────────────────────────────
+builds:
+  - id: gg
+    main: ./cmd/gg
+    binary: gg
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # Supported targets: linux/amd64, darwin/arm64, windows/amd64 only.
+    ignore:
+      - goos: windows
+        goarch: arm64
+      - goos: linux
+        goarch: arm64
+      - goos: darwin
+        goarch: amd64
+    ldflags:
+      - -s -w
+      - -X 'github.com/shyam-s00/gopher-glide/internal/version.Version={{.Version}}'
+      - -X 'github.com/shyam-s00/gopher-glide/internal/version.GitCommit={{.ShortCommit}}'
+      - -X 'github.com/shyam-s00/gopher-glide/internal/version.BuildDate={{.Date}}'
+    # Ensure mod download happens before build
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+# ── Archives ──────────────────────────────────────────────────────────────────
+archives:
+  - id: gg-archive
+    ids:
+      - gg
+    name_template: "gg-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    # tar.gz for Linux/macOS, zip for Windows
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    # Bundle sample files into every archive
+    files:
+      - config.yaml
+      - request.http
+      - LICENSE
+      - readme.md
+
+# ── Checksums ─────────────────────────────────────────────────────────────────
+checksum:
+  name_template: "gg-{{ .Version }}-checksums.txt"
+  algorithm: sha256
+
+# ── Changelog ─────────────────────────────────────────────────────────────────
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - "merge conflict"
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+
+# ── GitHub Release ────────────────────────────────────────────────────────────
+release:
+  github:
+    owner: shyam-s00
+    name: gopher-glide
+  draft: false
+  prerelease: auto   # auto-detects pre-release when tag contains a hyphen (e.g. v1.0.0-rc1)
+  header: |
+    ## gg (Gopher Glide) {{ .Version }}
+
+    ### What's included in each package
+    | File | Purpose |
+    |---|---|
+    | `gg` / `gg.exe` | Compiled binary |
+    | `config.yaml` | Default configuration — edit before running |
+    | `request.http` | Sample HTTP request definitions |
+
+    ### Quick start
+    ```bash
+    # Extract the archive for your platform, then:
+    ./gg config.yaml
+    ```
+
+    ### Install via Homebrew (macOS / Linux)
+    ```bash
+    brew tap shyam-s00/tap
+    brew install gg
+    ```
+
+    ### Docker
+    ```bash
+    docker pull ghcr.io/shyam-s00/gopher-glide:{{ .Version }}
+    docker pull ghcr.io/shyam-s00/gopher-glide:latest
+    ```
+
+    ### macOS — "Apple could not verify" warning (direct-download only)
+    Homebrew-installed binaries bypass Gatekeeper automatically.
+    If you downloaded the archive directly and see a Gatekeeper warning, run once:
+    ```bash
+    xattr -d com.apple.quarantine ./gg
+    ```
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+dockers:
+  - id: gg-docker-amd64
+    ids:
+      - gg
+    image_templates:
+      - "ghcr.io/shyam-s00/gopher-glide:{{ .Version }}"
+      - "ghcr.io/shyam-s00/gopher-glide:latest"
+    goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title=gg"
+      - "--label=org.opencontainers.image.description=Gopher Glide — HTTP load-testing tool"
+      - "--label=org.opencontainers.image.url=https://github.com/shyam-s00/gopher-glide"
+      - "--label=org.opencontainers.image.source=https://github.com/shyam-s00/gopher-glide"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+
+# ── Homebrew Tap ──────────────────────────────────────────────────────────────
+brews:
+  - name: gg
+    ids:
+      - gg-archive
+    repository:
+      owner: shyam-s00
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew formula update for gg version {{ .Tag }}"
+    homepage: "https://github.com/shyam-s00/gopher-glide"
+    description: "gg (Gopher Glide) — fast, stage-based HTTP load-testing tool with behavioral snapshot support"
+    license: "MIT"
+    # Only include the darwin/arm64 and linux/amd64 archives in the formula
+    skip_upload: auto
+    install: |
+      bin.install "gg"
+    test: |
+      system "#{bin}/gg", "--help"
+

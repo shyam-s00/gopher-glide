@@ -141,3 +141,24 @@ The `--reporter` flag supports `text`, `json`, and `md`. When generating Markdow
 - **Windows**: `%APPDATA%\gg\snapshots\`
 
 You can manually override this path on any command using the `--snap-dir <path>` flag.
+
+---
+
+## 🧹 5. Pruning Snapshots (`gg snap prune`)
+
+As you run more load tests, your snapshot directory can grow. You can automatically clean up old snapshots using `gg snap prune`.
+
+```bash
+# Keep the 10 most recent snapshots, delete the rest
+gg snap prune --keep-last 10
+
+# Delete anything older than 30 days
+gg snap prune --older-than 30d
+
+# Delete all snapshots with a specific tag
+gg snap prune --tag "pr-123"
+```
+
+**Safety First**: By default, `gg` will display a confirmation prompt listing all the snapshots it intends to delete before proceeding.
+- Use `--dry-run` to see what would be deleted without actually doing it.
+- Use `--yes` to skip the prompt (useful for automated cleanup in CI/CD).
