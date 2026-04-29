@@ -306,6 +306,11 @@ func runSnapList(args []string) {
 		_, _ = fmt.Fprintf(os.Stderr, "snap list: resolve directory: %v\n", err)
 		os.Exit(1)
 	}
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap list: resolve absolute path: %v\n", err)
+		os.Exit(1)
+	}
 
 	summaries, err := snap.ListAll(dir)
 	if err != nil {
@@ -367,6 +372,11 @@ func runSnapView(args []string) {
 		_, _ = fmt.Fprintf(os.Stderr, "snap view: resolve directory: %v\n", err)
 		os.Exit(1)
 	}
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap view: resolve absolute path: %v\n", err)
+		os.Exit(1)
+	}
 
 	info, err := resolveSnapTarget(target, dir)
 	if err != nil {
@@ -421,6 +431,11 @@ func runSnapDiff(args []string) {
 	dir, err := snap.ResolveSnapDir(*snapDir)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap diff: resolve directory: %v\n", err)
+		os.Exit(1)
+	}
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap diff: resolve absolute path: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -497,6 +512,11 @@ func runSnapAssert(args []string) {
 	dir, err := snap.ResolveSnapDir(*snapDir)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap assert: resolve directory: %v\n", err)
+		os.Exit(1)
+	}
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap assert: resolve absolute path: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -597,6 +617,11 @@ func runSnapPrune(args []string) {
 	dir, err := snap.ResolveSnapDir(*snapDir)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap prune: resolve directory: %v\n", err)
+		os.Exit(1)
+	}
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap prune: resolve absolute path: %v\n", err)
 		os.Exit(1)
 	}
 
