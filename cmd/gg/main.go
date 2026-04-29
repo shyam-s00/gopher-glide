@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -286,6 +287,8 @@ func runSnapCmd(args []string) {
 		runSnapDiff(args[1:])
 	case "assert":
 		runSnapAssert(args[1:])
+	case "prune":
+		runSnapPrune(args[1:])
 	default:
 		_, _ = fmt.Fprintf(os.Stderr, "unknown snap subcommand %q\n\n", args[0])
 		snapUsage()
@@ -552,6 +555,147 @@ func runSnapAssert(args []string) {
 	}
 }
 
+func runSnapPrune(args []string) {
+	fs := flag.NewFlagSet("gg snap prune", flag.ExitOnError)
+	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
+	keepLast := fs.Int("keep-last", 0, "keep the N most-recent snapshots; delete all older ones")
+	olderThan := fs.String("older-than", "", "delete snapshots older than this duration (e.g. 30d, 720h)")
+	tag := fs.String("tag", "", "delete all snapshots whose tag matches this value exactly")
+	ids := fs.String("ids", "", "comma-separated list of snapshot IDs to delete (e.g. 1,3,5) — used by the IDE Snap Explorer tool window")
+	dryRun := fs.Bool("dry-run", false, "preview candidates without deleting anything")
+	yes := fs.Bool("yes", false, "skip interactive confirmation prompt (required for non-interactive / plugin-driven calls)")
+	reporter := fs.String("reporter", "text", "output format: text | json  (json is the stable contract for the JetBrains plugin)")
+	_ = fs.Parse(args)
+
+	// ── validate: at least one filter required ────────────────────────────────
+	if *keepLast == 0 && *olderThan == "" && *tag == "" && *ids == "" {
+		_, _ = fmt.Fprintln(os.Stderr, "snap prune: at least one filter flag is required")
+		_, _ = fmt.Fprintln(os.Stderr, "")
+		fs.PrintDefaults()
+		os.Exit(1)
+	}
+
+	// ── parse filter flags ────────────────────────────────────────────────────
+	olderThanDur, err := snap.ParseOlderThan(*olderThan)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap prune: %v\n", err)
+		os.Exit(1)
+	}
+
+	idList, err := snap.ParseIDs(*ids)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap prune: %v\n", err)
+		os.Exit(1)
+	}
+
+	if *keepLast < 0 {
+		_, _ = fmt.Fprintln(os.Stderr, "snap prune: --keep-last must be >= 0")
+		os.Exit(1)
+	}
+
+	// ── resolve snap directory and list snapshots ─────────────────────────────
+	dir, err := snap.ResolveSnapDir(*snapDir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap prune: resolve directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	infos, err := snap.List(dir)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "snap prune: list snapshots: %v\n", err)
+		os.Exit(1)
+	}
+
+	// ── select candidates ─────────────────────────────────────────────────────
+	candidates := snap.SelectForPrune(infos, snap.PruneOptions{
+		KeepLast:  *keepLast,
+		OlderThan: olderThanDur,
+		Tag:       *tag,
+		IDs:       idList,
+	})
+
+	// ── no-op path ────────────────────────────────────────────────────────────
+	if len(candidates) == 0 {
+		if strings.ToLower(*reporter) == "json" {
+			report := snap.BuildPruneReport(dir, candidates, *dryRun, 0, nil)
+			js, _ := report.JSON()
+			fmt.Println(js)
+		} else {
+			fmt.Println("No snapshots match the given filters — nothing to prune.")
+		}
+		return
+	}
+
+	// ── dry-run: preview and exit without deleting ────────────────────────────
+	if *dryRun {
+		if strings.ToLower(*reporter) == "json" {
+			report := snap.BuildPruneReport(dir, candidates, true, 0, nil)
+			js, _ := report.JSON()
+			fmt.Println(js)
+		} else {
+			fmt.Printf("Dry run — %d snapshot(s) would be deleted from %s:\n\n", len(candidates), dir)
+			printPruneCandidates(candidates)
+			fmt.Println("\nRe-run without --dry-run to apply.")
+		}
+		return
+	}
+
+	// ── interactive confirmation (skipped when --yes or --reporter json) ──────
+	isJSON := strings.ToLower(*reporter) == "json"
+	if !*yes && !isJSON {
+		fmt.Printf("The following %d snapshot(s) in %s will be permanently deleted:\n\n", len(candidates), dir)
+		printPruneCandidates(candidates)
+		fmt.Printf("\nProceed? [y/N] ")
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
+		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+		if answer != "y" && answer != "yes" {
+			fmt.Println("Aborted.")
+			return
+		}
+	}
+
+	// ── delete ────────────────────────────────────────────────────────────────
+	deleted, errs := snap.Delete(candidates)
+
+	if isJSON {
+		report := snap.BuildPruneReport(dir, candidates, false, deleted, errs)
+		js, _ := report.JSON()
+		fmt.Println(js)
+		if len(errs) > 0 {
+			os.Exit(1)
+		}
+		return
+	}
+
+	// text reporter
+	fmt.Printf("✓ Deleted %d of %d snapshot(s) from %s\n", deleted, len(candidates), dir)
+	if len(errs) > 0 {
+		for _, e := range errs {
+			_, _ = fmt.Fprintf(os.Stderr, "  ⚠ %v\n", e)
+		}
+		os.Exit(1)
+	}
+}
+
+// printPruneCandidates writes a tabwriter-aligned table of pruning candidates
+// to stdout.
+func printPruneCandidates(candidates []snap.PruneCandidate) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	_, _ = fmt.Fprintln(w, "ID\tTAG\tDATE\tFILE\tREASON")
+	_, _ = fmt.Fprintln(w, "--\t---\t----\t----\t------")
+	for _, c := range candidates {
+		_, _ = fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n",
+			c.ID,
+			snapDisplayTag(c.Tag),
+			c.Date.Format("2006-01-02 15:04"),
+			c.FileName,
+			c.Reason,
+		)
+	}
+	_ = w.Flush()
+}
+
 func snapUsage() {
 	_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap <subcommand> [flags]")
 	_, _ = fmt.Fprintln(os.Stderr, "")
@@ -560,6 +704,7 @@ func snapUsage() {
 	_, _ = fmt.Fprintln(os.Stderr, "  view <id|tag|file>                     [--snap-dir DIR]   view a single snapshot")
 	_, _ = fmt.Fprintln(os.Stderr, "  diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR]   diff two snapshots")
 	_, _ = fmt.Fprintln(os.Stderr, "  assert --baseline <id|tag|file> --current <id|tag|file> [flags] [--snap-dir DIR]   CI regression gate (exits 1 on failure)")
+	_, _ = fmt.Fprintln(os.Stderr, "  prune  [--keep-last N] [--older-than DURATION] [--tag TAG] [--ids 1,3,5] [--dry-run] [--yes] [--reporter text|json] [--snap-dir DIR]   delete old snapshots")
 }
 
 func snapDisplayTag(tag string) string {
