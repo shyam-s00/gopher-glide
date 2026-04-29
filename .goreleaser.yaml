@@ -18,12 +18,14 @@ builds:
     goarch:
       - amd64
       - arm64
-    # Restrict to the three supported targets; skip e.g. windows/arm64
+    # Supported targets: linux/amd64, darwin/arm64, windows/amd64 only.
     ignore:
       - goos: windows
         goarch: arm64
       - goos: linux
         goarch: arm64
+      - goos: darwin
+        goarch: amd64
     ldflags:
       - -s -w
       - -X 'github.com/shyam-s00/gopher-glide/internal/version.Version={{.Version}}'
