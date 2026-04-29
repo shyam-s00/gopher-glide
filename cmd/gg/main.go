@@ -647,7 +647,18 @@ func runSnapPrune(args []string) {
 		printPruneCandidates(candidates)
 		fmt.Printf("\nProceed? [y/N] ")
 		scanner := bufio.NewScanner(os.Stdin)
-		scanner.Scan()
+		if !scanner.Scan() {
+			// Scan() returned false: either EOF (stdin closed/piped with no input)
+			// or a read error. Treat both as an explicit abort rather than silently
+			// doing nothing, so the user understands why nothing was deleted.
+			if err := scanner.Err(); err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "snap prune: failed to read confirmation: %v\n", err)
+				os.Exit(1)
+			}
+			// EOF — e.g. stdin redirected from /dev/null or a closed pipe.
+			fmt.Println("\nAborted (no input).")
+			return
+		}
 		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
 		if answer != "y" && answer != "yes" {
 			fmt.Println("Aborted.")
