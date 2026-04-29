@@ -172,11 +172,20 @@ func SelectForPrune(infos []SnapInfo, opts PruneOptions) []PruneCandidate {
 
 	// ── --keep-last ───────────────────────────────────────────────────────────
 	if opts.KeepLast > 0 && opts.KeepLast < len(infos) {
-		// infos are sorted oldest-first by List(); copy and reverse for newest-first.
+		// infos are sorted oldest-first by List(); copy and sort newest-first.
+		// Tiebreaker: reverse-lexicographic FileName so that when two snapshots
+		// share the same timestamp the one with the lexicographically greater
+		// filename is consistently treated as "newer" and therefore kept.
+		// This makes keep/prune decisions fully deterministic regardless of how
+		// many files were created within the same second.
 		sorted := make([]SnapInfo, len(infos))
 		copy(sorted, infos)
-		sort.Slice(sorted, func(i, j int) bool {
-			return sorted[i].Date.After(sorted[j].Date)
+		sort.SliceStable(sorted, func(i, j int) bool {
+			if !sorted[i].Date.Equal(sorted[j].Date) {
+				return sorted[i].Date.After(sorted[j].Date)
+			}
+			// Tiebreaker: greater FileName sorts first (treated as "newer").
+			return sorted[i].FileName > sorted[j].FileName
 		})
 		for _, info := range sorted[opts.KeepLast:] {
 			add(info, fmt.Sprintf("beyond keep-last %d", opts.KeepLast))
@@ -184,12 +193,17 @@ func SelectForPrune(infos []SnapInfo, opts PruneOptions) []PruneCandidate {
 	}
 
 	// Collect and order candidates oldest-first for stable, readable output.
+	// Tiebreaker: lexicographic FileName so the table/JSON output is stable
+	// when multiple candidates share the same timestamp.
 	out := make([]PruneCandidate, 0, len(seen))
 	for _, c := range seen {
 		out = append(out, c)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].Date.Before(out[j].Date)
+	sort.SliceStable(out, func(i, j int) bool {
+		if !out[i].Date.Equal(out[j].Date) {
+			return out[i].Date.Before(out[j].Date)
+		}
+		return out[i].FileName < out[j].FileName
 	})
 	return out
 }
