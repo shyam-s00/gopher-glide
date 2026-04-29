@@ -32,3 +32,22 @@ Developers frequently look for a **lightweight alternative** to traditional tool
 - **Stamped binaries** — version, git commit, and build date embedded at compile time via `-ldflags`
 - **Cross-platform** — pre-built binaries for Linux (amd64), macOS (arm64), and Windows (amd64)
 - **JetBrains Plugin** — a dedicated IDE plugin is available for integrating Gopher Glide runs into your workflow
+
+---
+
+## Installation & Quick Start
+
+### 1. macOS / Linux (Homebrew)
+The easiest way to install is via Homebrew:
+```bash
+brew install shyam-s00/tap/gg
+```
+
+### 2. Docker
+Perfect for CI/CD pipelines:
+```bash
+docker run --rm -v $(pwd):/workspace ghcr.io/shyam-s00/gopher-glide:latest config.yaml
+```
+
+### 3. Pre-built binary
+Go to the [Releases](https://github.com/shyam-s00/gopher-glide/releases) page and download the archive for your platform. Extract the binary and place it in your `$PATH`.
