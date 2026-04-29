@@ -23,7 +23,7 @@
 
 Generate high-concurrency traffic with a dynamic terminal UI, adjust RPS in real-time, and catch API regressions using built-in semantic JSON snapshotting. No agents, no servers, no boilerplate code.
 
-👉 **[Read the Full Documentation](https://shyam-s00.github.io/gopher-glide/)**
+👉 **[Read the Full Documentation](https://gopherglide.dev/)**
 
 ---
 
