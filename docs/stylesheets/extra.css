@@ -1,0 +1,5 @@
+/* Visually enlarge the logo without breaking the header's flexbox layout */
+.md-header__button.md-logo img {
+  transform: scale(2.2);
+  transform-origin: center;
+}

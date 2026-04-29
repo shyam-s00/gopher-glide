@@ -1,0 +1,26 @@
+site_name: Gopher Glide (gg)
+site_description: High-Performance API Load Testing Tool Built in Go
+site_url: https://shyam-s00.github.io/gopher-glide/
+repo_url: https://github.com/shyam-s00/gopher-glide
+
+theme:
+  name: material
+  logo: assets/ggToolIcon_dark.svg
+  favicon: assets/pluginIcon.svg
+  palette:
+    scheme: slate
+    primary: deep purple
+    accent: cyan
+  features:
+    - navigation.tabs
+    - content.code.copy
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - Home: index.md
+  - Configuration: configuration.md
+  - The TUI: tui.md
+  - JetBrains Plugin: plugin.md
+  - Snapshots (gg snap): snap.md
