@@ -39,7 +39,7 @@ archives:
   - id: gg-archive
     ids:
       - gg
-    name_template: "gg-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    name_template: "gg-v{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     # tar.gz for Linux/macOS, zip for Windows
     formats:
       - tar.gz
