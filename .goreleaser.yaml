@@ -39,7 +39,9 @@ archives:
   - id: gg-archive
     ids:
       - gg
-    name_template: "gg-v{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    # Use {{.Tag}} (e.g. v1.2.3) so archive names match the old Makefile output
+    # exactly. {{.Version}} strips the leading "v", which broke the plugin updater.
+    name_template: "gg-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
     # tar.gz for Linux/macOS, zip for Windows
     formats:
       - tar.gz
@@ -56,7 +58,7 @@ archives:
 
 # ── Checksums ─────────────────────────────────────────────────────────────────
 checksum:
-  name_template: "gg-{{ .Version }}-checksums.txt"
+  name_template: "gg-{{ .Tag }}-checksums.txt"
   algorithm: sha256
 
 # ── Changelog ─────────────────────────────────────────────────────────────────
