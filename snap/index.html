@@ -1,0 +1,1024 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-Performance API Load Testing Tool Built in Go">
+      
+      
+      
+        <link rel="canonical" href="https://gopherglide.dev/snap/">
+      
+      
+        <link rel="prev" href="../plugin/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/pluginIcon.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Snapshots (gg snap) - Gopher Glide (gg)</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#gopher-glide-snapshots-gg-snap" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Gopher Glide (gg)" class="md-header__button md-logo" aria-label="Gopher Glide (gg)" data-md-component="logo">
+      
+  <img src="../assets/ggToolIcon_dark.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Gopher Glide (gg)
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Snapshots (gg snap)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/shyam-s00/gopher-glide" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../configuration/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Configuration
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../tui/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  The TUI
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../plugin/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  JetBrains Plugin
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Snapshots (gg snap)
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Gopher Glide (gg)" class="md-nav__button md-logo" aria-label="Gopher Glide (gg)" data-md-component="logo">
+      
+  <img src="../assets/ggToolIcon_dark.svg" alt="logo">
+
+    </a>
+    Gopher Glide (gg)
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/shyam-s00/gopher-glide" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The TUI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plugin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JetBrains Plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Snapshots (gg snap)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Snapshots (gg snap)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-power-of-snapshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Power of Snapshots
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-capturing-a-snapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📸 1. Capturing a Snapshot
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📸 1. Capturing a Snapshot">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuring-schema-inference-engine-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuring Schema Inference Engine Limits
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-managing-snapshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🗂 2. Managing Snapshots
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🗂 2. Managing Snapshots">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#listing-snapshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Listing Snapshots
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#viewing-a-snapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Viewing a Snapshot
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-semantic-diffing-gg-snap-diff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔍 3. Semantic Diffing (gg snap diff)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-ci-integration-automated-assertions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🛡️ 4. CI Integration &amp; Automated Assertions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🛡️ 4. CI Integration &amp; Automated Assertions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-assert-command" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The assert Command
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#headless-execution-headless" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Headless execution (--headless)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-are-snapshots-saved" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where are Snapshots saved?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-pruning-snapshots-gg-snap-prune" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧹 5. Pruning Snapshots (gg snap prune)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-power-of-snapshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Power of Snapshots
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-capturing-a-snapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📸 1. Capturing a Snapshot
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📸 1. Capturing a Snapshot">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuring-schema-inference-engine-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuring Schema Inference Engine Limits
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-managing-snapshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🗂 2. Managing Snapshots
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🗂 2. Managing Snapshots">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#listing-snapshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Listing Snapshots
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#viewing-a-snapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Viewing a Snapshot
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-semantic-diffing-gg-snap-diff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔍 3. Semantic Diffing (gg snap diff)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-ci-integration-automated-assertions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🛡️ 4. CI Integration &amp; Automated Assertions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🛡️ 4. CI Integration &amp; Automated Assertions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-assert-command" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The assert Command
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#headless-execution-headless" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Headless execution (--headless)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-are-snapshots-saved" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where are Snapshots saved?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-pruning-snapshots-gg-snap-prune" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧹 5. Pruning Snapshots (gg snap prune)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="gopher-glide-snapshots-gg-snap">Gopher Glide Snapshots (<code>gg snap</code>)</h1>
+<p>Typical load testing tools report basic metrics at the end of a run (e.g., P99 latency, RPS) and then discard the underlying data. <strong>Gopher Glide (gg)</strong> takes a radically different approach with its <strong>Snap</strong> feature.</p>
+<p>Instead of just outputting numbers, <code>gg</code> captures a replayable <strong>Behavioral Profiling Snapshot</strong> of your API under load. By continuously sampling your API's responses during a load phase, <code>gg</code> records latency, status distributions, and intelligently infers the actual <em>semantic shape</em> (JSON schema) of the payloads returned. </p>
+<p>This enables <strong>Semantic Diffing</strong> and automated <strong>Time-Travel Regression Triage</strong>—allowing you to explicitly measure not just <em>when</em> your API slows down, but <em>how</em> its behavior and response shape dynamically change under pressure.</p>
+<hr />
+<h2 id="the-power-of-snapshots">The Power of Snapshots</h2>
+<p>With <code>gg snap</code>, you can:
+- 🕰 <strong>Time-Travel:</strong> Review the exact behavioral profile (payload schemas, latency distros, error rates) of a run performed days or weeks ago.
+- 🔬 <strong>Semantic Diffing:</strong> Compare two runs and see exactly what changed. Did P99 latency jump 38% because a <em>new</em> database field was suddenly injected into the JSON payload? <code>gg</code> will tell you.
+- 🚦 <strong>CI Regression Gates:</strong> Use <code>gg snap assert</code> in your CI pipelines to enforce hard limits on performance and payload regressions. Break the build if an endpoint degrades.</p>
+<hr />
+<h2 id="1-capturing-a-snapshot">📸 1. Capturing a Snapshot</h2>
+<p>To take a snapshot, simply add the <code>--snap</code> flag to any load test. </p>
+<pre><code class="language-bash">gg config.yaml --snap
+</code></pre>
+<p>You can optionally <strong>tag</strong> your snapshot to easily identify it later (e.g., baseline vs. PR branch):</p>
+<pre><code class="language-bash">gg config.yaml --snap --snap-tag &quot;v1-baseline&quot;
+</code></pre>
+<p>A lightweight JSON <code>.snap</code> file is written to your system's configuration directory (e.g., <code>~/.config/gg/snapshots/</code> on Linux/macOS). An indicator (<code>📸 Snapping</code>) will appear in your TUI during the run.</p>
+<h3 id="configuring-schema-inference-engine-limits">Configuring Schema Inference Engine Limits</h3>
+<p><code>gg</code> smartly samples a fraction of the request bodies to infer JSON schemas without tanking the load generator's performance. By default, it samples 5% of bodies.</p>
+<p>You can configure these limits in your <code>config.yaml</code> to strike the right balance between performance and thoroughness:</p>
+<pre><code class="language-yaml">snap:
+  sample_rate: 0.05       # Analyze 5% of responses for schema building
+  max_samples: 200        # Store up to 200 JSON body samples per-endpoint
+  max_body_kb: 500        # Byte limit (500 KB) for total samples stored per-endpoint
+</code></pre>
+<p><em>(You can also override these via CLI flags: <code>--snap-sample</code>, <code>--snap-max-samples</code>, <code>--snap-max-body-kb</code>)</em>.</p>
+<hr />
+<h2 id="2-managing-snapshots">🗂 2. Managing Snapshots</h2>
+<p>Managing your snapshot history is built right into the CLI. You don't need a config file to use these management commands.</p>
+<h3 id="listing-snapshots">Listing Snapshots</h3>
+<p>To see all saved snapshots on your machine:</p>
+<pre><code class="language-bash">gg snap list
+</code></pre>
+<p>Returns a neat table:</p>
+<pre><code>ID   TAG           DATE                 REQUESTS   PEAK RPS   ENDPOINTS
+--   ---           ----                 --------   --------   ---------
+2    v1-branch     2026-04-20 14:45     45,000     500        3
+1    v1-baseline   2026-04-20 14:30     45,000     500        3
+</code></pre>
+<h3 id="viewing-a-snapshot">Viewing a Snapshot</h3>
+<p>Explore the detailed profile (latency per endpoint, status code distribution, and the inferred JSON schemas) using a rich Terminal UI:</p>
+<pre><code class="language-bash">gg snap view v1-baseline 
+# Or target by ID: gg snap view 1
+</code></pre>
+<hr />
+<h2 id="3-semantic-diffing-gg-snap-diff">🔍 3. Semantic Diffing (<code>gg snap diff</code>)</h2>
+<p>This is where <code>gg</code> stands apart from other tools. You can visually diff two runs side-by-side to understand <em>why</em> performance changed.</p>
+<pre><code class="language-bash">gg snap diff v1-baseline v1-branch
+# Or by ID: gg snap diff 1 2
+</code></pre>
+<p>The diff engine compares the Baseline (first argument) against the Current (second argument) and highlights:
+- <strong>Metrics Shift:</strong> Changes in Latency (Avg, P95, P99, Max) and Error Rates.
+- <strong>Payload Shift:</strong> Average and max payload size growth (e.g., "Payload size grew by 1.2MB").
+- <strong>Schema Drift:</strong> Specifically calls out JSON Schema changes. <code>+</code> for newly added fields, <code>-</code> for removed fields, and <code>~</code> for fields that changed type (e.g., <code>string</code> to <code>integer</code>).</p>
+<p>Green, yellow, and red borders make it easy to instantly see which endpoints <strong>Passed</strong>, received a <strong>Warning</strong>, or suffered a <strong>Regression</strong>.</p>
+<hr />
+<h2 id="4-ci-integration-automated-assertions">🛡️ 4. CI Integration &amp; Automated Assertions</h2>
+<p>You can leverage snapshots directly in your Continuous Integration (CI) pipelines to stop performance regressions before they merge. </p>
+<h3 id="the-assert-command">The <code>assert</code> Command</h3>
+<p>Use <code>gg snap assert</code> to compare a new build against a baseline. If the new build breaches your thresholds, <code>gg</code> automatically fails the pipeline (<code>exit code 1</code>).</p>
+<pre><code class="language-bash">gg snap assert --baseline main --current pr-123 \
+    --latency-regression 10 \
+    --error-rate-delta 0.05 \
+    --payload-size-delta 50 \
+    --deny-removed-fields
+</code></pre>
+<p><strong>Threshold Flags Breakdown:</strong>
+- <code>--latency-regression 10</code>: Triggers a failure if P99 latency increases by more than 10%.
+- <code>--error-rate-delta 0.05</code>: Triggers a failure if the error rate increases by an absolute 5 percentage points.
+- <code>--payload-size-delta 50</code>: Triggers a warning if payload sizes increase by 50%.
+- <code>--deny-removed-fields</code>: Ensures backward compatibility. If any JSON fields are removed from the payload output, it fails the build.
+- <code>--fail-on-warn</code>: Upgrades all warnings (like payload growth) into hard pipeline failures.</p>
+<h3 id="headless-execution-headless">Headless execution (<code>--headless</code>)</h3>
+<p>In CI/CD environments, you don't want an interactive terminal UI. <code>gg</code> provides a fully decoupled <strong>Headless Mode</strong>.</p>
+<p>Instead of a dashboard, <code>gg</code> will stream structured heartbeat logs to <code>stdout</code>.</p>
+<pre><code class="language-bash"># Capture the snapshot in headless mode
+gg config.yaml --snap --snap-tag &quot;pr-123&quot; --headless
+
+# Make your assertions, outputting the result in Markdown format for a PR Comment
+gg snap assert --baseline main --current pr-123 \
+    --latency-regression 10 \
+    --reporter md &gt; report.md
+</code></pre>
+<p>The <code>--reporter</code> flag supports <code>text</code>, <code>json</code>, and <code>md</code>. When generating Markdown reports, <code>gg</code> produces beautiful, actionable summaries perfect for injecting directly as a GitHub or GitLab Pull Request comment!</p>
+<hr />
+<h2 id="where-are-snapshots-saved">Where are Snapshots saved?</h2>
+<p><code>gg</code> uses the idiomatic, cross-platform configuration directory for your OS:
+- <strong>macOS</strong>: <code>~/Library/Application Support/gg/snapshots/</code>
+- <strong>Linux</strong>: <code>~/.config/gg/snapshots/</code>
+- <strong>Windows</strong>: <code>%APPDATA%\gg\snapshots\</code></p>
+<p>You can manually override this path on any command using the <code>--snap-dir &lt;path&gt;</code> flag.</p>
+<hr />
+<h2 id="5-pruning-snapshots-gg-snap-prune">🧹 5. Pruning Snapshots (<code>gg snap prune</code>)</h2>
+<p>As you run more load tests, your snapshot directory can grow. You can automatically clean up old snapshots using <code>gg snap prune</code>.</p>
+<pre><code class="language-bash"># Keep the 10 most recent snapshots, delete the rest
+gg snap prune --keep-last 10
+
+# Delete anything older than 30 days
+gg snap prune --older-than 30d
+
+# Delete all snapshots with a specific tag
+gg snap prune --tag &quot;pr-123&quot;
+</code></pre>
+<p><strong>Safety First</strong>: By default, <code>gg</code> will display a confirmation prompt listing all the snapshots it intends to delete before proceeding.
+- Use <code>--dry-run</code> to see what would be deleted without actually doing it.
+- Use <code>--yes</code> to skip the prompt (useful for automated cleanup in CI/CD).</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

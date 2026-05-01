@@ -1,0 +1,881 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-Performance API Load Testing Tool Built in Go">
+      
+      
+      
+        <link rel="canonical" href="https://gopherglide.dev/configuration/">
+      
+      
+        <link rel="prev" href="..">
+      
+      
+        <link rel="next" href="../tui/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/pluginIcon.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Configuration - Gopher Glide (gg)</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#configuration-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Gopher Glide (gg)" class="md-header__button md-logo" aria-label="Gopher Glide (gg)" data-md-component="logo">
+      
+  <img src="../assets/ggToolIcon_dark.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Gopher Glide (gg)
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Configuration
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/shyam-s00/gopher-glide" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Configuration
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../tui/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  The TUI
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../plugin/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  JetBrains Plugin
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../snap/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Snapshots (gg snap)
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Gopher Glide (gg)" class="md-nav__button md-logo" aria-label="Gopher Glide (gg)" data-md-component="logo">
+      
+  <img src="../assets/ggToolIcon_dark.svg" alt="logo">
+
+    </a>
+    Gopher Glide (gg)
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/shyam-s00/gopher-glide" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#http-file-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        .http file format
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configyaml-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        config.yaml Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="config.yaml Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#stage-inference-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage inference rules
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jitter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        jitter
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#time_scale" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        time_scale
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-stage-load-profiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-stage load profiles
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The TUI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plugin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JetBrains Plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../snap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Snapshots (gg snap)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#http-file-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        .http file format
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configyaml-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        config.yaml Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="config.yaml Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#stage-inference-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage inference rules
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jitter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        jitter
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#time_scale" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        time_scale
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-stage-load-profiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-stage load profiles
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="configuration-reference">Configuration Reference</h1>
+<h2 id="http-file-format">.http file format</h2>
+<p><code>gg</code> uses the standard <code>.http</code> / REST Client file format. Requests are separated by <code>###</code>. Complete spec can be found <a href="https://github.com/JetBrains/http-request-in-editor-spec/blob/master/spec.md">here</a></p>
+<pre><code class="language-http">### Simple GET
+GET https://httpbin.org/get
+Accept: application/json
+X-Request-ID: gg-001
+
+### GET with query param
+GET https://httpbin.org/get?userId=1
+Accept: application/json
+Cache-Control: no-cache
+
+### POST with JSON body
+POST https://httpbin.org/post
+Content-Type: application/json
+Accept: application/json
+
+{
+  &quot;title&quot;: &quot;hello&quot;,
+  &quot;userId&quot;: 1
+}
+</code></pre>
+<ul>
+<li>Supported methods: <code>GET</code>, <code>POST</code>, and any valid HTTP verb</li>
+<li>Headers are placed directly after the request line</li>
+<li>Body (for POST/PUT/PATCH) follows a blank line after the headers</li>
+<li><code>###</code> separates requests; the text after <code>###</code> is an optional label</li>
+<li>All requests are dispatched in round-robin order across stages</li>
+</ul>
+<hr />
+<h2 id="configyaml-reference"><code>config.yaml</code> Reference</h2>
+<pre><code class="language-yaml">config:
+  httpFile: &quot;request.http&quot;        # .http file to load (relative to config.yaml)
+  jitter: 0.1                     # ±10% noise on the RPS ticker; 0 disables (default: 0)
+  time_scale: 1.0                 # stage clock multiplier; 2.0 = run 2× faster (default: 1.0)
+  prometheus: false               # (planned) expose /metrics endpoint
+  breaker_threshold_pct: 20.0     # (planned) circuit-breaker error-rate threshold %
+
+stages:
+  - name: &quot;Warm Up&quot;               # optional; inferred from shape if omitted
+    duration: 10s                 # how long this stage runs
+    target_rps: 50                # RPS target at the end of this stage
+
+  - duration: 30s
+    target_rps: 50                # same as previous → Sustain
+
+  - duration: 0s
+    target_rps: 200               # duration 0 → instant Spike (no interpolation)
+
+  - duration: 10s
+    target_rps: 200               # hold after spike → Sustain
+
+  - duration: 10s
+    target_rps: 0                 # ramp down → cool-down
+</code></pre>
+<h3 id="stage-inference-rules">Stage inference rules</h3>
+<p>When <code>name</code> is omitted, <code>gg</code> infers the display label from the stage shape:</p>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>Inferred label</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>target_rps</code> higher than previous</td>
+<td><strong>Ramp Up</strong></td>
+</tr>
+<tr>
+<td><code>target_rps</code> same as previous</td>
+<td><strong>Sustain</strong></td>
+</tr>
+<tr>
+<td><code>target_rps</code> lower than previous</td>
+<td><strong>Ramp Down</strong></td>
+</tr>
+<tr>
+<td><code>duration: 0s</code></td>
+<td><strong>Spike</strong></td>
+</tr>
+<tr>
+<td><code>target_rps: 0</code></td>
+<td><strong>Ramp Down</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="jitter"><code>jitter</code></h3>
+<p>Adds symmetric <code>±N%</code> noise to the inter-request interval so traffic looks organic. For example <code>jitter: 0.1</code> varies each interval by ±10%. The average rate is unchanged.</p>
+<h3 id="time_scale"><code>time_scale</code></h3>
+<p>Compresses the stage clock by a multiplier. Useful for local testing:</p>
+<pre><code class="language-yaml">time_scale: 10   # a 10-minute plan finishes in 1 minute
+</code></pre>
+<hr />
+<h2 id="multi-stage-load-profiles">Multi-stage load profiles</h2>
+<p><code>gg</code> uses <strong>implicit ramping</strong> — stage defines a <code>target_rps</code> and <code>duration</code>. The engine automatically interpolates (LERP) from the previous stage's rate to the new target. You never specify the "ramp type" explicitly; it is inferred from the numbers.</p>
+<pre><code class="language-yaml">stages:
+  # Ramp Up: 0 → 100 RPS over 30s
+  - duration: 30s
+    target_rps: 100
+
+  # Sustain: hold 100 RPS for 1 minute
+  - duration: 1m
+    target_rps: 100
+
+  # Spike: jump instantly to 500 RPS
+  - duration: 0s
+    target_rps: 500
+
+  # Sustain spike for 15s
+  - duration: 15s
+    target_rps: 500
+
+  # Ramp Down: 500 → 0 RPS over 30s
+  - duration: 30s
+    target_rps: 0
+</code></pre>
+<p>The TUI timeline visualizes the entire plan before and during the run, with a live cursor showing the current position and an RPS marker per block showing the actual throughput achieved.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
