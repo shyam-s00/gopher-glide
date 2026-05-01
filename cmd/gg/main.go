@@ -25,26 +25,44 @@ func main() {
 	fmt.Printf("gg (Gopher Glide) %s (commit:%s) built %s\n",
 		version.Version, version.GitCommit, version.GetBuildDate())
 
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: gg <config-file> [--snap] [--snap-tag TAG] [--snap-dir DIR] [--snap-sample RATE]")
-		fmt.Println("       gg snap <list|view|diff> [--snap-dir DIR]")
-		os.Exit(1)
-	}
-
 	// ── snap subcommand router ────────────────────────────────────────────────
 	// Dispatched before the config-load so `gg snap` works without a config file.
-	if os.Args[1] == "snap" {
+	if len(os.Args) >= 2 && os.Args[1] == "snap" {
 		runSnapCmd(os.Args[2:])
 		return
 	}
 
-	configPath := os.Args[1]
+	// ── determine config path and flag args ───────────────────────────────────
+	// <config-file> is an optional positional argument. If the first argument
+	// exists and does not start with '-' it is treated as the config file path.
+	// When omitted, gg falls back to an in-memory DefaultConfig.
+	var configPath string
+	var flagArgs []string
+	if len(os.Args) >= 2 && !strings.HasPrefix(os.Args[1], "-") {
+		configPath = os.Args[1]
+		flagArgs = os.Args[2:]
+	} else if len(os.Args) >= 2 {
+		flagArgs = os.Args[1:]
+	}
 
-	// ── snap flags ────────────────────────────────────────────────────────────
-	// Parsed from os.Args[2:] so <config-file> always stays as the first arg.
-	// 0 is the sentinel for "not explicitly set on CLI"; effective values are
-	// resolved after config.yaml is loaded (CLI > config.yaml > hard default).
+	// ── flags ─────────────────────────────────────────────────────────────────
+	// 0 / "" is the sentinel for "not explicitly set on CLI"; effective values
+	// are resolved after config is loaded (CLI > config.yaml > hard default).
 	fs := flag.NewFlagSet("gg", flag.ExitOnError)
+
+	// config / http-file / scale / duration — Phase 1 & 3 flags
+	var configFlag string
+	fs.StringVar(&configFlag, "config", "", "path to config YAML file (overrides positional argument)")
+	fs.StringVar(&configFlag, "c", "", "shorthand for --config")
+	httpFileFlag := fs.String("http-file", "", "path to .http requests file (overrides httpFile in config)")
+	var scaleFlag float64
+	fs.Float64Var(&scaleFlag, "scale", 0, "RPS multiplier applied to every stage (e.g. 0.5 halves peak RPS) — applied in Phase 3")
+	fs.Float64Var(&scaleFlag, "s", 0, "shorthand for --scale")
+	var durationFlag time.Duration
+	fs.DurationVar(&durationFlag, "duration", 0, "stretch/shrink all stages to fit this total run time (e.g. 1h) — applied in Phase 3")
+	fs.DurationVar(&durationFlag, "d", 0, "shorthand for --duration")
+
+	// snap flags
 	snapEnabled := fs.Bool("snap", false, "capture a behavioral snapshot after the run")
 	snapTag := fs.String("snap-tag", "", "tag to attach to the snapshot (e.g. v1.2.0-pre)")
 	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
@@ -53,10 +71,11 @@ func main() {
 	snapMaxBodyKB := fs.Int("snap-max-body-kb", 0, "per-endpoint byte budget for stored body samples in KB (0 = no byte-based limit)")
 	headless := fs.Bool("headless", false, "run without interactive TUI — emits structured heartbeat logs (for CI)")
 	reporter := fs.String("reporter", "text", "output format in headless mode: text | json")
-	_ = fs.Parse(os.Args[2:])
+	_ = fs.Parse(flagArgs)
 
 	// Track which flags were explicitly provided so we can apply the correct
 	// precedence: CLI (explicit) > config.yaml > hard default.
+	var cliConfigSet, cliHTTPFileSet, cliScaleSet, cliDurationSet bool
 	var cliSnapSampleSet, cliMaxSamplesSet, cliMaxBodyKBSet bool
 
 	// Any snap-specific flag passed explicitly implicitly enables snapping,
@@ -67,6 +86,14 @@ func main() {
 			*snapEnabled = true
 		}
 		switch f.Name {
+		case "config", "c":
+			cliConfigSet = true
+		case "http-file":
+			cliHTTPFileSet = true
+		case "scale", "s":
+			cliScaleSet = true
+		case "duration", "d":
+			cliDurationSet = true
 		case "snap-sample":
 			cliSnapSampleSet = true
 		case "snap-max-samples":
@@ -76,6 +103,15 @@ func main() {
 		}
 	})
 
+	// --config / -c overrides the positional <config-file> argument.
+	if cliConfigSet && configFlag != "" {
+		configPath = configFlag
+	}
+
+	// Remember whether we are booting from the in-memory defaults so we can
+	// run a deferred Validate() after CLI overrides have been applied.
+	usingDefaultConfig := configPath == ""
+
 	// ── load config ───────────────────────────────────────────────────────────
 	cfg, err := config.Load(configPath)
 	if err != nil {
@@ -83,12 +119,51 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ── apply --http-file override (Task 6) ───────────────────────────────────
+	// --http-file takes the highest precedence for the requests file.
+	// The path is resolved from the current working directory (not the config
+	// file directory) so that CLI callers don't need to know where config lives.
+	if cliHTTPFileSet && *httpFileFlag != "" {
+		absHTTPFile, err := filepath.Abs(*httpFileFlag)
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error resolving --http-file path: %v\n", err)
+			os.Exit(1)
+		}
+		cfg.ConfigSection.HTTPFile = *httpFileFlag
+		cfg.ConfigSection.HTTPFilePath = absHTTPFile
+	}
+
+	// ── validate after CLI overrides ──────────────────────────────────────────
+	// When booting from DefaultConfig, Load() intentionally skips Validate() so
+	// that CLI flags (e.g. --http-file) can be applied first.  We run it now.
+	if usingDefaultConfig {
+		if err := cfg.Validate(); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			if cfg.ConfigSection.HTTPFile == "" {
+				_, _ = fmt.Fprintln(os.Stderr, "Tip: pass --http-file <path> or provide a config file with an httpFile entry.")
+			}
+			os.Exit(1)
+		}
+	}
+
+	// Suppress unused-variable warnings for scale/duration until Phase 3.
+	_ = cliScaleSet
+	_ = cliDurationSet
+	_ = scaleFlag
+	_ = durationFlag
+
 	fmt.Printf("✓ Configuration loaded successfully\n")
 	fmt.Printf("  HttpFile: %s\n", cfg.ConfigSection.HTTPFilePath)
 	fmt.Printf("  Prometheus: %t\n", cfg.ConfigSection.Prometheus)
 	fmt.Printf("  Stages: %d stage(s)\n", len(cfg.Stages))
 	for i, s := range cfg.Stages {
 		fmt.Printf("    [%d] duration=%s targetRPS=%d\n", i+1, s.Duration, s.TargetRPS)
+	}
+	if scaleFlag > 0 {
+		fmt.Printf("  Scale: %.2fx (pending — applied in Phase 3)\n", scaleFlag)
+	}
+	if durationFlag > 0 {
+		fmt.Printf("  Duration override: %s (pending — applied in Phase 3)\n", durationFlag)
 	}
 
 	// ── resolve effective snap tuning values ──────────────────────────────────

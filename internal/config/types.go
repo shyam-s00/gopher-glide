@@ -20,6 +20,12 @@ type Section struct {
 	// TimeScale speeds up or slows down the stage clock.
 	// 1.0 is real-time (default). 2.0 runs twice as fast. 0.5 runs at half speed.
 	TimeScale float64 `yaml:"time_scale"`
+	// ProfileName is the name of the profile used to generate the load stages,
+	// if any. Stored in snapshot metadata for traceability.
+	ProfileName string `yaml:"-"`
+	// ProfileScale is the RPS multiplier applied when the profile was loaded.
+	// 1.0 means no scaling. Stored in snapshot metadata for traceability.
+	ProfileScale float64 `yaml:"-"`
 }
 
 // SnapSection holds test-plan-level snap settings that control memory usage
