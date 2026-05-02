@@ -22,6 +22,19 @@ import (
 )
 
 func main() {
+	// ── version flag — handled before everything else ─────────────────────────
+	// Matches: --version, -version, -v, and the bare subcommand `version`.
+	if len(os.Args) >= 2 {
+		a := os.Args[1]
+		if a == "--version" || a == "-version" || a == "-v" || a == "version" {
+			fmt.Printf("gg (Gopher Glide)\n")
+			fmt.Printf("  Version:    %s\n", version.Version)
+			fmt.Printf("  Commit:     %s\n", version.GitCommit)
+			fmt.Printf("  Built:      %s\n", version.GetBuildDate())
+			return
+		}
+	}
+
 	fmt.Printf("gg (Gopher Glide) %s (commit:%s) built %s\n",
 		version.Version, version.GitCommit, version.GetBuildDate())
 
