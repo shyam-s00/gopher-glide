@@ -1,0 +1,19 @@
+name: load
+description: "Standard baseline load test: smooth ramp up, sustained hold, smooth ramp down. The go-to profile for everyday performance benchmarking."
+default_duration: 2m
+default_peak_rps: 100
+
+# 25% ramp up + 50% sustain + 25% ramp down = 1.0
+
+segments:
+  - type: linear
+    duration_pct: 0.25
+    rps_multiplier: 1.0
+
+  - type: flat
+    duration_pct: 0.50
+    rps_multiplier: 1.0
+
+  - type: linear
+    duration_pct: 0.25
+    rps_multiplier: 0.0

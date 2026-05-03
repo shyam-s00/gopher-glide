@@ -1,0 +1,12 @@
+name: chaos
+description: "Moderate RPS with extremely high jitter to simulate wildly irregular inter-arrival times. A good proxy for noisy-neighbour conditions or bursty upstream traffic patterns."
+default_duration: 10m
+default_peak_rps: 200
+
+config:
+  jitter: 0.4
+
+segments:
+  - type: flat
+    duration_pct: 1.0
+    rps_multiplier: 1.0

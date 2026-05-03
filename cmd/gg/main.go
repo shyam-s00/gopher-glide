@@ -15,6 +15,7 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
+	"github.com/shyam-s00/gopher-glide/internal/profile"
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 	"github.com/shyam-s00/gopher-glide/internal/tui"
 	"github.com/shyam-s00/gopher-glide/internal/ui"
@@ -63,16 +64,18 @@ func main() {
 	// are resolved after config is loaded (CLI > config.yaml > hard default).
 	fs := flag.NewFlagSet("gg", flag.ExitOnError)
 
-	// config / http-file / scale / duration — Phase 1 & 3 flags
+	// config / http-file / profile / scale / duration — new flags
 	var configFlag string
 	fs.StringVar(&configFlag, "config", "", "path to config YAML file (overrides positional argument)")
 	fs.StringVar(&configFlag, "c", "", "shorthand for --config")
 	httpFileFlag := fs.String("http-file", "", "path to .http requests file (overrides httpFile in config)")
+	profileFlag := fs.String("profile", "", "name of a built-in load profile to run (e.g. flash-sale, load, stress)")
+	fs.StringVar(profileFlag, "p", "", "shorthand for --profile")
 	var scaleFlag float64
-	fs.Float64Var(&scaleFlag, "scale", 0, "RPS multiplier applied to every stage (e.g. 0.5 halves peak RPS) — applied in Phase 3")
+	fs.Float64Var(&scaleFlag, "scale", 0, "RPS multiplier applied to every stage (e.g. 0.5 halves peak RPS) — TBD")
 	fs.Float64Var(&scaleFlag, "s", 0, "shorthand for --scale")
 	var durationFlag time.Duration
-	fs.DurationVar(&durationFlag, "duration", 0, "stretch/shrink all stages to fit this total run time (e.g. 1h) — applied in Phase 3")
+	fs.DurationVar(&durationFlag, "duration", 0, "stretch/shrink all stages to fit this total run time (e.g. 1h) — TBD")
 	fs.DurationVar(&durationFlag, "d", 0, "shorthand for --duration")
 
 	// snap flags
@@ -88,7 +91,7 @@ func main() {
 
 	// Track which flags were explicitly provided so we can apply the correct
 	// precedence: CLI (explicit) > config.yaml > hard default.
-	var cliConfigSet, cliHTTPFileSet, cliScaleSet, cliDurationSet bool
+	var cliConfigSet, cliHTTPFileSet, cliProfileSet, cliScaleSet, cliDurationSet bool
 	var cliSnapSampleSet, cliMaxSamplesSet, cliMaxBodyKBSet bool
 
 	// Any snap-specific flag passed explicitly implicitly enables snapping,
@@ -103,6 +106,8 @@ func main() {
 			cliConfigSet = true
 		case "http-file":
 			cliHTTPFileSet = true
+		case "profile", "p":
+			cliProfileSet = true
 		case "scale", "s":
 			cliScaleSet = true
 		case "duration", "d":
@@ -159,7 +164,7 @@ func main() {
 		}
 	}
 
-	// Suppress unused-variable warnings for scale/duration until Phase 3.
+	// Suppress unused-variable warnings for scale/duration TBD.
 	_ = cliScaleSet
 	_ = cliDurationSet
 	_ = scaleFlag
@@ -173,11 +178,44 @@ func main() {
 		fmt.Printf("    [%d] duration=%s targetRPS=%d\n", i+1, s.Duration, s.TargetRPS)
 	}
 	if scaleFlag > 0 {
-		fmt.Printf("  Scale: %.2fx (pending — applied in Phase 3)\n", scaleFlag)
+		fmt.Printf("  Scale: %.2fx (pending — TBD)\n", scaleFlag)
 	}
 	if durationFlag > 0 {
-		fmt.Printf("  Duration override: %s (pending — applied in Phase 3)\n", durationFlag)
+		fmt.Printf("  Duration override: %s (pending — TBD)\n", durationFlag)
 	}
+
+	// ── TODO(smoke-test): profile package validation ──────────────────
+	// Print embedded profile listing + load the requested profile (if any) so
+	// we can visually confirm the package is wired correctly.
+	// This block will be replaced by the real inflation logic.
+	fmt.Printf("\n── smoke-test: profile package ──\n")
+	profileNames := profile.ListNames()
+	fmt.Printf("  Embedded profiles: %d\n", len(profileNames))
+	for _, n := range profileNames {
+		fmt.Printf("    • %s\n", n)
+	}
+
+	if cliProfileSet && *profileFlag != "" {
+		fmt.Printf("\n  Loading profile %q ...\n", *profileFlag)
+		prof, err := profile.Load(*profileFlag)
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error loading profile: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("  ✓ Profile:          %s\n", prof.Name)
+		fmt.Printf("    Description:      %s\n", prof.Description)
+		fmt.Printf("    Default duration: %s\n", prof.DefaultDuration)
+		fmt.Printf("    Default peak RPS: %d\n", prof.DefaultPeakRPS)
+		if prof.ConfigOverride.Jitter > 0 {
+			fmt.Printf("    Jitter override:  %.2f\n", prof.ConfigOverride.Jitter)
+		}
+		fmt.Printf("    Segments (%d):\n", len(prof.Segments))
+		for i, seg := range prof.Segments {
+			fmt.Printf("      [%d] type=%-12s duration_pct=%.3f  rps_multiplier=%.2f\n",
+				i+1, seg.Type, seg.DurationPct, seg.RPSMultiplier)
+		}
+	}
+	fmt.Printf("── end smoke-test ──\n\n")
 
 	// ── resolve effective snap tuning values ──────────────────────────────────
 	// Precedence: explicit CLI flag > config.yaml snap: block > hard default.

@@ -1,0 +1,27 @@
+name: warm-up
+description: "Very slow step ramp over 5 minutes for JIT and cache warming. Each step gives the runtime time to compile hot paths and fill caches before the next level, avoiding cold-start latency spikes."
+default_duration: 5m
+default_peak_rps: 100
+
+# 5 equal steps x 1m each = 5m
+
+segments:
+  - type: step
+    duration_pct: 0.20
+    rps_multiplier: 0.10
+
+  - type: step
+    duration_pct: 0.20
+    rps_multiplier: 0.25
+
+  - type: step
+    duration_pct: 0.20
+    rps_multiplier: 0.50
+
+  - type: step
+    duration_pct: 0.20
+    rps_multiplier: 0.75
+
+  - type: step
+    duration_pct: 0.20
+    rps_multiplier: 1.0
