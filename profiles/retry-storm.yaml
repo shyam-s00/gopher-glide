@@ -1,0 +1,58 @@
+name: retry-storm
+description: "Fast repeating spikes simulating aggressive client retries. Models retry-on-failure amplification where each error wave triggers the next spike. Validates retry-budget and back-off configuration."
+default_duration: 4m
+default_peak_rps: 800
+
+# baseline at 12.5% of peak (100 RPS equivalent)
+# 30s baseline (0.125) + 6 waves x (10s spike + 20s rest = 30s, 0.125) + 30s cool-down (0.125) = 1.0
+
+segments:
+  - type: flat
+    duration_pct: 0.125
+    rps_multiplier: 0.125
+
+  - type: step
+    duration_pct: 0.042
+    rps_multiplier: 1.0
+  - type: step
+    duration_pct: 0.083
+    rps_multiplier: 0.125
+
+  - type: step
+    duration_pct: 0.042
+    rps_multiplier: 1.0
+  - type: step
+    duration_pct: 0.083
+    rps_multiplier: 0.125
+
+  - type: step
+    duration_pct: 0.042
+    rps_multiplier: 1.0
+  - type: step
+    duration_pct: 0.083
+    rps_multiplier: 0.125
+
+  - type: step
+    duration_pct: 0.042
+    rps_multiplier: 1.0
+  - type: step
+    duration_pct: 0.083
+    rps_multiplier: 0.125
+
+  - type: step
+    duration_pct: 0.042
+    rps_multiplier: 1.0
+  - type: step
+    duration_pct: 0.083
+    rps_multiplier: 0.125
+
+  - type: step
+    duration_pct: 0.042
+    rps_multiplier: 1.0
+  - type: step
+    duration_pct: 0.083
+    rps_multiplier: 0.125
+
+  - type: linear
+    duration_pct: 0.125
+    rps_multiplier: 0.0

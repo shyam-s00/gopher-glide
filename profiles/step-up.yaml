@@ -1,0 +1,35 @@
+name: step-up
+description: "Staircase ramp to gracefully find the breaking point. Each step is wide enough for auto-scaling to observe and react. Watch for the step where latency or error rate climbs."
+default_duration: 14m
+default_peak_rps: 1000
+
+# 6 steps + 1 cool-down, each 2m out of 14m = 1/7 ~= 0.143
+
+segments:
+  - type: step
+    duration_pct: 0.143
+    rps_multiplier: 0.10
+
+  - type: step
+    duration_pct: 0.143
+    rps_multiplier: 0.20
+
+  - type: step
+    duration_pct: 0.143
+    rps_multiplier: 0.40
+
+  - type: step
+    duration_pct: 0.143
+    rps_multiplier: 0.60
+
+  - type: step
+    duration_pct: 0.143
+    rps_multiplier: 0.80
+
+  - type: step
+    duration_pct: 0.143
+    rps_multiplier: 1.0
+
+  - type: linear
+    duration_pct: 0.142
+    rps_multiplier: 0.0

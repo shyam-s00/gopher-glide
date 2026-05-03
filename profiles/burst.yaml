@@ -1,0 +1,43 @@
+name: burst
+description: "5 repeating short spikes to test queue and worker-pool behaviour. Each burst fires for a short window followed by a rest. Validates that work queues drain fully between bursts."
+default_duration: 3m45s
+default_peak_rps: 500
+
+# Each cycle: 15s spike (0.067) + 30s rest (0.133) = 45s
+# 5 cycles x 45s = 225s = 3m45s
+
+segments:
+  - type: step
+    duration_pct: 0.067
+    rps_multiplier: 1.0
+  - type: step
+    duration_pct: 0.133
+    rps_multiplier: 0.0
+
+  - type: step
+    duration_pct: 0.067
+    rps_multiplier: 1.0
+  - type: step
+    duration_pct: 0.133
+    rps_multiplier: 0.0
+
+  - type: step
+    duration_pct: 0.067
+    rps_multiplier: 1.0
+  - type: step
+    duration_pct: 0.133
+    rps_multiplier: 0.0
+
+  - type: step
+    duration_pct: 0.067
+    rps_multiplier: 1.0
+  - type: step
+    duration_pct: 0.133
+    rps_multiplier: 0.0
+
+  - type: step
+    duration_pct: 0.067
+    rps_multiplier: 1.0
+  - type: step
+    duration_pct: 0.133
+    rps_multiplier: 0.0

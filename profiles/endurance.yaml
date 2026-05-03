@@ -1,0 +1,19 @@
+name: endurance
+description: "Extreme 2-hour soak at high capacity. Exposes thread exhaustion, heap fragmentation, and slow resource leaks that only surface under prolonged high load. Use with caution."
+default_duration: 130m
+default_peak_rps: 500
+
+# 5m ramp (3.8%) + 120m sustain (92.3%) + 5m ramp-down (3.8%) = ~1.0
+
+segments:
+  - type: linear
+    duration_pct: 0.038
+    rps_multiplier: 1.0
+
+  - type: flat
+    duration_pct: 0.924
+    rps_multiplier: 1.0
+
+  - type: linear
+    duration_pct: 0.038
+    rps_multiplier: 0.0

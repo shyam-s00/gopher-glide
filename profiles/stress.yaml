@@ -1,0 +1,35 @@
+name: stress
+description: "Aggressive staircase ramp designed to find the breaking point. Each step holds long enough to observe whether the service stabilises before the next increase."
+default_duration: 3m30s
+default_peak_rps: 2000
+
+# 6 equal steps + 1 cool-down, each 1/7 of total duration (~30s per segment)
+
+segments:
+  - type: step
+    duration_pct: 0.143
+    rps_multiplier: 0.05
+
+  - type: step
+    duration_pct: 0.143
+    rps_multiplier: 0.15
+
+  - type: step
+    duration_pct: 0.143
+    rps_multiplier: 0.30
+
+  - type: step
+    duration_pct: 0.143
+    rps_multiplier: 0.50
+
+  - type: step
+    duration_pct: 0.143
+    rps_multiplier: 0.75
+
+  - type: step
+    duration_pct: 0.143
+    rps_multiplier: 1.0
+
+  - type: linear
+    duration_pct: 0.142
+    rps_multiplier: 0.0

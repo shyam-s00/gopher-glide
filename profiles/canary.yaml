@@ -1,0 +1,9 @@
+name: canary
+description: "Very brief, very low RPS post-deployment verification. Validates that a freshly deployed service is responding correctly without applying any meaningful load."
+default_duration: 30s
+default_peak_rps: 5
+
+segments:
+  - type: flat
+    duration_pct: 1.0
+    rps_multiplier: 1.0

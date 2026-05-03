@@ -1,0 +1,13 @@
+name: ddos
+description: "Sustained high-volume attack simulation with no ramp. Models a volumetric DDoS: full flood from T=0. Tests rate-limiting, WAF rules, and back-pressure. Do NOT aim at production without safeguards."
+default_duration: 10m
+default_peak_rps: 5000
+
+segments:
+  - type: step
+    duration_pct: 1.0
+    rps_multiplier: 1.0
+
+  - type: step
+    duration_pct: 0.0
+    rps_multiplier: 0.0
