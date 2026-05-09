@@ -64,18 +64,18 @@ func main() {
 	// are resolved after config is loaded (CLI > config.yaml > hard default).
 	fs := flag.NewFlagSet("gg", flag.ExitOnError)
 
-	// config / http-file / profile / scale / duration — new flags
+	// config / http-file / profile / peak-rps / duration — new flags
 	var configFlag string
 	fs.StringVar(&configFlag, "config", "", "path to config YAML file (overrides positional argument)")
 	fs.StringVar(&configFlag, "c", "", "shorthand for --config")
 	httpFileFlag := fs.String("http-file", "", "path to .http requests file (overrides httpFile in config)")
 	profileFlag := fs.String("profile", "", "name of a built-in load profile to run (e.g. flash-sale, load, stress)")
 	fs.StringVar(profileFlag, "p", "", "shorthand for --profile")
-	var scaleFlag float64
-	fs.Float64Var(&scaleFlag, "scale", 0, "RPS multiplier applied to every stage (e.g. 0.5 halves peak RPS) — TBD")
-	fs.Float64Var(&scaleFlag, "s", 0, "shorthand for --scale")
+	var peakRPSFlag int
+	fs.IntVar(&peakRPSFlag, "peak-rps", 0, "peak RPS for the profile (overrides profile default_peak_rps)")
+	fs.IntVar(&peakRPSFlag, "r", 0, "shorthand for --peak-rps")
 	var durationFlag time.Duration
-	fs.DurationVar(&durationFlag, "duration", 0, "stretch/shrink all stages to fit this total run time (e.g. 1h) — TBD")
+	fs.DurationVar(&durationFlag, "duration", 0, "total run duration for the profile (overrides profile default_duration, e.g. 1h)")
 	fs.DurationVar(&durationFlag, "d", 0, "shorthand for --duration")
 
 	// snap flags
@@ -91,7 +91,7 @@ func main() {
 
 	// Track which flags were explicitly provided so we can apply the correct
 	// precedence: CLI (explicit) > config.yaml > hard default.
-	var cliConfigSet, cliHTTPFileSet, cliProfileSet, cliScaleSet, cliDurationSet bool
+	var cliConfigSet, cliHTTPFileSet, cliProfileSet, cliPeakRPSSet, cliDurationSet bool
 	var cliSnapSampleSet, cliMaxSamplesSet, cliMaxBodyKBSet bool
 
 	// Any snap-specific flag passed explicitly implicitly enables snapping,
@@ -108,8 +108,8 @@ func main() {
 			cliHTTPFileSet = true
 		case "profile", "p":
 			cliProfileSet = true
-		case "scale", "s":
-			cliScaleSet = true
+		case "peak-rps", "r":
+			cliPeakRPSSet = true
 		case "duration", "d":
 			cliDurationSet = true
 		case "snap-sample":
@@ -153,8 +153,10 @@ func main() {
 
 	// ── validate after CLI overrides ──────────────────────────────────────────
 	// When booting from DefaultConfig, Load() intentionally skips Validate() so
-	// that CLI flags (e.g. --http-file) can be applied first.  We run it now.
-	if usingDefaultConfig {
+	// that CLI flags (e.g. --http-file) can be applied first. We run it now,
+	// but only when no profile is being loaded (a profile will supply its own
+	// stages, making the default stage validation irrelevant).
+	if usingDefaultConfig && !cliProfileSet {
 		if err := cfg.Validate(); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			if cfg.ConfigSection.HTTPFile == "" {
@@ -164,58 +166,66 @@ func main() {
 		}
 	}
 
-	// Suppress unused-variable warnings for scale/duration TBD.
-	_ = cliScaleSet
-	_ = cliDurationSet
-	_ = scaleFlag
-	_ = durationFlag
-
-	fmt.Printf("✓ Configuration loaded successfully\n")
-	fmt.Printf("  HttpFile: %s\n", cfg.ConfigSection.HTTPFilePath)
-	fmt.Printf("  Prometheus: %t\n", cfg.ConfigSection.Prometheus)
-	fmt.Printf("  Stages: %d stage(s)\n", len(cfg.Stages))
-	for i, s := range cfg.Stages {
-		fmt.Printf("    [%d] duration=%s targetRPS=%d\n", i+1, s.Duration, s.TargetRPS)
-	}
-	if scaleFlag > 0 {
-		fmt.Printf("  Scale: %.2fx (pending — TBD)\n", scaleFlag)
-	}
-	if durationFlag > 0 {
-		fmt.Printf("  Duration override: %s (pending — TBD)\n", durationFlag)
-	}
-
-	// ── TODO(smoke-test): profile package validation ──────────────────
-	// Print embedded profile listing + load the requested profile (if any) so
-	// we can visually confirm the package is wired correctly.
-	// This block will be replaced by the real inflation logic.
-	fmt.Printf("\n── smoke-test: profile package ──\n")
-	profileNames := profile.ListNames()
-	fmt.Printf("  Embedded profiles: %d\n", len(profileNames))
-	for _, n := range profileNames {
-		fmt.Printf("    • %s\n", n)
-	}
-
+	// ── load and inflate profile (Phase 3) ────────────────────────────────────
+	// Precedence hierarchy for profiles:
+	//   Base Defaults → config.yaml → --profile → --peak-rps / --duration
+	//
+	// When --profile is provided, cfg.Stages is completely replaced by the
+	// inflated concrete stages. The config file's stages (if any) are ignored.
 	if cliProfileSet && *profileFlag != "" {
-		fmt.Printf("\n  Loading profile %q ...\n", *profileFlag)
 		prof, err := profile.Load(*profileFlag)
 		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Error loading profile: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error loading profile %q: %v\n", *profileFlag, err)
 			os.Exit(1)
 		}
-		fmt.Printf("  ✓ Profile:          %s\n", prof.Name)
-		fmt.Printf("    Description:      %s\n", prof.Description)
-		fmt.Printf("    Default duration: %s\n", prof.DefaultDuration)
-		fmt.Printf("    Default peak RPS: %d\n", prof.DefaultPeakRPS)
-		if prof.ConfigOverride.Jitter > 0 {
-			fmt.Printf("    Jitter override:  %.2f\n", prof.ConfigOverride.Jitter)
+
+		// Determine effective peak RPS: CLI flag wins, then profile default.
+		effectivePeak := prof.DefaultPeakRPS
+		if cliPeakRPSSet && peakRPSFlag > 0 {
+			effectivePeak = peakRPSFlag
 		}
-		fmt.Printf("    Segments (%d):\n", len(prof.Segments))
-		for i, seg := range prof.Segments {
-			fmt.Printf("      [%d] type=%-12s duration_pct=%.3f  rps_multiplier=%.2f\n",
-				i+1, seg.Type, seg.DurationPct, seg.RPSMultiplier)
+
+		// Determine effective duration: CLI flag wins, then profile default.
+		effectiveDur := prof.DefaultDuration
+		if cliDurationSet && durationFlag > 0 {
+			effectiveDur = durationFlag
+		}
+
+		// Inflate abstract segments into concrete config.Stage entries.
+		cfg.Stages = profile.InflateSegments(prof, effectivePeak, effectiveDur)
+
+		// Apply profile-level config overrides (e.g. jitter for chaos).
+		// These are lower priority than explicit config.yaml values which were
+		// already loaded, so only apply when the config field is still at its
+		// zero value.
+		if prof.ConfigOverride.Jitter > 0 && cfg.ConfigSection.Jitter == 0 {
+			cfg.ConfigSection.Jitter = prof.ConfigOverride.Jitter
+		}
+
+		// Store profile metadata for snapshot traceability.
+		cfg.ConfigSection.ProfileName = prof.Name
+
+		fmt.Printf("✓ Profile %q loaded  (peak=%d RPS, duration=%s, stages=%d)\n",
+			prof.Name, effectivePeak, effectiveDur, len(cfg.Stages))
+	}
+
+	// ── validate config (including inflated stages) ────────────────────────────
+	// For the default-config + profile path, Validate() was skipped above.
+	// Run it now that stages have been populated. For file-based configs,
+	// Validate() already ran inside Load(); re-running is harmless but we skip
+	// it to avoid double-reporting errors.
+	if usingDefaultConfig && cliProfileSet {
+		if err := cfg.Validate(); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			if cfg.ConfigSection.HTTPFile == "" {
+				_, _ = fmt.Fprintln(os.Stderr, "Tip: pass --http-file <path> to specify the requests file.")
+			}
+			os.Exit(1)
 		}
 	}
-	fmt.Printf("── end smoke-test ──\n\n")
+
+	fmt.Printf("✓ Configuration ready  (httpFile=%s, stages=%d)\n",
+		cfg.ConfigSection.HTTPFile, len(cfg.Stages))
 
 	// ── resolve effective snap tuning values ──────────────────────────────────
 	// Precedence: explicit CLI flag > config.yaml snap: block > hard default.
