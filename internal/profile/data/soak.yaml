@@ -1,0 +1,19 @@
+name: soak
+description: "Sustained moderate load over 1h+ to detect memory leaks, connection pool exhaustion, and GC pressure. The goal is not to stress the service but to let problems emerge over time."
+default_duration: 70m
+default_peak_rps: 200
+
+# 5m ramp (7.1%) + 60m sustain (85.8%) + 5m ramp-down (7.1%) = ~1.0
+
+segments:
+  - type: linear
+    duration_pct: 0.071
+    rps_multiplier: 1.0
+
+  - type: flat
+    duration_pct: 0.858
+    rps_multiplier: 1.0
+
+  - type: linear
+    duration_pct: 0.071
+    rps_multiplier: 0.0

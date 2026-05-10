@@ -1,0 +1,9 @@
+name: trickle
+description: "Very low constant RPS to test idle connection timeout behaviour. Sends just enough traffic to expose idle-timeout mis-configurations, proxy keepalive bugs, and database connection expiry."
+default_duration: 30m
+default_peak_rps: 2
+
+segments:
+  - type: flat
+    duration_pct: 1.0
+    rps_multiplier: 1.0

@@ -1,0 +1,13 @@
+name: ticket-release
+description: "Instantaneous extreme spike held for the entire run. Models concert or sports ticket drops where everyone floods in at T=0. Most systems capitulate in the first minute or not at all."
+default_duration: 1m
+default_peak_rps: 5000
+
+segments:
+  - type: step
+    duration_pct: 1.0
+    rps_multiplier: 1.0
+
+  - type: step
+    duration_pct: 0.0
+    rps_multiplier: 0.0

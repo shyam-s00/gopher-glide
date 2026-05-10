@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
+	"github.com/shyam-s00/gopher-glide/internal/profile"
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 	"github.com/shyam-s00/gopher-glide/internal/tui"
 	"github.com/shyam-s00/gopher-glide/internal/ui"
@@ -22,29 +24,68 @@ import (
 )
 
 func main() {
+	// ── version flag — handled before everything else ─────────────────────────
+	// Matches: --version, -version, -v, and the bare subcommand `version`.
+	if len(os.Args) >= 2 {
+		a := os.Args[1]
+		if a == "--version" || a == "-version" || a == "-v" || a == "version" {
+			fmt.Printf("gg (Gopher Glide)\n")
+			fmt.Printf("  Version:    %s\n", version.Version)
+			fmt.Printf("  Commit:     %s\n", version.GitCommit)
+			fmt.Printf("  Built:      %s\n", version.GetBuildDate())
+			return
+		}
+	}
+
 	fmt.Printf("gg (Gopher Glide) %s (commit:%s) built %s\n",
 		version.Version, version.GitCommit, version.GetBuildDate())
 
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: gg <config-file> [--snap] [--snap-tag TAG] [--snap-dir DIR] [--snap-sample RATE]")
-		fmt.Println("       gg snap <list|view|diff> [--snap-dir DIR]")
-		os.Exit(1)
-	}
-
 	// ── snap subcommand router ────────────────────────────────────────────────
 	// Dispatched before the config-load so `gg snap` works without a config file.
-	if os.Args[1] == "snap" {
+	if len(os.Args) >= 2 && os.Args[1] == "snap" {
 		runSnapCmd(os.Args[2:])
 		return
 	}
 
-	configPath := os.Args[1]
+	// ── profile subcommand router ─────────────────────────────────────────────
+	if len(os.Args) >= 2 && os.Args[1] == "profile" {
+		runProfileCmd(os.Args[2:])
+		return
+	}
 
-	// ── snap flags ────────────────────────────────────────────────────────────
-	// Parsed from os.Args[2:] so <config-file> always stays as the first arg.
-	// 0 is the sentinel for "not explicitly set on CLI"; effective values are
-	// resolved after config.yaml is loaded (CLI > config.yaml > hard default).
+	// ── determine config path and flag args ───────────────────────────────────
+	// <config-file> is an optional positional argument. If the first argument
+	// exists and does not start with '-' it is treated as the config file path.
+	// When omitted, gg falls back to an in-memory DefaultConfig.
+	var configPath string
+	var flagArgs []string
+	if len(os.Args) >= 2 && !strings.HasPrefix(os.Args[1], "-") {
+		configPath = os.Args[1]
+		flagArgs = os.Args[2:]
+	} else if len(os.Args) >= 2 {
+		flagArgs = os.Args[1:]
+	}
+
+	// ── flags ─────────────────────────────────────────────────────────────────
+	// 0 / "" is the sentinel for "not explicitly set on CLI"; effective values
+	// are resolved after config is loaded (CLI > config.yaml > hard default).
 	fs := flag.NewFlagSet("gg", flag.ExitOnError)
+
+	// config / http-file / profile / peak-rps / duration — new flags
+	var configFlag string
+	fs.StringVar(&configFlag, "config", "", "path to config YAML file (overrides positional argument)")
+	fs.StringVar(&configFlag, "c", "", "shorthand for --config")
+	httpFileFlag := fs.String("http-file", "", "path to .http requests file (overrides httpFile in config)")
+	profileFlag := fs.String("profile", "", "name of a built-in load profile to run (e.g. flash-sale, load, stress)")
+	fs.StringVar(profileFlag, "p", "", "shorthand for --profile")
+	var peakRPSFlag int
+	fs.IntVar(&peakRPSFlag, "peak-rps", 0, "peak RPS for the profile (overrides profile default_peak_rps)")
+	fs.IntVar(&peakRPSFlag, "r", 0, "shorthand for --peak-rps")
+	var durationFlag time.Duration
+	fs.DurationVar(&durationFlag, "duration", 0, "total run duration for the profile (overrides profile default_duration, e.g. 1h)")
+	fs.DurationVar(&durationFlag, "d", 0, "shorthand for --duration")
+
+	// snap flags
 	snapEnabled := fs.Bool("snap", false, "capture a behavioral snapshot after the run")
 	snapTag := fs.String("snap-tag", "", "tag to attach to the snapshot (e.g. v1.2.0-pre)")
 	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
@@ -53,10 +94,11 @@ func main() {
 	snapMaxBodyKB := fs.Int("snap-max-body-kb", 0, "per-endpoint byte budget for stored body samples in KB (0 = no byte-based limit)")
 	headless := fs.Bool("headless", false, "run without interactive TUI — emits structured heartbeat logs (for CI)")
 	reporter := fs.String("reporter", "text", "output format in headless mode: text | json")
-	_ = fs.Parse(os.Args[2:])
+	_ = fs.Parse(flagArgs)
 
 	// Track which flags were explicitly provided so we can apply the correct
 	// precedence: CLI (explicit) > config.yaml > hard default.
+	var cliConfigSet, cliHTTPFileSet, cliProfileSet, cliPeakRPSSet, cliDurationSet bool
 	var cliSnapSampleSet, cliMaxSamplesSet, cliMaxBodyKBSet bool
 
 	// Any snap-specific flag passed explicitly implicitly enables snapping,
@@ -67,6 +109,16 @@ func main() {
 			*snapEnabled = true
 		}
 		switch f.Name {
+		case "config", "c":
+			cliConfigSet = true
+		case "http-file":
+			cliHTTPFileSet = true
+		case "profile", "p":
+			cliProfileSet = true
+		case "peak-rps", "r":
+			cliPeakRPSSet = true
+		case "duration", "d":
+			cliDurationSet = true
 		case "snap-sample":
 			cliSnapSampleSet = true
 		case "snap-max-samples":
@@ -76,6 +128,15 @@ func main() {
 		}
 	})
 
+	// --config / -c overrides the positional <config-file> argument.
+	if cliConfigSet && configFlag != "" {
+		configPath = configFlag
+	}
+
+	// Remember whether we are booting from the in-memory defaults so we can
+	// run a deferred Validate() after CLI overrides have been applied.
+	usingDefaultConfig := configPath == ""
+
 	// ── load config ───────────────────────────────────────────────────────────
 	cfg, err := config.Load(configPath)
 	if err != nil {
@@ -83,13 +144,100 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("✓ Configuration loaded successfully\n")
-	fmt.Printf("  HttpFile: %s\n", cfg.ConfigSection.HTTPFilePath)
-	fmt.Printf("  Prometheus: %t\n", cfg.ConfigSection.Prometheus)
-	fmt.Printf("  Stages: %d stage(s)\n", len(cfg.Stages))
-	for i, s := range cfg.Stages {
-		fmt.Printf("    [%d] duration=%s targetRPS=%d\n", i+1, s.Duration, s.TargetRPS)
+	// ── apply --http-file override (Task 6) ───────────────────────────────────
+	// --http-file takes the highest precedence for the requests file.
+	// The path is resolved from the current working directory (not the config
+	// file directory) so that CLI callers don't need to know where config lives.
+	if cliHTTPFileSet && *httpFileFlag != "" {
+		absHTTPFile, err := filepath.Abs(*httpFileFlag)
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error resolving --http-file path: %v\n", err)
+			os.Exit(1)
+		}
+		cfg.ConfigSection.HTTPFile = *httpFileFlag
+		cfg.ConfigSection.HTTPFilePath = absHTTPFile
 	}
+
+	// ── validate after CLI overrides ──────────────────────────────────────────
+	// When booting from DefaultConfig, Load() intentionally skips Validate() so
+	// that CLI flags (e.g. --http-file) can be applied first. We run it now,
+	// but only when no profile is being loaded (a profile will supply its own
+	// stages, making the default stage validation irrelevant).
+	if usingDefaultConfig && !cliProfileSet {
+		if err := cfg.Validate(); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			if cfg.ConfigSection.HTTPFile == "" {
+				_, _ = fmt.Fprintln(os.Stderr, "Tip: pass --http-file <path> or provide a config file with an httpFile entry.")
+			}
+			os.Exit(1)
+		}
+	}
+
+	// ── load and inflate profile (Phase 3) ────────────────────────────────────
+	// Precedence hierarchy for profiles:
+	//   Base Defaults → config.yaml → --profile → --peak-rps / --duration
+	//
+	// When --profile is provided, cfg.Stages is completely replaced by the
+	// inflated concrete stages. The config file's stages (if any) are ignored.
+	if cliProfileSet && *profileFlag != "" {
+		prof, err := profile.Load(*profileFlag)
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error loading profile %q: %v\n", *profileFlag, err)
+			os.Exit(1)
+		}
+
+		// Determine effective peak RPS: CLI flag wins, then profile default.
+		effectivePeak := prof.DefaultPeakRPS
+		if cliPeakRPSSet && peakRPSFlag > 0 {
+			effectivePeak = peakRPSFlag
+		}
+
+		// Determine effective duration: CLI flag wins, then profile default.
+		effectiveDur := prof.DefaultDuration
+		if cliDurationSet && durationFlag > 0 {
+			effectiveDur = durationFlag
+		}
+
+		// Inflate abstract segments into concrete config.Stage entries.
+		cfg.Stages = profile.InflateSegments(prof, effectivePeak, effectiveDur)
+
+		// Apply profile-level config overrides (e.g. jitter for chaos).
+		// These are lower priority than explicit config.yaml values which were
+		// already loaded, so only apply when the config field is still at its
+		// zero value.
+		if prof.ConfigOverride.Jitter > 0 && cfg.ConfigSection.Jitter == 0 {
+			cfg.ConfigSection.Jitter = prof.ConfigOverride.Jitter
+		}
+
+		// Store profile metadata for snapshot traceability.
+		cfg.ConfigSection.ProfileName = prof.Name
+		// ProfileScale records how much the effective peak RPS diverges from the
+		// profile's built-in default. 1.0 means no scaling was applied; any other
+		// value reflects an explicit --peak-rps override (or a future config-level
+		// override). Stored so snapshot metadata accurately reflects the run conditions.
+		cfg.ConfigSection.ProfileScale = float64(effectivePeak) / float64(prof.DefaultPeakRPS)
+
+		fmt.Printf("✓ Profile %q loaded  (peak=%d RPS, duration=%s, stages=%d)\n",
+			prof.Name, effectivePeak, effectiveDur, len(cfg.Stages))
+	}
+
+	// ── validate config (including inflated stages) ────────────────────────────
+	// For the default-config + profile path, Validate() was skipped above.
+	// Run it now that stages have been populated. For file-based configs,
+	// Validate() already ran inside Load(); re-running is harmless but we skip
+	// it to avoid double-reporting errors.
+	if usingDefaultConfig && cliProfileSet {
+		if err := cfg.Validate(); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			if cfg.ConfigSection.HTTPFile == "" {
+				_, _ = fmt.Fprintln(os.Stderr, "Tip: pass --http-file <path> to specify the requests file.")
+			}
+			os.Exit(1)
+		}
+	}
+
+	fmt.Printf("✓ Configuration ready  (httpFile=%s, stages=%d)\n",
+		cfg.ConfigSection.HTTPFile, len(cfg.Stages))
 
 	// ── resolve effective snap tuning values ──────────────────────────────────
 	// Precedence: explicit CLI flag > config.yaml snap: block > hard default.
@@ -200,6 +348,15 @@ func main() {
 	}
 
 	fmt.Println("Starting...")
+	// ── ASCII chart preview (profile runs only) ───────────────────────────────
+	// Print the traffic shape so users know exactly what is about to happen
+	// before the TUI takes over the terminal. Skipped in headless mode because
+	// structured log output starts immediately after this point.
+	if cliProfileSet && !*headless {
+		if chart := profile.RenderASCIIChart(cfg.Stages); chart != "" {
+			fmt.Print(chart)
+		}
+	}
 	renderer := ui.New(*headless)
 	if *headless {
 		if hr, ok := renderer.(*ui.HeadlessRenderer); ok {
@@ -807,4 +964,143 @@ func validateAssertFlags(latencyReg, errorDelta, payloadPct float64) error {
 		return fmt.Errorf("--payload-size-delta must be > 0, got %g", payloadPct)
 	}
 	return nil
+}
+
+// ── profile subcommand handlers ───────────────────────────────────────────────
+
+func runProfileCmd(args []string) {
+	if len(args) == 0 {
+		profileUsage()
+		os.Exit(1)
+	}
+	switch args[0] {
+	case "list":
+		runProfileList()
+	case "view":
+		runProfileView(args[1:])
+	case "export":
+		runProfileExport(args[1:])
+	default:
+		_, _ = fmt.Fprintf(os.Stderr, "unknown profile subcommand %q\n\n", args[0])
+		profileUsage()
+		os.Exit(1)
+	}
+}
+
+func runProfileList() {
+	builtInNames := profile.ListNames()
+	customNames := profile.ListCustomNames()
+
+	// ── Built-in profiles ──────────────────────────────────────────────────
+	fmt.Printf("Built-in Profiles (%d)\n", len(builtInNames))
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	_, _ = fmt.Fprintln(w, "NAME\tPEAK RPS\tDURATION")
+	_, _ = fmt.Fprintln(w, "────\t────────\t────────")
+	for _, name := range builtInNames {
+		prof, err := profile.LoadBuiltIn(name)
+		if err != nil {
+			_, _ = fmt.Fprintf(w, "%s\t-\t<error: %v>\n", name, err)
+			continue
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%d\t%s\n",
+			prof.Name,
+			prof.DefaultPeakRPS,
+			profile.FormatDuration(prof.DefaultDuration),
+		)
+	}
+	_ = w.Flush()
+
+	// ── Custom profiles ────────────────────────────────────────────────────
+	fmt.Printf("\nCustom Profiles (%d)\n", len(customNames))
+	if len(customNames) == 0 {
+		fmt.Println("  (none — use `gg profile export <name>` to create one)")
+		return
+	}
+	home, _ := os.UserHomeDir()
+	w2 := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	_, _ = fmt.Fprintln(w2, "NAME\tSTATUS\tFILE")
+	_, _ = fmt.Fprintln(w2, "────\t──────\t────")
+	for _, name := range customNames {
+		status := "ok"
+		if profile.IsBuiltIn(name) {
+			status = "⚠ conflicts with built-in — rename to use"
+		}
+		file := filepath.Join(home, ".config", "gg", "profiles", name+".yaml")
+		_, _ = fmt.Fprintf(w2, "%s\t%s\t%s\n", name, status, file)
+	}
+	_ = w2.Flush()
+}
+
+func runProfileView(args []string) {
+	var name string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		name = args[0]
+	}
+	if name == "" {
+		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg profile view <name>")
+		os.Exit(1)
+	}
+
+	// Use LoadBuiltIn for built-in names so the view always shows the
+	// canonical definition, unaffected by files in ~/.config/gg/profiles/.
+	var prof *profile.Profile
+	var err error
+	if profile.IsBuiltIn(name) {
+		prof, err = profile.LoadBuiltIn(name)
+	} else {
+		prof, err = profile.Load(name)
+	}
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "profile view: %v\n", err)
+		os.Exit(1)
+	}
+
+	stages := profile.InflateSegments(prof, prof.DefaultPeakRPS, prof.DefaultDuration)
+
+	fmt.Printf("Profile:     %s\n", prof.Name)
+	fmt.Printf("Description: %s\n", prof.Description)
+	fmt.Printf("Peak RPS:    %d\n", prof.DefaultPeakRPS)
+	fmt.Printf("Duration:    %s\n", profile.FormatDuration(prof.DefaultDuration))
+	fmt.Printf("Segments:    %d  →  %d concrete stages\n\n", len(prof.Segments), len(stages))
+	fmt.Print(profile.RenderASCIIChart(stages))
+}
+
+func profileUsage() {
+	_, _ = fmt.Fprintln(os.Stderr, "Usage: gg profile <subcommand>")
+	_, _ = fmt.Fprintln(os.Stderr, "")
+	_, _ = fmt.Fprintln(os.Stderr, "Subcommands:")
+	_, _ = fmt.Fprintln(os.Stderr, "  list              list all built-in and custom profiles")
+	_, _ = fmt.Fprintln(os.Stderr, "  view <name>       show a profile's shape and ASCII chart")
+	_, _ = fmt.Fprintln(os.Stderr, "  export <name>     copy a built-in profile to ~/.config/gg/profiles/ for customization")
+}
+
+func runProfileExport(args []string) {
+	var name string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		name = args[0]
+	}
+	if name == "" {
+		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg profile export <name>")
+		os.Exit(1)
+	}
+
+	dest, err := profile.ExportEmbedded(name)
+	if err != nil {
+		if errors.Is(err, profile.ErrExportConflict) {
+			_, _ = fmt.Fprintf(os.Stderr,
+				"profile export: file already exists at %s\n"+
+					"Delete or rename it first if you want a fresh copy.\n", dest)
+			os.Exit(1)
+		}
+		_, _ = fmt.Fprintf(os.Stderr, "profile export: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("✓ Exported %q to %s\n\n", name, dest)
+	fmt.Println("Next steps:")
+	fmt.Printf("  1. Rename: mv %s ~/.config/gg/profiles/<custom-name>.yaml\n", dest)
+	fmt.Println("  2. Edit the YAML to tune the segments, peak RPS, and duration.")
+	fmt.Println("  3. Run: gg --profile <custom-name> --http-file target.http")
+	fmt.Println("")
+	fmt.Println("Note: built-in names are reserved. The file must be renamed before use.")
 }

@@ -1,0 +1,9 @@
+name: smoke
+description: "Quick health check at low RPS. The lightest possible test — confirms the service is alive and responding. Use in tight CI pipelines immediately after deploy."
+default_duration: 10s
+default_peak_rps: 10
+
+segments:
+  - type: flat
+    duration_pct: 1.0
+    rps_multiplier: 1.0

@@ -1,0 +1,43 @@
+name: black-friday
+description: "Extended heavy baseline with two sudden spikes. Models a full Black Friday shopping window: sustained high traffic punctuated by checkout-rush spikes that dwarf the baseline."
+default_duration: 17m
+default_peak_rps: 2500
+
+# Non-zero duration_pct values sum to 1.0: 0.12+0.29+0.18+0.29+0.12 = 1.00
+
+segments:
+  - type: linear
+    duration_pct: 0.12
+    rps_multiplier: 0.20
+
+  - type: flat
+    duration_pct: 0.29
+    rps_multiplier: 0.20
+
+  - type: step          # instant spike 1 to 80% peak
+    duration_pct: 0.0
+    rps_multiplier: 0.80
+
+  - type: step          # instant recover to baseline
+    duration_pct: 0.0
+    rps_multiplier: 0.20
+
+  - type: flat
+    duration_pct: 0.18
+    rps_multiplier: 0.20
+
+  - type: step          # instant spike 2 to 100% peak
+    duration_pct: 0.0
+    rps_multiplier: 1.0
+
+  - type: step          # instant recover to elevated tail baseline
+    duration_pct: 0.0
+    rps_multiplier: 0.24
+
+  - type: flat
+    duration_pct: 0.29
+    rps_multiplier: 0.24
+
+  - type: linear
+    duration_pct: 0.12
+    rps_multiplier: 0.0

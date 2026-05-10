@@ -1,0 +1,23 @@
+name: spike
+description: "Single sharp jump and drop to test queue buffering. Verifies that a short intense spike does not leave the service permanently degraded. The recovery period is as important as the spike itself."
+default_duration: 3m30s
+default_peak_rps: 1000
+
+# baseline 5% RPS | 1m baseline (28.6%) + 30s spike (14.3%) + 1m recovery (28.6%) + 30s ramp-down (14.3%) = ~0.86 + instant transitions
+
+segments:
+  - type: step
+    duration_pct: 0.286
+    rps_multiplier: 0.05
+
+  - type: step
+    duration_pct: 0.143
+    rps_multiplier: 1.0
+
+  - type: step
+    duration_pct: 0.286
+    rps_multiplier: 0.05
+
+  - type: linear
+    duration_pct: 0.285
+    rps_multiplier: 0.0
