@@ -192,6 +192,11 @@ func parse(data []byte, src string) (*Profile, error) {
 	return &p, nil
 }
 
+// durationPctTolerance is the maximum absolute deviation from 1.0 that the
+// sum of all segment duration_pct values may have before validation rejects
+// the profile.
+const durationPctTolerance = 0.01
+
 // validate performs basic structural checks on a parsed Profile.
 func validate(p *Profile, src string) error {
 	if p.Name == "" {
@@ -215,9 +220,24 @@ func validate(p *Profile, src string) error {
 		if s.DurationPct < 0 || s.DurationPct > 1 {
 			return fmt.Errorf("%w: %q: segment[%d] duration_pct must be in [0,1]", ErrInvalidProfile, src, i)
 		}
+		// duration_pct == 0 is only meaningful for SegmentStep (instant
+		// transition with no hold time). For all other types it would produce
+		// a zero-duration segment and is almost certainly a mistake.
+		if s.DurationPct == 0 && s.Type != SegmentStep {
+			return fmt.Errorf("%w: %q: segment[%d] duration_pct must be > 0 for type %q (0 is only valid for \"step\")", ErrInvalidProfile, src, i, s.Type)
+		}
 		if s.RPSMultiplier < 0 || s.RPSMultiplier > 1 {
 			return fmt.Errorf("%w: %q: segment[%d] rps_multiplier must be in [0,1]", ErrInvalidProfile, src, i)
 		}
 	}
+
+	// Ensure the sum of all duration_pct values is close enough to 1.0 that
+	// InflateSegments will produce a total duration matching the requested run
+	// duration. Step segments with duration_pct == 0 contribute nothing to the
+	// sum and are intentionally included in the total (they add 0).
+	if sum := p.TotalNonZeroPct(); sum < 1.0-durationPctTolerance || sum > 1.0+durationPctTolerance {
+		return fmt.Errorf("%w: %q: sum of segment duration_pct values is %.4f, must be within %.2f of 1.0", ErrInvalidProfile, src, sum, durationPctTolerance)
+	}
+
 	return nil
 }
