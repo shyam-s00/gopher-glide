@@ -211,6 +211,11 @@ func main() {
 
 		// Store profile metadata for snapshot traceability.
 		cfg.ConfigSection.ProfileName = prof.Name
+		// ProfileScale records how much the effective peak RPS diverges from the
+		// profile's built-in default. 1.0 means no scaling was applied; any other
+		// value reflects an explicit --peak-rps override (or a future config-level
+		// override). Stored so snapshot metadata accurately reflects the run conditions.
+		cfg.ConfigSection.ProfileScale = float64(effectivePeak) / float64(prof.DefaultPeakRPS)
 
 		fmt.Printf("✓ Profile %q loaded  (peak=%d RPS, duration=%s, stages=%d)\n",
 			prof.Name, effectivePeak, effectiveDur, len(cfg.Stages))
@@ -994,7 +999,7 @@ func runProfileList() {
 	for _, name := range builtInNames {
 		prof, err := profile.LoadBuiltIn(name)
 		if err != nil {
-			_, _ = fmt.Fprintf(w, "%s\t<error: %v>\t-\t-\n", name, err)
+			_, _ = fmt.Fprintf(w, "%s\t-\t<error: %v>\n", name, err)
 			continue
 		}
 		_, _ = fmt.Fprintf(w, "%s\t%d\t%s\n",
