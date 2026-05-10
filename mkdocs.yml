@@ -21,6 +21,7 @@ extra_css:
 nav:
   - Home: index.md
   - Configuration: configuration.md
+  - Load Profiles: profiles.md
   - The TUI: tui.md
   - JetBrains Plugin: plugin.md
   - Snapshots (gg snap): snap.md

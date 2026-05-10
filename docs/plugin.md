@@ -11,6 +11,16 @@ Gopher Glide features an official [JetBrains plugin](https://plugins.jetbrains.c
 * **Custom Snap Configuration** — smoothly point the plugin to custom snapshot directory paths matching your project structure.
 
 ## Installing the Plugin
+
+<div id="jb-plugin-widget"></div>
+
+<script src="https://plugins.jetbrains.com/assets/scripts/mp-widget.js"></script>
+<script>
+  MarketplaceWidget.setupMarketplaceWidget('install', 30983, "#jb-plugin-widget");
+</script>
+
+Or install manually:
+
 1. Open your JetBrains IDE (IntelliJ IDEA, GoLand, WebStorm, etc.).
 2. Go to **Settings > Plugins > Marketplace**.
 3. Search for **Gopher Glide**.

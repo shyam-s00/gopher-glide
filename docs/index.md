@@ -13,6 +13,7 @@ Developers frequently look for a **lightweight alternative** to traditional tool
 
 ## Features
 
+- **Zero-Config Profiles** — skip writing complex YAML files. Use built-in patterns like `--profile flash-sale` or `--profile ddos` to generate standard industry traffic shapes.
 - **Native `.http` file support** — define requests (with headers and bodies) using the familiar REST Client format; point `gg` at your existing file and go
 - **Multi-stage load engine** — define any number of stages; the engine linearly interpolates (LERP) RPS between stages automatically
   - **Ramp Up** — smoothly increase the load to a target RPS
