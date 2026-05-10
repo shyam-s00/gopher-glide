@@ -1,0 +1,19 @@
+name: inventory-drop
+description: "High immediate load with a slow organic tail-off. Models a limited-stock drop: a wall of traffic at T=0 that decays naturally as inventory depletes and users give up or complete their purchase."
+default_duration: 16m
+default_peak_rps: 1500
+
+# instant spike / 1m hold (0.0625) / 15m tail-off (0.9375) = 1.0
+
+segments:
+  - type: step
+    duration_pct: 0.0
+    rps_multiplier: 1.0
+
+  - type: flat
+    duration_pct: 0.0625
+    rps_multiplier: 1.0
+
+  - type: linear
+    duration_pct: 0.9375
+    rps_multiplier: 0.0

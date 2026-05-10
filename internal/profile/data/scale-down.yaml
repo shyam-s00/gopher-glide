@@ -1,0 +1,13 @@
+name: scale-down
+description: "Starts at full peak, then slowly ramps to zero over the entire run. Models a planned traffic drain before a deployment. Tests graceful connection draining and orderly shutdown behaviour."
+default_duration: 10m
+default_peak_rps: 1000
+
+segments:
+  - type: step
+    duration_pct: 0.0
+    rps_multiplier: 1.0
+
+  - type: linear
+    duration_pct: 1.0
+    rps_multiplier: 0.0

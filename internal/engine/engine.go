@@ -200,7 +200,7 @@ func New(opts ...EngineOption) *Engine {
 	return e
 }
 
-// SetTargetRPS allows live override (Director Mode – Phase 3).
+// SetTargetRPS allows live override (Director Mode).
 func (e *Engine) SetTargetRPS(rps int) {
 	e.targetRPS.Store(int64(rps))
 }

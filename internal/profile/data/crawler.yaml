@@ -1,0 +1,19 @@
+name: crawler
+description: "Simulates steady search-engine bot traffic: constant moderate RPS 24/7. Tests that the service handles long-lived, non-bursty traffic without memory creep or connection leaks."
+default_duration: 34m
+default_peak_rps: 50
+
+# 2m ramp (5.9%) + 30m crawl (88.2%) + 2m ramp-down (5.9%) = ~1.0
+
+segments:
+  - type: linear
+    duration_pct: 0.059
+    rps_multiplier: 1.0
+
+  - type: flat
+    duration_pct: 0.882
+    rps_multiplier: 1.0
+
+  - type: linear
+    duration_pct: 0.059
+    rps_multiplier: 0.0
