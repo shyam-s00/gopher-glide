@@ -46,6 +46,12 @@ func main() {
 		return
 	}
 
+	// ── profile subcommand router ─────────────────────────────────────────────
+	if len(os.Args) >= 2 && os.Args[1] == "profile" {
+		runProfileCmd(os.Args[2:])
+		return
+	}
+
 	// ── determine config path and flag args ───────────────────────────────────
 	// <config-file> is an optional positional argument. If the first argument
 	// exists and does not start with '-' it is treated as the config file path.
@@ -943,4 +949,101 @@ func validateAssertFlags(latencyReg, errorDelta, payloadPct float64) error {
 		return fmt.Errorf("--payload-size-delta must be > 0, got %g", payloadPct)
 	}
 	return nil
+}
+
+// ── profile subcommand handlers ───────────────────────────────────────────────
+
+func runProfileCmd(args []string) {
+	if len(args) == 0 {
+		profileUsage()
+		os.Exit(1)
+	}
+	switch args[0] {
+	case "list":
+		runProfileList()
+	case "view":
+		runProfileView(args[1:])
+	default:
+		_, _ = fmt.Fprintf(os.Stderr, "unknown profile subcommand %q\n\n", args[0])
+		profileUsage()
+		os.Exit(1)
+	}
+}
+
+func runProfileList() {
+	builtInNames := profile.ListNames()
+	customNames := profile.ListCustomNames()
+
+	// ── Built-in profiles ──────────────────────────────────────────────────
+	fmt.Printf("Built-in Profiles (%d)\n", len(builtInNames))
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	_, _ = fmt.Fprintln(w, "NAME\tPEAK RPS\tDURATION")
+	_, _ = fmt.Fprintln(w, "────\t────────\t────────")
+	for _, name := range builtInNames {
+		prof, err := profile.Load(name)
+		if err != nil {
+			_, _ = fmt.Fprintf(w, "%s\t<error: %v>\t-\t-\n", name, err)
+			continue
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%d\t%s\n",
+			prof.Name,
+			prof.DefaultPeakRPS,
+			profile.FormatDuration(prof.DefaultDuration),
+		)
+	}
+	_ = w.Flush()
+
+	// ── Custom profiles ────────────────────────────────────────────────────
+	fmt.Printf("\nCustom Profiles (%d)\n", len(customNames))
+	if len(customNames) == 0 {
+		fmt.Println("  (none — use `gg profile export <name>` to create one)")
+		return
+	}
+	home, _ := os.UserHomeDir()
+	w2 := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	_, _ = fmt.Fprintln(w2, "NAME\tSTATUS\tFILE")
+	_, _ = fmt.Fprintln(w2, "────\t──────\t────")
+	for _, name := range customNames {
+		status := "ok"
+		if profile.IsBuiltIn(name) {
+			status = "⚠ conflicts with built-in — rename to use"
+		}
+		file := filepath.Join(home, ".config", "gg", "profiles", name+".yaml")
+		_, _ = fmt.Fprintf(w2, "%s\t%s\t%s\n", name, status, file)
+	}
+	_ = w2.Flush()
+}
+
+func runProfileView(args []string) {
+	var name string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		name = args[0]
+	}
+	if name == "" {
+		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg profile view <name>")
+		os.Exit(1)
+	}
+
+	prof, err := profile.Load(name)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "profile view: %v\n", err)
+		os.Exit(1)
+	}
+
+	stages := profile.InflateSegments(prof, prof.DefaultPeakRPS, prof.DefaultDuration)
+
+	fmt.Printf("Profile:     %s\n", prof.Name)
+	fmt.Printf("Description: %s\n", prof.Description)
+	fmt.Printf("Peak RPS:    %d\n", prof.DefaultPeakRPS)
+	fmt.Printf("Duration:    %s\n", profile.FormatDuration(prof.DefaultDuration))
+	fmt.Printf("Segments:    %d  →  %d concrete stages\n\n", len(prof.Segments), len(stages))
+	fmt.Print(profile.RenderASCIIChart(stages))
+}
+
+func profileUsage() {
+	_, _ = fmt.Fprintln(os.Stderr, "Usage: gg profile <subcommand>")
+	_, _ = fmt.Fprintln(os.Stderr, "")
+	_, _ = fmt.Fprintln(os.Stderr, "Subcommands:")
+	_, _ = fmt.Fprintln(os.Stderr, "  list              list all built-in and custom profiles")
+	_, _ = fmt.Fprintln(os.Stderr, "  view <name>       show a profile's shape and ASCII chart")
 }

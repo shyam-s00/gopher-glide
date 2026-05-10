@@ -39,6 +39,15 @@ func Load(name string) (*Profile, error) {
 	if home, err := os.UserHomeDir(); err == nil {
 		globalPath := filepath.Join(home, ".config", "gg", "profiles", filename)
 		if _, err := os.Stat(globalPath); err == nil {
+			// Collision guard: built-in names are reserved and cannot be
+			// overridden by a file in the user config directory.
+			if IsBuiltIn(slug) {
+				return nil, fmt.Errorf(
+					"%w: %q is a built-in profile and cannot be overridden.\n"+
+						"Rename the file in ~/.config/gg/profiles/ to a custom name and try again",
+					ErrBuiltInProfileConflict, slug,
+				)
+			}
 			return loadFile(globalPath)
 		}
 	}
@@ -56,6 +65,41 @@ func ListNames() []string {
 		return nil
 	}
 	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") {
+			names = append(names, strings.TrimSuffix(e.Name(), ".yaml"))
+		}
+	}
+	return names
+}
+
+// IsBuiltIn reports whether name matches one of the 21 shipped built-in
+// profiles. The .yaml extension is stripped before comparison.
+func IsBuiltIn(name string) bool {
+	slug := strings.TrimSuffix(name, ".yaml")
+	for _, n := range ListNames() {
+		if n == slug {
+			return true
+		}
+	}
+	return false
+}
+
+// ListCustomNames returns the names of all profile YAML files found in
+// ~/.config/gg/profiles/ (without the .yaml extension). Names are returned
+// in directory order. Names that collide with built-in profiles are included;
+// callers can use IsBuiltIn to detect and surface conflicts.
+func ListCustomNames() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	dir := filepath.Join(home, ".config", "gg", "profiles")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var names []string
 	for _, e := range entries {
 		if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") {
 			names = append(names, strings.TrimSuffix(e.Name(), ".yaml"))
