@@ -77,12 +77,15 @@ type Profile struct {
 	Segments []Segment `yaml:"segments"`
 }
 
-// TotalNonZeroPct returns the sum of all non-zero DurationPct values.
+// TotalNonZeroPct returns the sum of all non-zero DurationPct values,
+// skipping instant (zero-duration) step transitions.
 // A well-formed profile should return a value very close to 1.0.
 func (p *Profile) TotalNonZeroPct() float64 {
 	var total float64
 	for _, s := range p.Segments {
-		total += s.DurationPct
+		if s.DurationPct != 0 {
+			total += s.DurationPct
+		}
 	}
 	return total
 }
