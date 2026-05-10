@@ -193,6 +193,33 @@ func TestRenderASCIIChart_RealProfile_FlashSale(t *testing.T) {
 	}
 }
 
+// TestRPSAtFraction_StepBoundary verifies that an instant (Duration==0) step
+// stage is applied when the sample lands exactly on the step's time boundary
+// (target == elapsed), not just when it has strictly passed it.
+func TestRPSAtFraction_StepBoundary(t *testing.T) {
+	// Layout: instant jump to 100 at t=0, then hold for 60s.
+	stages := []config.Stage{
+		{Duration: 0, TargetRPS: 100},                // instant step at t=0
+		{Duration: 60 * time.Second, TargetRPS: 100}, // hold at peak
+	}
+	// Sample at fraction 0.0 — the sample time is exactly at elapsed==0,
+	// which is the boundary where the step lives. The returned RPS must
+	// reflect the post-step value (100), not the pre-step value (0).
+	got := profile.RenderASCIIChart(stages)
+	if got == "" {
+		t.Fatal("expected non-empty chart")
+	}
+	lines := strings.Split(got, "\n")
+	parts := strings.SplitN(lines[0], "│", 2)
+	if len(parts) < 2 {
+		t.Fatalf("first row has no '│' separator: %q", lines[0])
+	}
+	// Every column should be filled because the step fires at t=0.
+	if strings.ContainsRune(parts[1], ' ') {
+		t.Errorf("top row has empty columns; step at t=0 boundary was not applied: %q", parts[1])
+	}
+}
+
 func TestRenderASCIIChart_ChartWidthIs60Columns(t *testing.T) {
 	stages := []config.Stage{
 		{Duration: 60 * time.Second, TargetRPS: 100},

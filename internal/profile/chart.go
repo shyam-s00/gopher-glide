@@ -155,9 +155,9 @@ func rpsAtFraction(stages []config.Stage, totalDur time.Duration, t float64) flo
 
 	for _, s := range stages {
 		if s.Duration == 0 {
-			// Instant jump at time `elapsed`. Only apply it if we have
-			// already passed (or are exactly at) this point in time.
-			if target > elapsed {
+			// Instant jump at time `elapsed`. Apply it if we have already
+			// reached (or are exactly at) this point in time.
+			if target >= elapsed {
 				prevRPS = float64(s.TargetRPS)
 			}
 			continue
