@@ -14,9 +14,11 @@ import (
 //
 //  1. Exact file path — if name contains a path separator or ends with ".yaml"
 //     it is treated as a direct file path and loaded as-is.
-//  2. Local bundled copy — ./profiles/<name>.yaml relative to the working dir.
-//  3. Global user config  — ~/.config/gg/profiles/<name>.yaml.
-//  4. Embedded binary     — the 21 profiles baked into the binary at build time.
+//  2. Global user config  — ~/.config/gg/profiles/<name>.yaml.
+//     Built-in names are reserved: if the file exists but the slug matches a
+//     built-in profile, Load returns ErrBuiltInProfileConflict instead of
+//     silently overriding the canonical definition.
+//  3. Embedded binary     — the 21 profiles baked into the binary at build time.
 //
 // name should be the profile slug (e.g. "flash-sale") without the .yaml suffix,
 // or a full file path for custom profiles outside the standard directories.
@@ -29,13 +31,7 @@ func Load(name string) (*Profile, error) {
 	slug := strings.TrimSuffix(name, ".yaml")
 	filename := slug + ".yaml"
 
-	// ── 2. Local ./profiles/ ───────────────────────────────────────────────
-	localPath := filepath.Join("profiles", filename)
-	if _, err := os.Stat(localPath); err == nil {
-		return loadFile(localPath)
-	}
-
-	// ── 3. Global ~/.config/gg/profiles/ ──────────────────────────────────
+	// ── 2. Global ~/.config/gg/profiles/ ──────────────────────────────────
 	if home, err := os.UserHomeDir(); err == nil {
 		globalPath := filepath.Join(home, ".config", "gg", "profiles", filename)
 		if _, err := os.Stat(globalPath); err == nil {
@@ -52,7 +48,7 @@ func Load(name string) (*Profile, error) {
 		}
 	}
 
-	// ── 4. Embedded fallback ───────────────────────────────────────────────
+	// ── 3. Embedded fallback ───────────────────────────────────────────────
 	return loadEmbedded(slug)
 }
 
@@ -108,7 +104,54 @@ func ListCustomNames() []string {
 	return names
 }
 
-// ── private helpers ──────────────────────────────────────────────────────────
+// ExportEmbedded copies the embedded YAML for the named built-in profile to
+// ~/.config/gg/profiles/<name>.yaml and returns the destination path.
+// The directory is created if it does not already exist.
+//
+// Because built-in names are reserved, the exported file cannot be used
+// with --profile until the user renames it to a custom name.
+// If a file already exists at the destination, ErrExportConflict is returned
+// so the caller can surface a clear message without silently overwriting edits.
+func ExportEmbedded(name string) (string, error) {
+	slug := strings.TrimSuffix(name, ".yaml")
+	if !IsBuiltIn(slug) {
+		return "", fmt.Errorf("%w: %q is not a built-in profile", ErrProfileNotFound, slug)
+	}
+
+	data, err := embeddedProfiles.ReadFile("data/" + slug + ".yaml")
+	if err != nil {
+		return "", fmt.Errorf("%w: read embedded %q: %v", ErrProfileNotFound, slug, err)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+
+	dir := filepath.Join(home, ".config", "gg", "profiles")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("create profiles directory %q: %w", dir, err)
+	}
+
+	dest := filepath.Join(dir, slug+".yaml")
+	if _, err := os.Stat(dest); err == nil {
+		return dest, ErrExportConflict
+	}
+
+	if err := os.WriteFile(dest, data, 0644); err != nil {
+		return "", fmt.Errorf("write profile %q: %w", dest, err)
+	}
+	return dest, nil
+}
+
+// LoadBuiltIn loads a profile exclusively from the embedded binary, bypassing
+// the resolution hierarchy and collision guard. It is intended for tooling that
+// always needs the canonical built-in definition (e.g. `gg profile list`,
+// `gg profile view`). Use Load for the normal --profile flag path.
+func LoadBuiltIn(name string) (*Profile, error) {
+	slug := strings.TrimSuffix(name, ".yaml")
+	return loadEmbedded(slug)
+}
 
 // isFilePath returns true when name looks like a file path rather than a
 // profile slug. It matches names that contain a path separator or end in .yaml.

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -342,6 +343,15 @@ func main() {
 	}
 
 	fmt.Println("Starting...")
+	// ── ASCII chart preview (profile runs only) ───────────────────────────────
+	// Print the traffic shape so users know exactly what is about to happen
+	// before the TUI takes over the terminal. Skipped in headless mode because
+	// structured log output starts immediately after this point.
+	if cliProfileSet && !*headless {
+		if chart := profile.RenderASCIIChart(cfg.Stages); chart != "" {
+			fmt.Print(chart)
+		}
+	}
 	renderer := ui.New(*headless)
 	if *headless {
 		if hr, ok := renderer.(*ui.HeadlessRenderer); ok {
@@ -963,6 +973,8 @@ func runProfileCmd(args []string) {
 		runProfileList()
 	case "view":
 		runProfileView(args[1:])
+	case "export":
+		runProfileExport(args[1:])
 	default:
 		_, _ = fmt.Fprintf(os.Stderr, "unknown profile subcommand %q\n\n", args[0])
 		profileUsage()
@@ -980,7 +992,7 @@ func runProfileList() {
 	_, _ = fmt.Fprintln(w, "NAME\tPEAK RPS\tDURATION")
 	_, _ = fmt.Fprintln(w, "────\t────────\t────────")
 	for _, name := range builtInNames {
-		prof, err := profile.Load(name)
+		prof, err := profile.LoadBuiltIn(name)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, "%s\t<error: %v>\t-\t-\n", name, err)
 			continue
@@ -1024,7 +1036,15 @@ func runProfileView(args []string) {
 		os.Exit(1)
 	}
 
-	prof, err := profile.Load(name)
+	// Use LoadBuiltIn for built-in names so the view always shows the
+	// canonical definition, unaffected by files in ~/.config/gg/profiles/.
+	var prof *profile.Profile
+	var err error
+	if profile.IsBuiltIn(name) {
+		prof, err = profile.LoadBuiltIn(name)
+	} else {
+		prof, err = profile.Load(name)
+	}
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "profile view: %v\n", err)
 		os.Exit(1)
@@ -1046,4 +1066,36 @@ func profileUsage() {
 	_, _ = fmt.Fprintln(os.Stderr, "Subcommands:")
 	_, _ = fmt.Fprintln(os.Stderr, "  list              list all built-in and custom profiles")
 	_, _ = fmt.Fprintln(os.Stderr, "  view <name>       show a profile's shape and ASCII chart")
+	_, _ = fmt.Fprintln(os.Stderr, "  export <name>     copy a built-in profile to ~/.config/gg/profiles/ for customization")
+}
+
+func runProfileExport(args []string) {
+	var name string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		name = args[0]
+	}
+	if name == "" {
+		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg profile export <name>")
+		os.Exit(1)
+	}
+
+	dest, err := profile.ExportEmbedded(name)
+	if err != nil {
+		if errors.Is(err, profile.ErrExportConflict) {
+			_, _ = fmt.Fprintf(os.Stderr,
+				"profile export: file already exists at %s\n"+
+					"Delete or rename it first if you want a fresh copy.\n", dest)
+			os.Exit(1)
+		}
+		_, _ = fmt.Fprintf(os.Stderr, "profile export: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("✓ Exported %q to %s\n\n", name, dest)
+	fmt.Println("Next steps:")
+	fmt.Printf("  1. Rename: mv %s ~/.config/gg/profiles/<custom-name>.yaml\n", dest)
+	fmt.Println("  2. Edit the YAML to tune the segments, peak RPS, and duration.")
+	fmt.Println("  3. Run: gg --profile <custom-name> --http-file target.http")
+	fmt.Println("")
+	fmt.Println("Note: built-in names are reserved. The file must be renamed before use.")
 }

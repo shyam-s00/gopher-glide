@@ -51,9 +51,11 @@ func TestLoad_EmbeddedProfile(t *testing.T) {
 func TestLoad_AllEmbeddedProfilesParseCleanly(t *testing.T) {
 	for _, name := range profile.ListNames() {
 		t.Run(name, func(t *testing.T) {
-			p, err := profile.Load(name)
+			// Use LoadBuiltIn to bypass the resolution hierarchy so the test
+			// is not affected by any files in ~/.config/gg/profiles/.
+			p, err := profile.LoadBuiltIn(name)
 			if err != nil {
-				t.Fatalf("Load(%q): %v", name, err)
+				t.Fatalf("LoadBuiltIn(%q): %v", name, err)
 			}
 			if p.DefaultDuration <= 0 {
 				t.Errorf("DefaultDuration must be > 0")

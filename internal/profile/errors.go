@@ -13,3 +13,7 @@ var ErrInvalidProfile = errors.New("invalid profile")
 // ErrBuiltInProfileConflict is returned when a file in ~/.config/gg/profiles/
 // uses the same name as one of the 21 shipped built-in profiles.
 var ErrBuiltInProfileConflict = errors.New("built-in profile conflict")
+
+// ErrExportConflict is returned by ExportEmbedded when a file already exists
+// at the export destination, preventing a silent overwrite.
+var ErrExportConflict = errors.New("export conflict: file already exists")
