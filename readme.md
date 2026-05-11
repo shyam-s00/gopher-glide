@@ -6,8 +6,8 @@
   </picture>
 </div>
 
-<h1 align="center">Gopher Glide (gg) 🚀</h1>
-<p align="center"><b>High-Performance API Load Testing Tool Built in Go</b></p>
+<h1 align="center">Gopher-Glide (gg) 🚀</h1>
+<p align="center"><b>High-fidelity API traffic simulation from your IDE. Beyond brute-force load testing.</b></p>
 
 <p align="center">
   <a href="https://github.com/shyam-s00/gopher-glide/actions/workflows/ci.yml"><img src="https://github.com/shyam-s00/gopher-glide/actions/workflows/ci.yml/badge.svg" alt="Build"></a>
@@ -19,9 +19,9 @@
 
 ---
 
-**Gopher Glide (gg)** is a modern, zero-scripting **API load testing** and **performance benchmarking** CLI built in Go. Designed as a lightweight alternative to tools like k6, Gatling, or Locust, `gg` runs standard `.http` files right out of the box. 
+**Gopher-Glide (gg)** is an open-source, high-fidelity **API traffic simulator** built in Go. Designed to move beyond brute-force load testing, `gg` runs your standard IDE `.http` REST Client files right out of the box. 
 
-Generate high-concurrency traffic with a dynamic terminal UI, adjust RPS in real-time, and catch API regressions using built-in semantic JSON snapshotting. No agents, no servers, no boilerplate code.
+Generate perfectly smooth, high-concurrency traffic using the lock-free Actor Model. Adjust RPS in real-time via the interactive TUI, catch API regressions using semantic snapshots (`gg snap`), and integrate natively into your CI/CD pipelines. No scripting, no boilerplate code.
 
 👉 **[Read the Full Documentation](https://gopherglide.dev/)**
 

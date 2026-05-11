@@ -1,5 +1,5 @@
 site_name: Gopher Glide (gg)
-site_description: High-Performance API Load Testing Tool Built in Go
+site_description: High-fidelity API traffic simulation from your IDE. Beyond brute-force load testing.
 site_url: https://gopherglide.dev
 repo_url: https://github.com/shyam-s00/gopher-glide
 
@@ -8,12 +8,35 @@ theme:
   logo: assets/ggToolIcon_dark.svg
   favicon: assets/pluginIcon.svg
   palette:
-    scheme: slate
-    primary: deep purple
-    accent: cyan
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
   features:
     - navigation.tabs
     - content.code.copy
+
+markdown_extensions:
+  - attr_list
+  - md_in_html
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
 extra_css:
   - stylesheets/extra.css

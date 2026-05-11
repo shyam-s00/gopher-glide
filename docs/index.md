@@ -1,13 +1,58 @@
-# Why Gopher Glide? (vs k6, Locust, JMeter)
+---
+hide:
+  - navigation
+---
 
-Developers frequently look for a **lightweight alternative** to traditional tools. Most load testers require you to translate your API requests into JavaScript, Python, or heavy XML configs. 
+# High-fidelity API traffic simulation from your IDE.
 
-**Gopher Glide** offers a **scriptless load testing** experience:
+**Gopher-Glide (gg)** is an open-source, high-fidelity API traffic simulator. Move beyond brute-force load testing with native IDE integration, zero-config profiles, and an interactive TUI that lets you inject chaos in real-time.
 
-1. **Zero-Scripting:** Reuse your existing VS Code or JetBrains IDE `.http` REST Client files directly.
-2. **Behavioral Profiling:** Not just metrics, `gg` captures payload sizes and infers JSON schemas for **API schema regression testing** and **semantic API diffing**.
-3. **Interactive Load Generation:** The live Director Mode allows you to bias RPS up or down in real-time.
-4. **CI/CD Ready:** Use the built-in `--headless` mode and `gg snap assert` command to act as an automated performance and regression gate in your test pipelines.
+[Get Started (Quickstart)](#installation-quick-start){ .md-button .md-button--primary }
+[View on GitHub](https://github.com/shyam-s00/gopher-glide){ .md-button }
+
+---
+
+## Why Gopher-Glide?
+
+<div class="grid cards" markdown>
+
+-   :material-code-braces: **Code-to-Load Pipeline**
+    
+    ---
+    Reuse your existing `.http` REST Client files directly. Featuring a native JetBrains IDE plugin, there is no need to rewrite requests in JavaScript or Python. Just point `gg` at your file and go.
+
+-   :material-chart-bell-curve-cumulative: **Zero-Config Profiles**
+    
+    ---
+    Skip writing complex YAML configs. Use built-in patterns like `--profile flash-sale` or `--profile ddos` to generate standard industry traffic shapes instantly.
+
+-   :material-monitor-dashboard: **Interactive Chaos TUI**
+    
+    ---
+    Adjust traffic in real-time with Director Mode. Bias RPS up or down using your arrow keys, and watch the beautiful terminal UI react instantly.
+
+-   :material-camera-iris: **Semantic Snapshots (`gg snap`)**
+    
+    ---
+    Record and view behavioral snapshots (latency, status distributions, and inferred JSON schemas) for semantic API diffing and regression testing.
+
+-   :material-robot-outline: **CI/CD Ready (Headless Mode)**
+    
+    ---
+    Run perfectly in CI pipelines using the built-in `--headless` mode. Combine with `gg snap assert` to act as an automated performance and regression gate.
+
+-   :material-engine: **Coming Soon: The Hive Engine**
+    
+    ---
+    The upcoming Hive Engine introduces a lock-free Actor Model. Soon, you'll be able to simulate organic, stateful user journeys with ultra-high RPS from a single instance.
+
+</div>
+
+---
+
+## How does it compare?
+
+Unlike traditional tools (**k6, Locust, JMeter**) that require you to translate your API requests into JavaScript, Python, or heavy XML configs, Gopher-Glide offers a **scriptless** experience. By natively supporting `.http` files and utilizing an Actor Model for traffic generation, you get the performance of a compiled Go binary with the developer experience of your favorite IDE.
 
 ---
 
