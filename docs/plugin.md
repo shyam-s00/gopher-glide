@@ -12,12 +12,9 @@ Gopher Glide features an official [JetBrains plugin](https://plugins.jetbrains.c
 
 ## Installing the Plugin
 
-<div id="jb-plugin-widget"></div>
-
-<script src="https://plugins.jetbrains.com/assets/scripts/mp-widget.js"></script>
-<script>
-  MarketplaceWidget.setupMarketplaceWidget('install', 30983, "#jb-plugin-widget");
-</script>
+<a href="https://plugins.jetbrains.com/plugin/30983-gopher-glide" class="md-button md-button--primary">
+  Download from JetBrains Marketplace
+</a>
 
 Or install manually:
 

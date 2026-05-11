@@ -1,99 +1,149 @@
 ---
 hide:
   - navigation
+  - toc
 ---
 
-# High-fidelity API traffic simulation from your IDE.
+<div class="tx-container" markdown="1">
 
-**Gopher-Glide (gg)** is an open-source, high-fidelity API traffic simulator. Move beyond brute-force load testing with native IDE integration, zero-config profiles, and an interactive TUI that lets you inject chaos in real-time.
-
-[Get Started (Quickstart)](#installation-quick-start){ .md-button .md-button--primary }
-[View on GitHub](https://github.com/shyam-s00/gopher-glide){ .md-button }
-
----
-
-## Why Gopher-Glide?
-
-<div class="grid cards" markdown>
-
--   :material-code-braces: **Code-to-Load Pipeline**
-    
-    ---
-    Reuse your existing `.http` REST Client files directly. Featuring a native JetBrains IDE plugin, there is no need to rewrite requests in JavaScript or Python. Just point `gg` at your file and go.
-
--   :material-chart-bell-curve-cumulative: **Zero-Config Profiles**
-    
-    ---
-    Skip writing complex YAML configs. Use built-in patterns like `--profile flash-sale` or `--profile ddos` to generate standard industry traffic shapes instantly.
-
--   :material-monitor-dashboard: **Interactive Chaos TUI**
-    
-    ---
-    Adjust traffic in real-time with Director Mode. Bias RPS up or down using your arrow keys, and watch the beautiful terminal UI react instantly.
-
--   :material-camera-iris: **Semantic Snapshots (`gg snap`)**
-    
-    ---
-    Record and view behavioral snapshots (latency, status distributions, and inferred JSON schemas) for semantic API diffing and regression testing.
-
--   :material-robot-outline: **CI/CD Ready (Headless Mode)**
-    
-    ---
-    Run perfectly in CI pipelines using the built-in `--headless` mode. Combine with `gg snap assert` to act as an automated performance and regression gate.
-
--   :material-engine: **Coming Soon: The Hive Engine**
-    
-    ---
-    The upcoming Hive Engine introduces a lock-free Actor Model. Soon, you'll be able to simulate organic, stateful user journeys with ultra-high RPS from a single instance.
-
+<div class="tx-hero">
+  <img src="assets/ggToolIcon_dark.svg" alt="Gopher-Glide Logo" width="280" style="margin-bottom: 0.5rem;" class="tx-hero-logo">
+  <h1>High-fidelity API traffic simulation from your IDE.</h1>
+  <p>Gopher-Glide (gg) is an open-source, high-fidelity API traffic simulator. Move beyond brute-force load testing with native IDE integration, zero-config profiles, and an interactive TUI that lets you inject chaos in real-time.</p>
+  
+  <div class="tx-hero-buttons">
+    <a href="#quick-start" class="md-button md-button--primary">Get Started</a>
+    <a href="https://github.com/shyam-s00/gopher-glide" class="md-button">View on GitHub</a>
+  </div>
 </div>
 
----
+<div class="tx-feature-row" markdown="1">
+<div class="tx-feature-text" markdown="1">
 
-## How does it compare?
+## Code-to-Load Pipeline
+Reuse your existing `.http` REST Client files directly. Featuring a native JetBrains IDE plugin, there is no need to rewrite requests in JavaScript or Python. Just point `gg` at your file and go.
 
-Unlike traditional tools (**k6, Locust, JMeter**) that require you to translate your API requests into JavaScript, Python, or heavy XML configs, Gopher-Glide offers a **scriptless** experience. By natively supporting `.http` files and utilizing an Actor Model for traffic generation, you get the performance of a compiled Go binary with the developer experience of your favorite IDE.
+</div>
+<div class="tx-feature-visual" markdown="1">
 
----
+```http
+### Simulated User Journey
+POST http://api.example.com/login
+Content-Type: application/json
 
-## Features
+{ "user": "tester", "pass": "secure" }
 
-- **Zero-Config Profiles** — skip writing complex YAML files. Use built-in patterns like `--profile flash-sale` or `--profile ddos` to generate standard industry traffic shapes.
-- **Native `.http` file support** — define requests (with headers and bodies) using the familiar REST Client format; point `gg` at your existing file and go
-- **Multi-stage load engine** — define any number of stages; the engine linearly interpolates (LERP) RPS between stages automatically
-  - **Ramp Up** — smoothly increase the load to a target RPS
-  - **Sustain** — hold a fixed RPS for a duration
-  - **Spike** — instant step jump (`duration: 0s`) with no interpolation
-  - **Ramp Down** — smoothly reduce the load back to zero (cool-down)
-  - **Named stages** — optional `name:` field used in the TUI timeline label
-- **RPS-based scheduler** — drift-free ticker dispatches requests at the configured rate; never accumulates lag across second boundaries
-- **Concurrent worker pool** — powered by `errgroup` + channels; worker count scales to peak RPS across all stages; minimal memory footprint
-- **Jitter** — configurable `±N%` organic noise on the RPS ticker so load patterns look realistic rather than mechanical
-- **Timescale** — `time_scale` compresses or stretches the stage clock for fast local iteration (e.g. `time_scale: 10` runs a 10-minute plan in 60 seconds)
-- **Director Mode** — live RPS bias while a run is in progress:
-  - `↑` / `↓` keys adjust the running RPS by ±5 in real-time
-  - Bias is applied on top of the LERP'd stage target and shown in the TUI
-- **Live TUI dashboard** — rendered with Bubble Tea & Lip Gloss
-- **Semantic Snapshots (`gg snap`)** — record and view behavioral snapshots (latency, status distribution, and inferred JSON schemas) for **semantic API diffing** and regression testing.
-- **Stamped binaries** — version, git commit, and build date embedded at compile time via `-ldflags`
-- **Cross-platform** — pre-built binaries for Linux (amd64), macOS (arm64), and Windows (amd64)
-- **JetBrains Plugin** — a dedicated IDE plugin is available for integrating Gopher Glide runs into your workflow
+> {%
+    client.global.set("token", response.body.token);
+%}
 
----
-
-## Installation & Quick Start
-
-### 1. macOS / Linux (Homebrew)
-The easiest way to install is via Homebrew:
-```bash
-brew install shyam-s00/tap/gg
+### Fetch user profile using token
+GET http://api.example.com/profile
+Authorization: Bearer {{token}}
 ```
 
-### 2. Docker
-Perfect for CI/CD pipelines:
+</div>
+</div>
+
+<div class="tx-feature-row reverse" markdown="1">
+<div class="tx-feature-text" markdown="1">
+
+## Zero-Config Profiles
+Skip writing complex YAML configs. Use built-in patterns like `--profile flash-sale` or `--profile ddos` to generate standard industry traffic shapes instantly.
+
+Perfect for quick validation or CI/CD pipelines where you don't want to maintain external configuration files.
+
+</div>
+<div class="tx-feature-visual" markdown="1">
+
 ```bash
-docker run --rm -v $(pwd):/workspace ghcr.io/shyam-s00/gopher-glide:latest config.yaml
+$ gg run checkout.http --profile flash-sale
+
+[Stages]
+1. Ramp Up: 0 -> 1000 RPS (30s)
+2. Sustain: 1000 RPS (2m)
+3. Cool Down: 1000 -> 0 RPS (30s)
+
+[Status] Running Stage 2 (Sustain)...
 ```
 
-### 3. Pre-built binary
-Go to the [Releases](https://github.com/shyam-s00/gopher-glide/releases) page and download the archive for your platform. Extract the binary and place it in your `$PATH`.
+</div>
+</div>
+
+<div class="tx-feature-row" markdown="1">
+<div class="tx-feature-text" markdown="1">
+
+## Interactive Chaos TUI
+Adjust traffic in real-time using the interactive TUI. Bias RPS up or down using your arrow keys, and watch the beautiful terminal UI react instantly. 
+
+Combined with `gg snap`, you can record behavioral snapshots of your API's latency, status distributions, and inferred JSON schemas.
+
+</div>
+<div class="tx-feature-visual" markdown="1">
+
+```bash
+# Adjust traffic dynamically during a run
+$ gg run api.http --profile sustain
+
+[↑] Increase Load (+50 RPS)
+[↓] Decrease Load (-50 RPS)
+[Q] Quit & Generate Report
+```
+
+</div>
+</div>
+<div class="tx-upcoming-banner" markdown="1">
+<h3>🚧 Coming Soon: The Hive Engine</h3>
+<p>The upcoming <b>Hive Engine</b> introduces a lock-free Actor Model. Soon, you'll be able to simulate organic, stateful user journeys with ultra-high RPS from a single instance.</p>
+</div>
+
+<div class="tx-steps-section" style="background: transparent; padding-top: 2rem; padding-bottom: 0;" markdown="1">
+<h2>Why Gopher-Glide?</h2>
+<p style="margin-bottom: 2rem; color: var(--md-default-fg-color--light);">Feature comparison against traditional load testing tools.</p>
+
+| Feature | Gopher-Glide (gg) | k6 | Locust | JMeter |
+|---------|-------------------|----|--------|--------|
+| **Scripting Language** | IDE `.http` (Zero Code) | JavaScript | Python | XML / UI |
+| **IDE Integration** | ✅ Native Plugin | ❌ External | ❌ External | ❌ External |
+| **Pre-built Profiles** | ✅ Built-in Patterns | ❌ Scripted | ❌ Scripted | ❌ Configured |
+| **API Snapshots** | ✅ `gg snap` | ❌ No | ❌ No | ❌ No |
+| **Real-time TUI** | ✅ Yes (Director) | ❌ No | ❌ No | ❌ No |
+| **CI/CD Native** | ✅ Yes (Headless) | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Stateful Simulation** | Upcoming | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Memory Footprint** | Extremely Low | Medium | High | High |
+
+</div>
+<div class="tx-steps-section" markdown="1" id="quick-start">
+<h2>Three steps. Zero config.</h2>
+
+<div class="tx-steps-grid" markdown="1">
+<div class="tx-step-card" markdown="1">
+<div class="tx-step-number">01</div>
+<h3>Install</h3>
+<p>Get the binary via Homebrew in seconds.</p>
+<code class="tx-step-code">brew install shyam-s00/tap/gg</code>
+</div>
+
+<div class="tx-step-card" markdown="1">
+<div class="tx-step-number">02</div>
+<h3>Write</h3>
+<p>Use your existing IDE `.http` files.</p>
+<code class="tx-step-code">GET http://localhost:8080/health</code>
+</div>
+
+<div class="tx-step-card" markdown="1">
+<div class="tx-step-number">03</div>
+<h3>Simulate</h3>
+<p>Run the traffic simulator with a built-in profile.</p>
+<code class="tx-step-code">gg run api.http --profile sustain</code>
+</div>
+</div>
+</div>
+
+<div class="tx-cta-banner">
+  <div class="tx-cta-title">Stop testing load. Start simulating reality.</div>
+  <p>Open-source, highly concurrent, and built in Go.</p>
+  <a href="https://github.com/shyam-s00/gopher-glide" class="md-button md-button--primary">Star us on GitHub ⭐</a>
+</div>
+
+</div>
