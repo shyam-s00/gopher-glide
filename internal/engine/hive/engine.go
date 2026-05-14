@@ -23,19 +23,6 @@ import (
 
 const userAgent = "gg/1.0"
 
-// ── Placeholder types ─────────────────────────────────────────────────────────
-
-// metrics holds all atomic request counters.
-type metrics struct {
-	totalRequests atomic.Int64
-	successCount  atomic.Int64
-	failureCount  atomic.Int64
-	totalLatency  atomic.Int64
-}
-
-// rpsWindow is a sliding-window RPS tracker.
-type rpsWindow struct{}
-
 // ── Engine ────────────────────────────────────────────────────────────────────
 
 // Engine is the Hive Engine. It implements engine.Runner and will be
@@ -79,7 +66,7 @@ type Engine struct {
 	targetRPS atomic.Int64
 	rpsBias   atomic.Int64
 	// biasCh receives RPS delta values from the TUI.
-	// Buffered so TUI sends never block regardless of Queen drain speed.
+	// Buffered so TUI never sends a block regardless of Queen drain speed.
 	biasCh chan int
 
 	// ── Snap / sampling ───────────────────────────────────────────────────
