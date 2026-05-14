@@ -27,54 +27,6 @@ type Metrics struct {
 	totalLatency  atomic.Int64
 }
 
-// rpsWindow is a fixed-size ring of per-second request counts used to
-// compute a smooth, responsive current-RPS without any cumulative lag.
-const rpsWindowSize = 3 // seconds to average over — short enough to be responsive
-
-type rpsWindow struct {
-	mu      sync.Mutex
-	buckets [rpsWindowSize]int64
-	seconds [rpsWindowSize]int64 // unix second each bucket belongs to
-}
-
-func (w *rpsWindow) record(count int64) {
-	now := time.Now().Unix()
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	slot := int(now % rpsWindowSize)
-	if w.seconds[slot] != now {
-		w.seconds[slot] = now
-		w.buckets[slot] = 0
-	}
-	w.buckets[slot] += count
-}
-
-// rate returns the request rate over the past rpsWindowSize seconds.
-// It always divides by the full window width so there is no oscillation at
-// second boundaries — only complete past seconds count (current second is
-// excluded because it is still accumulating).
-func (w *rpsWindow) rate() float64 {
-	now := time.Now().Unix()
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	var total int64
-	// Sum the (rpsWindowSize - 1) fully-completed seconds before now.
-	// Skipping "now" avoids a partial-second low reading at the boundary.
-	for i := 0; i < rpsWindowSize; i++ {
-		age := now - w.seconds[i]
-		if age >= 1 && age < rpsWindowSize {
-			total += w.buckets[i]
-		}
-	}
-	// Divide by the number of complete seconds we looked at.
-	windowSecs := float64(rpsWindowSize - 1)
-	if windowSecs < 1 {
-		windowSecs = 1
-	}
-	return float64(total) / windowSecs
-}
-
 type MetricsSnapshot struct {
 	TotalRequests int64
 	SuccessCount  int64
@@ -124,7 +76,7 @@ type Engine struct {
 	latencyMu sync.RWMutex
 
 	// rpsWin gives a responsive current-rate without cumulative lag.
-	rpsWin rpsWindow
+	rpsWin RpsWindow
 
 	// stage progress (written by stage-runner goroutine, read by TUI)
 	currentStage atomic.Int32
@@ -267,7 +219,7 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 					e.metrics.successCount.Add(1)
 				}
 				e.metrics.totalRequests.Add(1)
-				e.rpsWin.record(1)
+				e.rpsWin.Record(1)
 				e.activeVPU.Add(-1)
 			}
 			return nil
@@ -547,7 +499,7 @@ func (e *Engine) GetMetrics() *MetricsSnapshot {
 
 	// Use the sliding-window rate for a responsive current-RPS display.
 	// Falls back to 0 when the engine hasn't started yet.
-	throughput := e.rpsWin.rate()
+	throughput := e.rpsWin.Rate()
 
 	minL, maxL, p50, p95, p99 := e.computeLatency()
 

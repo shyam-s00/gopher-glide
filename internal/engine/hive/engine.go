@@ -41,7 +41,7 @@ type Engine struct {
 	// ── Metrics ───────────────────────────────────────────────────────────
 	counters     metrics
 	activeActors atomic.Int32
-	rpsWin       rpsWindow
+	rpsWin       engine.RpsWindow
 
 	// ── Latency percentile slice ──────────────────────────────────────────
 	latencies []float64

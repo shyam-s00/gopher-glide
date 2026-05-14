@@ -3,156 +3,222 @@ package hive
 import (
 	"testing"
 	"time"
+	"unsafe"
+
+	"github.com/shyam-s00/gopher-glide/internal/engine"
 )
 
-// ── metrics ───────────────────────────────────────────────────────────────────
+// ── paddedCounter ─────────────────────────────────────────────────────────────
+
+func TestPaddedCounter_CacheLineSize(t *testing.T) {
+	// Each paddedCounter must be exactly 64 bytes so it occupies one CPU cache
+	// line and no two shards share a line.
+	got := unsafe.Sizeof(paddedCounter{})
+	if got != 64 {
+		t.Errorf("paddedCounter size: want 64 bytes (one cache line), got %d", got)
+	}
+}
+
+func TestPaddedCounter_ZeroValue(t *testing.T) {
+	var c paddedCounter
+	if c.value != 0 {
+		t.Errorf("zero paddedCounter should have value 0, got %d", c.value)
+	}
+}
+
+// ── metrics — write path ──────────────────────────────────────────────────────
 
 func TestMetrics_ZeroState(t *testing.T) {
 	var m metrics
-	if v := m.totalRequests.Load(); v != 0 {
+	if v := m.loadTotalRequests(); v != 0 {
 		t.Errorf("totalRequests: want 0, got %d", v)
 	}
-	if v := m.successCount.Load(); v != 0 {
+	if v := m.loadSuccessCount(); v != 0 {
 		t.Errorf("successCount: want 0, got %d", v)
 	}
-	if v := m.failureCount.Load(); v != 0 {
+	if v := m.loadFailureCount(); v != 0 {
 		t.Errorf("failureCount: want 0, got %d", v)
 	}
-	if v := m.totalLatency.Load(); v != 0 {
+	if v := m.loadTotalLatency(); v != 0 {
 		t.Errorf("totalLatency: want 0, got %d", v)
 	}
 }
 
-func TestMetrics_AtomicAdd(t *testing.T) {
+func TestMetrics_IncAndLoad(t *testing.T) {
 	var m metrics
-	m.totalRequests.Add(10)
-	m.successCount.Add(7)
-	m.failureCount.Add(3)
-	m.totalLatency.Add(500)
+	// Use shard 0 for simplicity.
+	m.incTotalRequests(0)
+	m.incTotalRequests(0)
+	m.incSuccess(0)
+	m.incFailure(0)
+	m.addLatency(0, 250)
 
-	if v := m.totalRequests.Load(); v != 10 {
-		t.Errorf("totalRequests: want 10, got %d", v)
+	if v := m.loadTotalRequests(); v != 2 {
+		t.Errorf("totalRequests: want 2, got %d", v)
 	}
-	if v := m.successCount.Load(); v != 7 {
-		t.Errorf("successCount: want 7, got %d", v)
+	if v := m.loadSuccessCount(); v != 1 {
+		t.Errorf("successCount: want 1, got %d", v)
 	}
-	if v := m.failureCount.Load(); v != 3 {
-		t.Errorf("failureCount: want 3, got %d", v)
+	if v := m.loadFailureCount(); v != 1 {
+		t.Errorf("failureCount: want 1, got %d", v)
 	}
-	if v := m.totalLatency.Load(); v != 500 {
-		t.Errorf("totalLatency: want 500, got %d", v)
+	if v := m.loadTotalLatency(); v != 250 {
+		t.Errorf("totalLatency: want 250, got %d", v)
 	}
 }
 
-func TestMetrics_CounterInvariant(t *testing.T) {
-	// success + failure must always equal totalRequests.
+// ── metrics — shard distribution ─────────────────────────────────────────────
+
+func TestMetrics_ShardDistribution(t *testing.T) {
 	var m metrics
+	// Write 1 request to every shard individually.
+	for i := 0; i < numShards; i++ {
+		m.incTotalRequests(i)
+	}
+	// load*() must sum all shards — result must equal numShards.
+	if got := m.loadTotalRequests(); got != numShards {
+		t.Errorf("loadTotalRequests after writing 1 per shard: want %d, got %d", numShards, got)
+	}
+}
+
+func TestMetrics_ShardModulo(t *testing.T) {
+	var m metrics
+	// shard index wraps correctly: shard == numShards must map to shard 0.
+	m.incTotalRequests(0)
+	m.incTotalRequests(numShards) // same physical shard as 0
+	if got := m.loadTotalRequests(); got != 2 {
+		t.Errorf("shard modulo: want 2 (shards 0 and numShards alias), got %d", got)
+	}
+}
+
+func TestMetrics_IndependentShards(t *testing.T) {
+	var m metrics
+	// Write different amounts to different shards.
+	m.incTotalRequests(0)
+	m.incTotalRequests(0)
+	m.incTotalRequests(1)  // shard 1 gets 1
+	m.incTotalRequests(15) // shard 15 gets 1
+
+	if got := m.loadTotalRequests(); got != 4 {
+		t.Errorf("independent shards: want 4, got %d", got)
+	}
+}
+
+func TestMetrics_LatencyShardAccumulation(t *testing.T) {
+	var m metrics
+	// Spread latency across every shard, 10ms each.
+	for i := 0; i < numShards; i++ {
+		m.addLatency(i, 10)
+	}
+	want := int64(numShards * 10)
+	if got := m.loadTotalLatency(); got != want {
+		t.Errorf("loadTotalLatency: want %d, got %d", want, got)
+	}
+}
+
+// ── metrics — counter invariant ───────────────────────────────────────────────
+
+func TestMetrics_CounterInvariant(t *testing.T) {
+	var m metrics
+	// Distribute 20 requests across shards; alternate success/failure.
 	for i := 0; i < 20; i++ {
-		m.totalRequests.Add(1)
+		shard := i % numShards
+		m.incTotalRequests(shard)
 		if i%3 == 0 {
-			m.failureCount.Add(1)
+			m.incFailure(shard)
 		} else {
-			m.successCount.Add(1)
+			m.incSuccess(shard)
 		}
 	}
-	total := m.totalRequests.Load()
-	success := m.successCount.Load()
-	failure := m.failureCount.Load()
+	total := m.loadTotalRequests()
+	success := m.loadSuccessCount()
+	failure := m.loadFailureCount()
 	if total != success+failure {
-		t.Errorf("counter invariant broken: total=%d success=%d failure=%d", total, success, failure)
+		t.Errorf("counter invariant: total=%d success=%d failure=%d (success+failure=%d)",
+			total, success, failure, success+failure)
 	}
 }
 
 // ── rpsWindow ────────────────────────────────────────────────────────────────
 
 func TestRpsWindow_ZeroBeforeRecord(t *testing.T) {
-	var w rpsWindow
-	if r := w.rate(); r != 0 {
+	var w engine.RpsWindow
+	if r := w.Rate(); r != 0 {
 		t.Errorf("want 0 before any records, got %f", r)
 	}
 }
 
 func TestRpsWindow_RecordAndRate(t *testing.T) {
-	var w rpsWindow
-	// Back-fill the previous second's bucket so rate() sees a completed second.
+	var w engine.RpsWindow
 	prev := time.Now().Unix() - 1
-	slot := int(prev % rpsWindowSize)
-	w.seconds[slot] = prev
-	w.buckets[slot] = 50
+	slot := int(prev % engine.RpsWindowSize)
+	w.Seconds[slot] = prev
+	w.Buckets[slot] = 50
 
-	r := w.rate()
-	if r <= 0 {
+	if r := w.Rate(); r <= 0 {
 		t.Errorf("want rate > 0 after recording, got %f", r)
 	}
 }
 
 func TestRpsWindow_ClearsStaleSlot(t *testing.T) {
-	var w rpsWindow
-	// Write a bucket from 100 seconds ago — well outside the window.
+	var w engine.RpsWindow
 	old := time.Now().Unix() - 100
-	slot := int(old % rpsWindowSize)
-	w.seconds[slot] = old
-	w.buckets[slot] = 999
+	slot := int(old % engine.RpsWindowSize)
+	w.Seconds[slot] = old
+	w.Buckets[slot] = 999
 
-	if r := w.rate(); r != 0 {
+	if r := w.Rate(); r != 0 {
 		t.Errorf("stale bucket must not affect rate, got %f", r)
 	}
 }
 
 func TestRpsWindow_RecordResetsStaleSlot(t *testing.T) {
-	var w rpsWindow
-	// Pre-load a slot with a stale second.
+	var w engine.RpsWindow
 	now := time.Now().Unix()
-	slot := int(now % rpsWindowSize)
-	w.seconds[slot] = now - 1000 // very old
-	w.buckets[slot] = 999
+	slot := int(now % engine.RpsWindowSize)
+	w.Seconds[slot] = now - 1000
+	w.Buckets[slot] = 999
 
-	// record() for the current second must reset the stale data.
-	w.record(1)
+	w.Record(1)
 
-	w.mu.Lock()
-	if w.seconds[slot] != now {
-		t.Errorf("record() should have reset seconds[%d] to %d, got %d", slot, now, w.seconds[slot])
+	w.Mu.Lock()
+	if w.Seconds[slot] != now {
+		t.Errorf("Record() should have reset Seconds[%d] to %d, got %d", slot, now, w.Seconds[slot])
 	}
-	if w.buckets[slot] != 1 {
-		t.Errorf("record() should have reset buckets[%d] to 1, got %d", slot, w.buckets[slot])
+	if w.Buckets[slot] != 1 {
+		t.Errorf("Record() should have reset Buckets[%d] to 1, got %d", slot, w.Buckets[slot])
 	}
-	w.mu.Unlock()
+	w.Mu.Unlock()
 }
 
 func TestRpsWindow_AccumulatesWithinSameSecond(t *testing.T) {
-	var w rpsWindow
-	w.record(10)
-	w.record(5)
-	w.record(3)
+	var w engine.RpsWindow
+	w.Record(10)
+	w.Record(5)
+	w.Record(3)
 
 	now := time.Now().Unix()
-	slot := int(now % rpsWindowSize)
+	slot := int(now % engine.RpsWindowSize)
 
-	w.mu.Lock()
-	got := w.buckets[slot]
-	w.mu.Unlock()
+	w.Mu.Lock()
+	got := w.Buckets[slot]
+	w.Mu.Unlock()
 
 	if got != 18 {
-		t.Errorf("multiple record() calls in same second: want 18, got %d", got)
+		t.Errorf("multiple Record() calls in same second: want 18, got %d", got)
 	}
 }
 
 func TestRpsWindow_RateAveragesOverWindow(t *testing.T) {
-	var w rpsWindow
+	var w engine.RpsWindow
 	now := time.Now().Unix()
-
-	// Fill the two completed-second slots (age 1 and age 2).
-	for age := int64(1); age < rpsWindowSize; age++ {
+	for age := int64(1); age < engine.RpsWindowSize; age++ {
 		sec := now - age
-		s := int(sec % rpsWindowSize)
-		w.seconds[s] = sec
-		w.buckets[s] = 100 // 100 req/s each
+		s := int(sec % engine.RpsWindowSize)
+		w.Seconds[s] = sec
+		w.Buckets[s] = 100
 	}
-
-	rate := w.rate()
-	// Both slots have 100 req; divided by (rpsWindowSize-1)=2 → expect 100.
-	if rate != 100 {
+	if rate := w.Rate(); rate != 100 {
 		t.Errorf("rate: want 100.0, got %f", rate)
 	}
 }

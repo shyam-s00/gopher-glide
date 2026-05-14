@@ -2,14 +2,15 @@ package engine
 
 import (
 	"context"
-	"github.com/shyam-s00/gopher-glide/internal/config"
-	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/shyam-s00/gopher-glide/internal/config"
+	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 )
 
 // All tests in this file are designed to be run with -race.
@@ -41,7 +42,7 @@ func multiSpecFor(url string, n int) []httpreader.RequestSpec {
 // ── rpsWindow: concurrent record + rate ──────────────────────────────────────
 
 func TestConcurrent_RpsWindow_RecordAndRate(t *testing.T) {
-	var w rpsWindow
+	var w RpsWindow
 	const goroutines = 50
 	const recordsEach = 200
 
@@ -52,7 +53,7 @@ func TestConcurrent_RpsWindow_RecordAndRate(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < recordsEach; j++ {
-				w.record(1)
+				w.Record(1)
 			}
 		}()
 	}
@@ -62,7 +63,7 @@ func TestConcurrent_RpsWindow_RecordAndRate(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < recordsEach; j++ {
-				_ = w.rate()
+				_ = w.Rate()
 			}
 		}()
 	}
