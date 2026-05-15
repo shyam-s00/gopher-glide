@@ -77,35 +77,35 @@ func TestPercentile_Table(t *testing.T) {
 // ── rpsWindow ─────────────────────────────────────────────────────────────────
 
 func TestRpsWindow_ZeroBeforeRecord(t *testing.T) {
-	var w RpsWindow
-	if r := w.Rate(); r != 0 {
+	var w rpsWindow
+	if r := w.rate(); r != 0 {
 		t.Errorf("want 0 before any records, got %f", r)
 	}
 }
 
 func TestRpsWindow_RecordAndRate(t *testing.T) {
-	var w RpsWindow
+	var w rpsWindow
 	// Back-fill the previous second's bucket manually so Rate() sees a full second.
 	prev := time.Now().Unix() - 1
-	slot := int(prev % RpsWindowSize)
-	w.Seconds[slot] = prev
-	w.Buckets[slot] = 50
+	slot := int(prev % rpsWindowSize)
+	w.seconds[slot] = prev
+	w.buckets[slot] = 50
 
-	r := w.Rate()
+	r := w.rate()
 	if r <= 0 {
 		t.Errorf("want rate > 0 after recording, got %f", r)
 	}
 }
 
 func TestRpsWindow_ClearsStaleSlot(t *testing.T) {
-	var w RpsWindow
+	var w rpsWindow
 	// Put a value in a slot from a long time ago — should not appear in rate.
 	old := time.Now().Unix() - 100
-	slot := int(old % RpsWindowSize)
-	w.Seconds[slot] = old
-	w.Buckets[slot] = 999
+	slot := int(old % rpsWindowSize)
+	w.seconds[slot] = old
+	w.buckets[slot] = 999
 
-	if r := w.Rate(); r != 0 {
+	if r := w.rate(); r != 0 {
 		t.Errorf("stale bucket should not affect rate, got %f", r)
 	}
 }

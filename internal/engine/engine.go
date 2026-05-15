@@ -20,6 +20,49 @@ import (
 
 const userAgent = "gg/1.0"
 
+// rpsWindow is a fixed-size ring of per-second request counts used to
+// compute a smooth, responsive current-RPS without any cumulative lag.
+//
+// Deprecated: belongs to the legacy engine; will be removed once the Hive
+// engine reaches production parity.
+const rpsWindowSize = 3 // seconds to average over
+
+type rpsWindow struct {
+	mu      sync.Mutex
+	buckets [rpsWindowSize]int64
+	seconds [rpsWindowSize]int64 // unix second each bucket belongs to
+}
+
+func (w *rpsWindow) record(count int64) {
+	now := time.Now().Unix()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	slot := int(now % rpsWindowSize)
+	if w.seconds[slot] != now {
+		w.seconds[slot] = now
+		w.buckets[slot] = 0
+	}
+	w.buckets[slot] += count
+}
+
+func (w *rpsWindow) rate() float64 {
+	now := time.Now().Unix()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	var total int64
+	for i := 0; i < rpsWindowSize; i++ {
+		age := now - w.seconds[i]
+		if age >= 1 && age < rpsWindowSize {
+			total += w.buckets[i]
+		}
+	}
+	windowSecs := float64(rpsWindowSize - 1)
+	if windowSecs < 1 {
+		windowSecs = 1
+	}
+	return float64(total) / windowSecs
+}
+
 type Metrics struct {
 	totalRequests atomic.Int64
 	successCount  atomic.Int64
@@ -58,6 +101,11 @@ type CallLog struct {
 	Error      string
 }
 
+// Engine is the legacy worker-pool load engine.
+//
+// Deprecated: Engine is superseded by the Hive engine (internal/engine/hive).
+// It will be removed once the Hive engine reaches production parity.
+// Do not add new features here.
 type Engine struct {
 	client     *http.Client
 	metrics    *Metrics
@@ -76,7 +124,7 @@ type Engine struct {
 	latencyMu sync.RWMutex
 
 	// rpsWin gives a responsive current-rate without cumulative lag.
-	rpsWin RpsWindow
+	rpsWin rpsWindow
 
 	// stage progress (written by stage-runner goroutine, read by TUI)
 	currentStage atomic.Int32
@@ -99,9 +147,13 @@ type Engine struct {
 }
 
 // EngineOption is a functional option for New().
+//
+// Deprecated: use hive.EngineOption instead.
 type EngineOption func(*Engine)
 
 // WithRecorder attaches a snap.Recorder to the engine.
+//
+// Deprecated: use hive.WithRecorder instead.
 // When set, every HTTP response is passed to recorder.Record() after the body
 // is drained. When nil (the default), the hot-path incurs zero overhead.
 func WithRecorder(r snap.Recorder) EngineOption {
@@ -111,6 +163,8 @@ func WithRecorder(r snap.Recorder) EngineOption {
 // WithSampleRate sets the fraction of responses whose body is captured for
 // schema inference (0.0–1.0). Default is 0.05 (5 %).
 // The rate is rounded to the nearest 1-in-N integer slot, so 0.05 → 1-in-20.
+//
+// Deprecated: use hive.WithSampleRate instead.
 func WithSampleRate(rate float64) EngineOption {
 	return func(e *Engine) {
 		if rate <= 0 {
@@ -129,6 +183,9 @@ func WithSampleRate(rate float64) EngineOption {
 	}
 }
 
+// New creates a legacy Engine.
+//
+// Deprecated: use hive.New() instead.
 func New(opts ...EngineOption) *Engine {
 	e := &Engine{
 		client: &http.Client{
@@ -222,7 +279,7 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 				} else {
 					e.metrics.successCount.Add(1)
 				}
-				e.rpsWin.Record(1)
+				e.rpsWin.record(1)
 				e.activeVPU.Add(-1)
 			}
 			return nil
@@ -502,7 +559,7 @@ func (e *Engine) GetMetrics() *MetricsSnapshot {
 
 	// Use the sliding-window rate for a responsive current-RPS display.
 	// Falls back to 0 when the engine hasn't started yet.
-	throughput := e.rpsWin.Rate()
+	throughput := e.rpsWin.rate()
 
 	minL, maxL, p50, p95, p99 := e.computeLatency()
 

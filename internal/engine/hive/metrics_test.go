@@ -4,8 +4,6 @@ import (
 	"testing"
 	"time"
 	"unsafe"
-
-	"github.com/shyam-s00/gopher-glide/internal/engine"
 )
 
 // ── paddedCounter ─────────────────────────────────────────────────────────────
@@ -142,67 +140,67 @@ func TestMetrics_CounterInvariant(t *testing.T) {
 // ── rpsWindow ────────────────────────────────────────────────────────────────
 
 func TestRpsWindow_ZeroBeforeRecord(t *testing.T) {
-	var w engine.RpsWindow
-	if r := w.Rate(); r != 0 {
+	var w rpsWindow
+	if r := w.rate(); r != 0 {
 		t.Errorf("want 0 before any records, got %f", r)
 	}
 }
 
 func TestRpsWindow_RecordAndRate(t *testing.T) {
-	var w engine.RpsWindow
+	var w rpsWindow
 	prev := time.Now().Unix() - 1
-	slot := int(prev % engine.RpsWindowSize)
-	w.Seconds[slot] = prev
-	w.Buckets[slot] = 50
+	slot := int(prev % rpsWindowSize)
+	w.seconds[slot] = prev
+	w.buckets[slot] = 50
 
-	if r := w.Rate(); r <= 0 {
+	if r := w.rate(); r <= 0 {
 		t.Errorf("want rate > 0 after recording, got %f", r)
 	}
 }
 
 func TestRpsWindow_ClearsStaleSlot(t *testing.T) {
-	var w engine.RpsWindow
+	var w rpsWindow
 	old := time.Now().Unix() - 100
-	slot := int(old % engine.RpsWindowSize)
-	w.Seconds[slot] = old
-	w.Buckets[slot] = 999
+	slot := int(old % rpsWindowSize)
+	w.seconds[slot] = old
+	w.buckets[slot] = 999
 
-	if r := w.Rate(); r != 0 {
+	if r := w.rate(); r != 0 {
 		t.Errorf("stale bucket must not affect rate, got %f", r)
 	}
 }
 
 func TestRpsWindow_RecordResetsStaleSlot(t *testing.T) {
-	var w engine.RpsWindow
+	var w rpsWindow
 	now := time.Now().Unix()
-	slot := int(now % engine.RpsWindowSize)
-	w.Seconds[slot] = now - 1000
-	w.Buckets[slot] = 999
+	slot := int(now % rpsWindowSize)
+	w.seconds[slot] = now - 1000
+	w.buckets[slot] = 999
 
-	w.Record(1)
+	w.record(1)
 
-	w.Mu.Lock()
-	if w.Seconds[slot] != now {
-		t.Errorf("Record() should have reset Seconds[%d] to %d, got %d", slot, now, w.Seconds[slot])
+	w.mu.Lock()
+	if w.seconds[slot] != now {
+		t.Errorf("Record() should have reset Seconds[%d] to %d, got %d", slot, now, w.seconds[slot])
 	}
-	if w.Buckets[slot] != 1 {
-		t.Errorf("Record() should have reset Buckets[%d] to 1, got %d", slot, w.Buckets[slot])
+	if w.buckets[slot] != 1 {
+		t.Errorf("Record() should have reset Buckets[%d] to 1, got %d", slot, w.buckets[slot])
 	}
-	w.Mu.Unlock()
+	w.mu.Unlock()
 }
 
 func TestRpsWindow_AccumulatesWithinSameSecond(t *testing.T) {
-	var w engine.RpsWindow
-	w.Record(10)
-	w.Record(5)
-	w.Record(3)
+	var w rpsWindow
+	w.record(10)
+	w.record(5)
+	w.record(3)
 
 	now := time.Now().Unix()
-	slot := int(now % engine.RpsWindowSize)
+	slot := int(now % rpsWindowSize)
 
-	w.Mu.Lock()
-	got := w.Buckets[slot]
-	w.Mu.Unlock()
+	w.mu.Lock()
+	got := w.buckets[slot]
+	w.mu.Unlock()
 
 	if got != 18 {
 		t.Errorf("multiple Record() calls in same second: want 18, got %d", got)
@@ -210,15 +208,15 @@ func TestRpsWindow_AccumulatesWithinSameSecond(t *testing.T) {
 }
 
 func TestRpsWindow_RateAveragesOverWindow(t *testing.T) {
-	var w engine.RpsWindow
+	var w rpsWindow
 	now := time.Now().Unix()
-	for age := int64(1); age < engine.RpsWindowSize; age++ {
+	for age := int64(1); age < rpsWindowSize; age++ {
 		sec := now - age
-		s := int(sec % engine.RpsWindowSize)
-		w.Seconds[s] = sec
-		w.Buckets[s] = 100
+		s := int(sec % rpsWindowSize)
+		w.seconds[s] = sec
+		w.buckets[s] = 100
 	}
-	if rate := w.Rate(); rate != 100 {
+	if rate := w.rate(); rate != 100 {
 		t.Errorf("rate: want 100.0, got %f", rate)
 	}
 }

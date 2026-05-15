@@ -41,7 +41,7 @@ type Engine struct {
 	// ── Metrics ───────────────────────────────────────────────────────────
 	counters     metrics
 	activeActors atomic.Int32
-	rpsWin       engine.RpsWindow
+	rpsWin       rpsWindow
 
 	// ── Latency percentile slice ──────────────────────────────────────────
 	latencies []float64
@@ -92,6 +92,7 @@ func New(opts ...EngineOption) *Engine {
 				IdleConnTimeout:     90 * time.Second,
 			},
 		},
+		latencies:   make([]float64, 0, 1024),
 		callLogs:    make([]*engine.CallLog, 0, 100),
 		errorLogs:   make([]*engine.CallLog, 0, 100),
 		maxLogs:     100,

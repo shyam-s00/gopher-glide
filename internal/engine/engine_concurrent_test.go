@@ -42,7 +42,7 @@ func multiSpecFor(url string, n int) []httpreader.RequestSpec {
 // ── rpsWindow: concurrent record + rate ──────────────────────────────────────
 
 func TestConcurrent_RpsWindow_RecordAndRate(t *testing.T) {
-	var w RpsWindow
+	var w rpsWindow
 	const goroutines = 50
 	const recordsEach = 200
 
@@ -53,7 +53,7 @@ func TestConcurrent_RpsWindow_RecordAndRate(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < recordsEach; j++ {
-				w.Record(1)
+				w.record(1)
 			}
 		}()
 	}
@@ -63,7 +63,7 @@ func TestConcurrent_RpsWindow_RecordAndRate(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < recordsEach; j++ {
-				_ = w.Rate()
+				_ = w.rate()
 			}
 		}()
 	}
