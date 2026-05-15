@@ -213,12 +213,15 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 		g.Go(func() error {
 			for spec := range work {
 				e.activeVPU.Add(1)
+				// Increment totalRequests first so total is always ≥ success+failure.
+				// A concurrent GetMetrics snapshot may see total=N, success/failure=N-1
+				// for an instant, but will never see success+failure > total.
+				e.metrics.totalRequests.Add(1)
 				if err := e.executeRequest(gCtx, spec); err != nil {
 					e.metrics.failureCount.Add(1)
 				} else {
 					e.metrics.successCount.Add(1)
 				}
-				e.metrics.totalRequests.Add(1)
 				e.rpsWin.Record(1)
 				e.activeVPU.Add(-1)
 			}

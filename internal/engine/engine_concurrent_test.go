@@ -196,8 +196,10 @@ func TestConcurrent_GetMetrics_DuringRun(t *testing.T) {
 			defer wg.Done()
 			for {
 				m := e.GetMetrics()
-				// Invariant: TotalRequests == SuccessCount + FailureCount
-				if m.TotalRequests != m.SuccessCount+m.FailureCount {
+				// Invariant during a live run: TotalRequests >= SuccessCount+FailureCount.
+				// totalRequests is incremented before success/failure, so a mid-flight
+				// snapshot may see total=N with success+failure=N-1, but never the reverse.
+				if m.TotalRequests < m.SuccessCount+m.FailureCount {
 					t.Errorf("counter invariant broken: total=%d success=%d failure=%d",
 						m.TotalRequests, m.SuccessCount, m.FailureCount)
 				}
