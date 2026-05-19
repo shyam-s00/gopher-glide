@@ -8,6 +8,43 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 )
 
+// MetricsSnapshot is a point-in-time read of all engine counters and latency
+// percentiles. It is the shared output type returned by Runner.GetMetrics()
+// and consumed by the TUI, headless renderer, and CLI.
+type MetricsSnapshot struct {
+	TotalRequests int64
+	SuccessCount  int64
+	FailureCount  int64
+	AvgLatency    float64
+	MinLatency    float64
+	MaxLatency    float64
+	P50Latency    float64
+	P95Latency    float64
+	P99Latency    float64
+	CurrentVPUs   int
+	ActiveVPUs    int
+	Throughput    float64
+	ErrorRate     float64
+	TargetRPS     int
+	// Stage progress — updated by RunStages
+	CurrentStage int
+	TotalStages  int
+	// Director Mode
+	Bias int
+}
+
+// CallLog is a single recorded HTTP call (success or failure).
+// It is the shared element type returned by Runner.GetRecentLogs() and
+// Runner.GetRecentErrorLogs(), and consumed by the TUI log panel.
+type CallLog struct {
+	Timestamp  time.Time
+	Method     string
+	Url        string
+	StatusCode int
+	Duration   time.Duration
+	Error      string
+}
+
 // Runner is the shared contract that every engine implementation must satisfy.
 //
 // It covers the full capability surface used by the TUI, headless renderer,
