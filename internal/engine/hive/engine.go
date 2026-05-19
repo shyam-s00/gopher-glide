@@ -115,16 +115,16 @@ func (e *Engine) Run(_ context.Context, _ int, _ time.Duration, _ []httpreader.R
 	return ErrNotImplemented
 }
 
-func (e *Engine) IsRunning() bool                           { return false }
-func (e *Engine) GetStartTime() time.Time                   { return time.Time{} }
-func (e *Engine) GetEndTime() time.Time                     { return time.Now() }
-func (e *Engine) GetElapsedTime() float64                   { return 0 }
-func (e *Engine) GetMetrics() *engine.MetricsSnapshot       { return &engine.MetricsSnapshot{} }
-func (e *Engine) GetRecentLogs(_ int) []engine.CallLog      { return nil }
-func (e *Engine) GetRecentErrorLogs(_ int) []engine.CallLog { return nil }
-func (e *Engine) ApplyBias(_ int)                           {}
-func (e *Engine) GetBias() int                              { return 0 }
-func (e *Engine) SetTargetRPS(_ int)                        {}
+func (e *Engine) IsRunning() bool                     { return false }
+func (e *Engine) GetStartTime() time.Time             { return time.Time{} }
+func (e *Engine) GetEndTime() time.Time               { return time.Now() }
+func (e *Engine) GetElapsedTime() float64             { return 0 }
+func (e *Engine) GetMetrics() *engine.MetricsSnapshot { return &engine.MetricsSnapshot{} }
+
+// GetRecentLogs and GetRecentErrorLogs are implemented in calllog.go.
+func (e *Engine) ApplyBias(_ int)    {}
+func (e *Engine) GetBias() int       { return 0 }
+func (e *Engine) SetTargetRPS(_ int) {}
 
 // ── Compile-time assertion ────────────────────────────────────────────────────
 
