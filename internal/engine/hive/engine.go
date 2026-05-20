@@ -115,11 +115,12 @@ func (e *Engine) Run(_ context.Context, _ int, _ time.Duration, _ []httpreader.R
 	return ErrNotImplemented
 }
 
-func (e *Engine) IsRunning() bool                     { return false }
-func (e *Engine) GetStartTime() time.Time             { return time.Time{} }
-func (e *Engine) GetEndTime() time.Time               { return time.Now() }
-func (e *Engine) GetElapsedTime() float64             { return 0 }
-func (e *Engine) GetMetrics() *engine.MetricsSnapshot { return &engine.MetricsSnapshot{} }
+func (e *Engine) IsRunning() bool         { return false }
+func (e *Engine) GetStartTime() time.Time { return time.Time{} }
+func (e *Engine) GetEndTime() time.Time   { return time.Now() }
+func (e *Engine) GetElapsedTime() float64 { return 0 }
+
+// GetMetrics is implemented in metrics_snapshot.go.
 
 // GetRecentLogs and GetRecentErrorLogs are implemented in calllog.go.
 func (e *Engine) ApplyBias(_ int)    {}
