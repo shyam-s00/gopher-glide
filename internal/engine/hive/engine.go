@@ -57,6 +57,10 @@ type Engine struct {
 	isRunning atomic.Bool
 	startTime time.Time
 	endTime   time.Time
+	// timeMu protects startTime and endTime. Both are written exactly once
+	// (startTime at RunStages entry, endTime in its defer) but may be read
+	// concurrently by the TUI at ~10 Hz via GetMetrics / GetElapsedTime.
+	timeMu sync.RWMutex
 
 	// ── Stage progress (written by Queen, read by TUI via GetMetrics) ────
 	currentStage atomic.Int32
@@ -115,10 +119,7 @@ func (e *Engine) Run(_ context.Context, _ int, _ time.Duration, _ []httpreader.R
 	return ErrNotImplemented
 }
 
-func (e *Engine) IsRunning() bool         { return false }
-func (e *Engine) GetStartTime() time.Time { return time.Time{} }
-func (e *Engine) GetEndTime() time.Time   { return time.Now() }
-func (e *Engine) GetElapsedTime() float64 { return 0 }
+// IsRunning, GetStartTime, GetEndTime, GetElapsedTime are implemented in lifecycle.go.
 
 // GetMetrics is implemented in metrics_snapshot.go.
 
