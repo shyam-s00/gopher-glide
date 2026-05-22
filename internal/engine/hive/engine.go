@@ -124,9 +124,8 @@ func (e *Engine) Run(_ context.Context, _ int, _ time.Duration, _ []httpreader.R
 // GetMetrics is implemented in metrics_snapshot.go.
 
 // GetRecentLogs and GetRecentErrorLogs are implemented in calllog.go.
-func (e *Engine) ApplyBias(_ int)    {}
-func (e *Engine) GetBias() int       { return 0 }
-func (e *Engine) SetTargetRPS(_ int) {}
+
+// ApplyBias, GetBias, SetTargetRPS are implemented in director.go.
 
 // ── Compile-time assertion ────────────────────────────────────────────────────
 
