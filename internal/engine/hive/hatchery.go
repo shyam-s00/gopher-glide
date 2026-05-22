@@ -18,15 +18,11 @@ import (
 // spawns a batch in a tight loop with no sleep between individual goroutines.
 const hatcheryTick = 10 * time.Millisecond
 
-// hatcheryTicksPerSec is the number of micro-batch ticks in one second.
-// Derived from hatcheryTick so the two constants stay in sync.
-const hatcheryTicksPerSec = int(time.Second / hatcheryTick) // 100
-
 // ── hatchery ─────────────────────────────────────────────────────────────────
 
 // hatchery is the Smooth Dispatcher. It reads SpawnManifests from the Queen
 // and spreads the requested number of Actor goroutines evenly across the
-// 1-second window using micro-batch ticks.
+// manifest's Duration window using micro-batch ticks.
 //
 // Design invariants:
 //   - activeActors is incremented before each go-launch and decremented by
@@ -63,16 +59,18 @@ func (h *hatchery) run(
 	}
 }
 
-// dispatch spreads `manifest.Count` Actor goroutines evenly across one
-// 1-second window using micro-batch ticks of hatcheryTick duration.
+// dispatch spreads `manifest.Count` Actor goroutines evenly across the
+// window defined by `manifest.Duration` using micro-batch ticks of hatcheryTick.
 //
 // Batching maths:
 //
-//	batchSize = count / hatcheryTicksPerSec        (floor — base per-tick count)
-//	remainder = count % hatcheryTicksPerSec        (extra 1 per-tick for first N ticks)
+//	numTicks  = max(1, manifest.Duration / hatcheryTick)  (ticks that fit in the window)
+//	batchSize  = count / numTicks                          (floor — base per-tick count)
+//	remainder  = count % numTicks                          (extra 1 per-tick for first N ticks)
 //
-// E.g. count=150: batchSize=1, remainder=50 → first 50 ticks spawn 2, next 50 spawn 1.
-// E.g. count=10:  batchSize=0, remainder=10 → first 10 ticks spawn 1, remaining skip.
+// E.g. count=150, duration=1s (100 ticks): batchSize=1, remainder=50 → first 50 ticks spawn 2.
+// E.g. count=5,   duration=400ms (40 ticks): batchSize=0, remainder=5 → first 5 ticks spawn 1.
+// E.g. count=10,  duration=15ms  (2 ticks):  batchSize=5, remainder=0 → each tick spawns 5.
 //
 // spawnIdx is shared across calls so shard assignment is globally monotonic.
 func (h *hatchery) dispatch(
@@ -88,8 +86,19 @@ func (h *hatchery) dispatch(
 
 	specIdx := manifest.SpecIndex
 
-	batchSize := count / hatcheryTicksPerSec
-	remainder := count % hatcheryTicksPerSec
+	// Compute the number of micro-batch ticks that fit within the manifest
+	// window. A minimum of 1 tick prevents divide-by-zero for tiny durations.
+	window := manifest.Duration
+	if window <= 0 {
+		window = time.Second // safe default: fall back to 1-second window
+	}
+	numTicks := int(window / hatcheryTick)
+	if numTicks < 1 {
+		numTicks = 1
+	}
+
+	batchSize := count / numTicks
+	remainder := count % numTicks
 
 	ticker := time.NewTicker(hatcheryTick)
 	defer ticker.Stop()

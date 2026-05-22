@@ -358,3 +358,44 @@ func TestQueen_FullChannel_DoesNotBlock(t *testing.T) {
 		t.Fatal("Queen blocked on full channel")
 	}
 }
+
+// ── manifest Duration field ────────────────────────────────────────────────────
+
+func TestQueen_NormalTick_ManifestDurationIsOneSecond(t *testing.T) {
+	// 30s at 10x = 3s real; ticker fires ~3 times, each with Duration=1s.
+	stages := singleStage(30*time.Second, 10)
+	manifests, _ := runQueen(t, stages, 10.0, makeSpecs(1), 64, 5*time.Second)
+	if len(manifests) == 0 {
+		t.Fatal("expected at least 1 manifest")
+	}
+	for i, m := range manifests {
+		if m.Duration != time.Second {
+			t.Errorf("manifest[%d]: expected Duration=1s, got %v", i, m.Duration)
+		}
+	}
+}
+
+func TestQueen_SubSecondStage_ManifestDurationIsSubSecond(t *testing.T) {
+	// A 100ms stage at timeScale=1 fires the stageTimer immediately.
+	// The emitted manifest must carry a Duration < 1s (the fractional remainder).
+	stages := singleStage(100*time.Millisecond, 10)
+	e := New()
+	q := &queen{e: e}
+	manifestCh := make(chan SpawnManifest, 4)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- q.run(ctx, stages, 1.0, makeSpecs(1), manifestCh) }()
+	manifests := collectManifests(manifestCh, 2*time.Second)
+	<-done
+	if len(manifests) == 0 {
+		t.Fatal("expected at least 1 manifest from 100ms stage")
+	}
+	last := manifests[len(manifests)-1]
+	if last.Duration >= time.Second {
+		t.Errorf("sub-second stage final manifest: expected Duration < 1s, got %v", last.Duration)
+	}
+	if last.Duration <= 0 {
+		t.Errorf("sub-second stage final manifest: expected Duration > 0, got %v", last.Duration)
+	}
+}

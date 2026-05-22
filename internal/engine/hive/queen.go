@@ -75,7 +75,7 @@ func (q *queen) run(
 			q.e.targetRPS.Store(int64(biasedRPS))
 
 			select {
-			case manifestCh <- SpawnManifest{Count: biasedRPS, SpecIndex: specIdx % len(specs)}:
+			case manifestCh <- SpawnManifest{Count: biasedRPS, Duration: time.Second, SpecIndex: specIdx % len(specs)}:
 				specIdx += biasedRPS
 			default:
 			}
@@ -99,7 +99,7 @@ func (q *queen) run(
 
 		// emitAt is a small helper that evaluates the LERP at a given
 		// instant, applies bias, and emits a SpawnManifest non-blocking.
-		emitAt := func(now time.Time) {
+		emitAt := func(now time.Time, windowDur time.Duration) {
 			q.drainBias()
 			elapsed := now.Sub(stageStart)
 			pct := float64(elapsed) / float64(scaledDur)
@@ -116,7 +116,7 @@ func (q *queen) run(
 			roundedRPS := int(math.Round(biasedRPS))
 			q.e.targetRPS.Store(int64(roundedRPS))
 			select {
-			case manifestCh <- SpawnManifest{Count: roundedRPS, SpecIndex: specIdx % len(specs)}:
+			case manifestCh <- SpawnManifest{Count: roundedRPS, Duration: windowDur, SpecIndex: specIdx % len(specs)}:
 				specIdx += roundedRPS
 			default:
 				// Hatchery is behind — drop this manifest silently.
@@ -131,10 +131,19 @@ func (q *queen) run(
 				return nil
 
 			case <-stageTimer.C:
-				// Stage duration elapsed. Emit one final manifest at endRPS
-				// (pct=1) so every stage — including sub-second ones that
-				// never see a 1-second heartbeat tick — dispatches actors.
-				emitAt(stageEnd)
+				// Stage duration elapsed. Calculate exactly how much time
+				// remains in the current second window so the Hatchery spreads
+				// actors over the true fractional remainder, not a full second.
+				remaining := time.Until(stageEnd)
+				if remaining < 0 {
+					remaining = 0
+				}
+				// Clamp to at least one micro-batch tick so the Hatchery can
+				// always compute a valid batch size (avoids divide-by-zero).
+				if remaining < hatcheryTick {
+					remaining = hatcheryTick
+				}
+				emitAt(stageEnd, remaining)
 				break stageLoop
 
 			case now := <-ticker.C:
@@ -143,7 +152,7 @@ func (q *queen) run(
 					// ticker). The stageTimer case handles the final emit.
 					break stageLoop
 				}
-				emitAt(now)
+				emitAt(now, time.Second)
 			}
 		}
 		stageTimer.Stop()

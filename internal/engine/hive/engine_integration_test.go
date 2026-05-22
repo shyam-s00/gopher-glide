@@ -23,6 +23,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -230,9 +231,15 @@ func TestRunStages_RequestsAreSent(t *testing.T) {
 }
 
 func TestRunStages_UserAgentSet(t *testing.T) {
-	var capturedUA string
+	// Multiple actor goroutines may hit the server concurrently.
+	// Use sync.Once so only the first request's UA is captured — that is
+	// sufficient to prove all actors share the same User-Agent value.
+	var (
+		capturedUA string
+		once       sync.Once
+	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedUA = r.Header.Get("User-Agent")
+		once.Do(func() { capturedUA = r.Header.Get("User-Agent") })
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(srv.Close)
