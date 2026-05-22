@@ -363,14 +363,26 @@ func TestQueen_FullChannel_DoesNotBlock(t *testing.T) {
 
 func TestQueen_NormalTick_ManifestDurationIsOneSecond(t *testing.T) {
 	// 30s at 10x = 3s real; ticker fires ~3 times, each with Duration=1s.
+	// The FINAL manifest always comes from the stageTimer (fractional remainder,
+	// clamped to hatcheryTick). Only the intermediate ticker manifests are 1s.
 	stages := singleStage(30*time.Second, 10)
 	manifests, _ := runQueen(t, stages, 10.0, makeSpecs(1), 64, 5*time.Second)
 	if len(manifests) == 0 {
 		t.Fatal("expected at least 1 manifest")
 	}
+	// All manifests must have a positive, non-zero Duration.
 	for i, m := range manifests {
-		if m.Duration != time.Second {
-			t.Errorf("manifest[%d]: expected Duration=1s, got %v", i, m.Duration)
+		if m.Duration <= 0 {
+			t.Errorf("manifest[%d]: expected Duration > 0, got %v", i, m.Duration)
+		}
+	}
+	// All but the final manifest are ticker emits and must be exactly 1s.
+	// The final manifest is the stageTimer emit (fractional remainder ≤ 1s).
+	if len(manifests) > 1 {
+		for i, m := range manifests[:len(manifests)-1] {
+			if m.Duration != time.Second {
+				t.Errorf("ticker manifest[%d]: expected Duration=1s, got %v", i, m.Duration)
+			}
 		}
 	}
 }
