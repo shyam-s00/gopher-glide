@@ -66,12 +66,11 @@ For full technical breakdown and latency details, see the **[Official Benchmarks
 
 ---
 
-## Roadmap
-- [x] Snap – Behavioral Profiling
-- [ ] VPU mode — fixed virtual users instead of fixed RPS
-- [ ] Circuit breaker — auto-stop on a configurable error-rate threshold
-- [ ] Prometheus `/metrics` endpoint
-- [ ] HTML / JSON result export
+## Planned Features
+- [ ] **Chaos / Fault Injection** — Simulate poor network conditions (3G packet loss, latency jitter) to see how APIs handle degradation.
+- [ ] **Distributed Simulation Mesh** — Run `gg worker` nodes across multiple servers/regions, controlled by a central `gg master` UI.
+- [ ] **Auto-Pilot (Smart Scaling)** — Set a `--target-latency` and let the engine automatically ramp RPS to find your API's exact breaking point.
+
 
 ## License
 [MIT](LICENSE)
