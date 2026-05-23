@@ -114,6 +114,21 @@ type rpsWindow struct {
 	seconds [rpsWindowSize]int64 // unix second the corresponding bucket belongs to
 }
 
+// reset zeroes the window's data buckets under the lock.
+//
+// Use this instead of struct reassignment (e.g. w = rpsWindow{}) which would
+// race against concurrent calls to record/rate that are accessing the mutex
+// state. By locking first we ensure the zeroing is fully serialised with any
+// in-flight reader or writer.
+func (w *rpsWindow) reset() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for i := range w.buckets {
+		w.buckets[i] = 0
+		w.seconds[i] = 0
+	}
+}
+
 // record increments the count for the current second.
 func (w *rpsWindow) record(count int64) {
 	now := time.Now().Unix()

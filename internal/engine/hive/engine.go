@@ -154,7 +154,7 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 		atomic.StoreInt64(&e.counters.totalLatency[i].value, 0)
 	}
 	e.activeActors.Store(0)
-	e.rpsWin = rpsWindow{}
+	e.rpsWin.reset() // lock-safe zero — avoids race with concurrent GetMetrics calls
 	e.targetRPS.Store(0)
 	e.currentStage.Store(0)
 	e.totalStages.Store(int32(len(cfg.Stages)))
