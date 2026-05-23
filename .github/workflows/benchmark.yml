@@ -1,0 +1,48 @@
+name: Benchmark Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR Branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Run benchmark on PR branch
+        run: go test -bench=. -benchmem -run='^$' -count=5 ./internal/engine/hive/ > pr_bench.txt
+
+      - name: Checkout main branch
+        run: git checkout origin/main
+
+      - name: Run benchmark on main branch
+        run: go test -bench=. -benchmem -run='^$' -count=5 ./internal/engine/hive/ > main_bench.txt
+
+      - name: Compare with benchstat
+        run: |
+          echo "Comparing PR against main..."
+          benchstat main_bench.txt pr_bench.txt > bench_diff.txt
+          cat bench_diff.txt
+          
+          # Check for performance drops (increases in execution time by >=15%)
+          # benchstat outputs +X.XX% for increases in time/op. 
+          # The regex looks for any +15.XX% to +99.XX%, or +100.XX% and above.
+          if grep -E '\+(1[5-9]|[2-9][0-9]|[1-9][0-9]{2,})\.[0-9]+%' bench_diff.txt; then
+            echo "::error::Performance degraded by 15% or more! Please check the benchstat output."
+            exit 1
+          fi
+          
+          echo "Performance is within acceptable limits."

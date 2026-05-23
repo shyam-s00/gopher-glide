@@ -55,6 +55,17 @@ Gopher Glide features an official [JetBrains plugin](https://plugins.jetbrains.c
 
 ---
 
+## 🚀 Performance
+
+The Hive Engine is built for maximum throughput with zero garbage-collection penalties. 
+- **Sequential Peak:** ~31,000 Requests Per Second (RPS) per core.
+- **Parallel Aggregate:** ~89,000+ RPS total system throughput on standard 12-core hardware.
+- **Zero Garbage:** The metrics subsystem operates with absolutely 0 memory allocations.
+
+For full technical breakdown and latency details, see the **[Official Benchmarks](docs/BENCHMARKS.md)**.
+
+---
+
 ## Roadmap
 - [x] Snap – Behavioral Profiling
 - [ ] VPU mode — fixed virtual users instead of fixed RPS
