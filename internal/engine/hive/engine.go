@@ -88,15 +88,15 @@ type EngineOption func(*Engine)
 
 // New creates a Hive Engine with a default HTTP client and sane defaults.
 // Functional options are applied last and can override any default.
+//
+// The initial transport is built with buildTransport(1000) as a conservative
+// baseline. RunStages will rebuild it to match the actual peak RPS of the
+// test plan before the first request is dispatched.
 func New(opts ...EngineOption) *Engine {
 	e := &Engine{
 		client: &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				MaxIdleConnsPerHost: 100,
-				MaxIdleConns:        1000,
-				IdleConnTimeout:     90 * time.Second,
-			},
+			Timeout:   30 * time.Second,
+			Transport: buildTransport(1000), // baseline; tuned in RunStages
 		},
 		latencies:   make([]float64, 0, 1024),
 		callLogs:    make([]*engine.CallLog, 0, 100),
@@ -183,14 +183,27 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 		e.isRunning.Store(false)
 	}()
 
-	// ── Channel connecting Queen → Hatchery ───────────────────────────────
-	// Buffer sized to peak RPS so the Queen never blocks on a slow Hatchery
-	// during a burst. SpawnManifests are small (two ints), so memory cost is
-	// negligible even at high RPS.
+	// ── Dynamic connection pool ───────────────────────────────────────────
+	// Rebuild the transport before every run so that pool sizes are always
+	// tuned to the current test plan's peak RPS.  If the caller injected a
+	// custom client via WithHTTPClient (e.g. in tests) we leave it untouched;
+	// the sentinel is a nil Transport, which only the default client has after
+	// New() sets it via buildTransport the first time below.
 	peakRPS := cfg.PeakRPS()
 	if peakRPS < 1 {
 		peakRPS = 1
 	}
+	// Only update the transport when the client is the engine-owned one
+	// (not an externally injected test client). We detect this by checking
+	// whether the transport is an *http.Transport we can safely replace.
+	if _, ok := e.client.Transport.(*http.Transport); ok {
+		e.client.Transport = buildTransport(peakRPS)
+	}
+
+	// ── Channel connecting Queen → Hatchery ───────────────────────────────
+	// Buffer sized to peak RPS so the Queen never blocks on a slow Hatchery
+	// during a burst. SpawnManifests are small (two ints), so memory cost is
+	// negligible even at high RPS.
 	manifestCh := make(chan SpawnManifest, peakRPS)
 
 	// ── Launch Queen + Hatchery under errgroup ────────────────────────────

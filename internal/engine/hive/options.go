@@ -1,6 +1,19 @@
 package hive
 
-import "github.com/shyam-s00/gopher-glide/internal/snap"
+import (
+	"net/http"
+
+	"github.com/shyam-s00/gopher-glide/internal/snap"
+)
+
+// WithHTTPClient replaces the default shared HTTP client with the provided one.
+//
+// Primarily useful in tests to inject an httptest.Server-backed client without
+// going through the network stack. Production callers should prefer the default
+// client built by New(), which is tuned via WithPeakRPS / buildTransport.
+func WithHTTPClient(c *http.Client) EngineOption {
+	return func(e *Engine) { e.client = c }
+}
 
 // WithRecorder attaches a snap.Recorder to the engine.
 //
