@@ -6,6 +6,22 @@ import (
 	"sync/atomic"
 )
 
+// ── latency buffer capacity bounds ───────────────────────────────────────────
+
+const (
+	// minLatencyBufCap is the smallest ring buffer we ever allocate.
+	// 1 024 slots is enough for any test that runs at ≤ 1 RPS for ~17 min.
+	minLatencyBufCap = 1_024
+
+	// maxLatencyBufCap caps memory regardless of run duration or RPS.
+	// 1 000 000 × 8 B (atomic.Uint64) = 8 MB per engine instance.
+	//
+	// At 50 000 RPS the ring wraps roughly every 20 s, so the snapshot
+	// always reflects recent behaviour.  1 M samples is far more than
+	// needed for statistically sound p50 / p95 / p99 percentile estimates.
+	maxLatencyBufCap = 1_000_000
+)
+
 // latencyBuf is a pre-allocated lock-free ring buffer for recording per-request
 // latencies as float64 millisecond values.
 //

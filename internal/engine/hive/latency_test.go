@@ -324,3 +324,49 @@ func TestLatencyBuf_LiveEngine_Consistency(t *testing.T) {
 		}
 	}
 }
+
+// ── buffer capacity bounds ────────────────────────────────────────────────────
+
+// TestLatencyBuf_MinCap verifies that RunStages always allocates at least
+// minLatencyBufCap slots even for very short / low-RPS test plans.
+func TestLatencyBuf_MinCap(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	e := New()
+	_ = e.RunStages(context.Background(), singleStageCfg(10*time.Millisecond, 1), specsFor(srv.URL))
+
+	lb := e.latBuf.Load()
+	if lb == nil {
+		t.Fatal("latBuf is nil after RunStages")
+	}
+	if len(lb.buf) < minLatencyBufCap {
+		t.Errorf("expected cap >= %d, got %d", minLatencyBufCap, len(lb.buf))
+	}
+}
+
+// TestLatencyBuf_MaxCap verifies that RunStages never allocates more than
+// maxLatencyBufCap slots even for extremely high-RPS, long-duration test plans
+// (the scenario that would otherwise allocate gigabytes).
+func TestLatencyBuf_MaxCap(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	e := New()
+	// 100 000 RPS × 3 600 s would request 360 M slots ≈ 2.9 GB without the cap.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately — we only care about the buffer allocation
+	_ = e.RunStages(ctx, singleStageCfg(1*time.Hour, 100_000), specsFor(srv.URL))
+
+	lb := e.latBuf.Load()
+	if lb == nil {
+		t.Fatal("latBuf is nil after RunStages")
+	}
+	if len(lb.buf) > maxLatencyBufCap {
+		t.Errorf("expected cap <= %d, got %d — OOM guard failed", maxLatencyBufCap, len(lb.buf))
+	}
+}

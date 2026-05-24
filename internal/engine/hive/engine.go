@@ -151,9 +151,22 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	if totalSecs < 1 {
 		totalSecs = 1
 	}
+	// Desired capacity: peakRPS × totalSecs + 10 % headroom.
+	// Hard cap at maxLatencyBufCap to prevent OOM on long / high-RPS runs.
+	//
+	// Example worst-case without the cap:
+	//   50 000 RPS × 3 600 s × 1.1 = 198 000 000 atomic.Uint64 ≈ 1.6 GB
+	//
+	// With the cap we allocate at most 8 MB (1 M × 8 B). The ring buffer
+	// already wraps, so only the oldest entries are evicted — percentile
+	// accuracy is unaffected; 1 M recent samples is more than sufficient
+	// for statistically sound p50/p95/p99 estimates at any RPS.
 	bufCap := int(float64(peakRPS)*totalSecs*1.1 + 0.5) // +10 %, round up
-	if bufCap < 1024 {
-		bufCap = 1024
+	if bufCap < minLatencyBufCap {
+		bufCap = minLatencyBufCap
+	}
+	if bufCap > maxLatencyBufCap {
+		bufCap = maxLatencyBufCap
 	}
 
 	// ── Reset state ───────────────────────────────────────────────────────
