@@ -45,6 +45,7 @@ extra_css:
 nav:
   - Home: index.md
   - Load Profiles: profiles.md
+  - Benchmarks: BENCHMARKS.md
   - The TUI: tui.md
   - Snapshots (gg snap): snap.md
   - JetBrains Plugin: plugin.md

@@ -40,7 +40,7 @@ type RunOptions struct {
 // Implementations are responsible for running the engine and reporting
 // progress until the run finishes (or the user aborts).
 type Renderer interface {
-	Run(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpec, opts RunOptions) error
+	Run(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec, opts RunOptions) error
 }
 
 // New returns the appropriate Renderer for the execution context.

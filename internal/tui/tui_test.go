@@ -458,8 +458,9 @@ func TestRenderLogContent_WithSuccessLogs(t *testing.T) {
 	m := newTestModel()
 	m.showFailures = false // all-logs mode
 
-	// Inject a success log directly.
-	m.engine.LogCallForTest("GET", "http://example.com/api", 200, 10*time.Millisecond, nil)
+	// Inject a success log directly via type assertion (LogCallForTest is a
+	// test-only export shim on *engine.Engine, not part of engine.Runner).
+	m.engine.(*engine.Engine).LogCallForTest("GET", "http://example.com/api", 200, 10*time.Millisecond, nil)
 
 	content := m.renderLogContent()
 	if content == "" {
@@ -566,7 +567,7 @@ func TestRenderLogContent_WithErrorLogs(t *testing.T) {
 	m.showFailures = true // failures only mode
 
 	// Inject an error log (status 500).
-	m.engine.LogCallForTest("POST", "http://example.com/api/fail", 500, 5*time.Millisecond, nil)
+	m.engine.(*engine.Engine).LogCallForTest("POST", "http://example.com/api/fail", 500, 5*time.Millisecond, nil)
 
 	content := m.renderLogContent()
 	if content == "" {
@@ -579,7 +580,7 @@ func TestRenderLogContent_NonSuccessStatus(t *testing.T) {
 	m.showFailures = false // all logs
 
 	// Inject a 404 log (non-2xx, non-error).
-	m.engine.LogCallForTest("GET", "http://example.com/api/missing", 404, 3*time.Millisecond, nil)
+	m.engine.(*engine.Engine).LogCallForTest("GET", "http://example.com/api/missing", 404, 3*time.Millisecond, nil)
 
 	content := m.renderLogContent()
 	if content == "" {

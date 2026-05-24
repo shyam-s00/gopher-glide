@@ -74,7 +74,7 @@ type HeartbeatPayload struct {
 
 // Run executes the engine headlessly and blocks until the run finishes or an
 // interrupt signal is received. Progress heartbeats are written to stdout.
-func (r *HeadlessRenderer) Run(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpec, opts RunOptions) error {
+func (r *HeadlessRenderer) Run(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec, opts RunOptions) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

@@ -1,0 +1,49 @@
+name: Benchmark Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR Branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Run benchmark on PR branch
+        run: go test -bench=. -benchmem -run='^$' -count=5 ./internal/engine/hive/ > pr_bench.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-benchmarks
+          path: pr_bench.txt
+
+      # TODO: restore once hive-engine is merged into main
+      # - name: Checkout main branch
+      #   run: git checkout origin/main
+      #
+      # - name: Run benchmark on main branch
+      #   run: go test -bench=. -benchmem -run='^$' -count=5 ./internal/engine/hive/ > main_bench.txt
+      #
+      # - name: Compare with benchstat
+      #   run: |
+      #     benchstat main_bench.txt pr_bench.txt > bench_diff.txt
+      #     cat bench_diff.txt
+      #     if grep -E '\+(1[5-9]|[2-9][0-9]|[1-9][0-9]{2,})\.[0-9]+%' bench_diff.txt; then
+      #       echo "::error::Performance degraded by 15% or more!"
+      #       exit 1
+      #     fi
+      #     echo "Performance is within acceptable limits."

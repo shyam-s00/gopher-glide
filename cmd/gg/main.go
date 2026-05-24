@@ -15,6 +15,7 @@ import (
 
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine"
+	"github.com/shyam-s00/gopher-glide/internal/engine/hive"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 	"github.com/shyam-s00/gopher-glide/internal/profile"
 	"github.com/shyam-s00/gopher-glide/internal/snap"
@@ -94,6 +95,7 @@ func main() {
 	snapMaxBodyKB := fs.Int("snap-max-body-kb", 0, "per-endpoint byte budget for stored body samples in KB (0 = no byte-based limit)")
 	headless := fs.Bool("headless", false, "run without interactive TUI — emits structured heartbeat logs (for CI)")
 	reporter := fs.String("reporter", "text", "output format in headless mode: text | json")
+	hiveEngine := fs.Bool("hive-engine", false, "use the new hive engine for execution")
 	_ = fs.Parse(flagArgs)
 
 	// Track which flags were explicitly provided so we can apply the correct
@@ -315,15 +317,24 @@ func main() {
 		)
 	}
 
-	// ── build engine ──────────────────────────────────────────────────────────
-	var engineOpts []engine.EngineOption
-	if rec != nil {
-		engineOpts = append(engineOpts,
-			engine.WithRecorder(rec),
-			engine.WithSampleRate(effectiveSampleRate),
-		)
+	// ── build engine ────────────────────────────────────────────────────────
+	var eng engine.Runner
+	if *hiveEngine {
+		var hiveOpts []hive.EngineOption
+		if rec != nil {
+			hiveOpts = append(hiveOpts, hive.WithRecorder(rec), hive.WithSampleRate(effectiveSampleRate))
+		}
+		eng = hive.New(hiveOpts...)
+	} else {
+		var engineOpts []engine.EngineOption
+		if rec != nil {
+			engineOpts = append(engineOpts,
+				engine.WithRecorder(rec),
+				engine.WithSampleRate(effectiveSampleRate),
+			)
+		}
+		eng = engine.New(engineOpts...)
 	}
-	eng := engine.New(engineOpts...)
 
 	// ── start TUI ─────────────────────────────────────────────────────────────
 	// onRunComplete is dispatched by the TUI as a background goroutine once
@@ -393,7 +404,7 @@ func main() {
 // .snap file to dir. Returns a human-readable status line on success.
 // It does not write to stdout or stderr, making it safe to call while the
 // TUI alt-screen is active.
-func finalizeSnapResult(rec *snap.DefaultRecorder, eng *engine.Engine, cfg *config.Config,
+func finalizeSnapResult(rec *snap.DefaultRecorder, eng engine.Runner, cfg *config.Config,
 	tag, dir string, sampleRate float64, maxSamples, maxBodyKB int) (string, error) {
 	endTime := eng.GetEndTime()
 	if endTime.IsZero() {

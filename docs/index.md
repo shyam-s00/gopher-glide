@@ -93,8 +93,8 @@ $ gg run api.http --profile sustain
 </div>
 </div>
 <div class="tx-upcoming-banner" markdown="1">
-<h3>🚧 Coming Soon: The Hive Engine</h3>
-<p>The upcoming <b>Hive Engine</b> introduces a lock-free Actor Model. Soon, you'll be able to simulate organic, stateful user journeys with ultra-high RPS from a single instance.</p>
+<h3>🚧 Planned Features</h3>
+<p>We are expanding Gopher-Glide into a full-scale traffic simulator. Planned capabilities include <b>Chaos Engineering</b>, a <b>Distributed Simulation Mesh</b>, and <b>Auto-Pilot</b> scaling.</p>
 </div>
 
 <div class="tx-steps-section" style="background: transparent; padding-top: 2rem; padding-bottom: 0;" markdown="1">
@@ -109,7 +109,7 @@ $ gg run api.http --profile sustain
 | **API Snapshots** | ✅ `gg snap` | ❌ No | ❌ No | ❌ No |
 | **Real-time TUI** | ✅ Yes (Director) | ❌ No | ❌ No | ❌ No |
 | **CI/CD Native** | ✅ Yes (Headless) | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Stateful Simulation** | Upcoming | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Stateful Simulation** | ✅ Yes (Hive Engine) | ✅ Yes | ✅ Yes | ✅ Yes |
 | **Memory Footprint** | Extremely Low | Medium | High | High |
 
 </div>

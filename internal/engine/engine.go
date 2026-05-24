@@ -20,16 +20,12 @@ import (
 
 const userAgent = "gg/1.0"
 
-type Metrics struct {
-	totalRequests atomic.Int64
-	successCount  atomic.Int64
-	failureCount  atomic.Int64
-	totalLatency  atomic.Int64
-}
-
 // rpsWindow is a fixed-size ring of per-second request counts used to
 // compute a smooth, responsive current-RPS without any cumulative lag.
-const rpsWindowSize = 3 // seconds to average over — short enough to be responsive
+//
+// Deprecated: belongs to the legacy engine; will be removed once the Hive
+// engine reaches production parity.
+const rpsWindowSize = 3 // seconds to average over
 
 type rpsWindow struct {
 	mu      sync.Mutex
@@ -49,25 +45,17 @@ func (w *rpsWindow) record(count int64) {
 	w.buckets[slot] += count
 }
 
-// rate returns the request rate over the past rpsWindowSize seconds.
-// It always divides by the full window width so there is no oscillation at
-// second boundaries — only complete past seconds count (current second is
-// excluded because it is still accumulating).
 func (w *rpsWindow) rate() float64 {
 	now := time.Now().Unix()
 	w.mu.Lock()
 	defer w.mu.Unlock()
-
 	var total int64
-	// Sum the (rpsWindowSize - 1) fully-completed seconds before now.
-	// Skipping "now" avoids a partial-second low reading at the boundary.
 	for i := 0; i < rpsWindowSize; i++ {
 		age := now - w.seconds[i]
 		if age >= 1 && age < rpsWindowSize {
 			total += w.buckets[i]
 		}
 	}
-	// Divide by the number of complete seconds we looked at.
 	windowSecs := float64(rpsWindowSize - 1)
 	if windowSecs < 1 {
 		windowSecs = 1
@@ -75,37 +63,18 @@ func (w *rpsWindow) rate() float64 {
 	return float64(total) / windowSecs
 }
 
-type MetricsSnapshot struct {
-	TotalRequests int64
-	SuccessCount  int64
-	FailureCount  int64
-	AvgLatency    float64
-	MinLatency    float64
-	MaxLatency    float64
-	P50Latency    float64
-	P95Latency    float64
-	P99Latency    float64
-	CurrentVPUs   int
-	ActiveVPUs    int
-	Throughput    float64
-	ErrorRate     float64
-	TargetRPS     int
-	// Stage progress — updated by RunStages
-	CurrentStage int
-	TotalStages  int
-	// Director Mode
-	Bias int
+type Metrics struct {
+	totalRequests atomic.Int64
+	successCount  atomic.Int64
+	failureCount  atomic.Int64
+	totalLatency  atomic.Int64
 }
 
-type CallLog struct {
-	Timestamp  time.Time
-	Method     string
-	Url        string
-	StatusCode int
-	Duration   time.Duration
-	Error      string
-}
-
+// Engine is the legacy worker-pool load engine.
+//
+// Deprecated: Engine is superseded by the Hive engine (internal/engine/hive).
+// It will be removed once the Hive engine reaches production parity.
+// Do not add new features here.
 type Engine struct {
 	client     *http.Client
 	metrics    *Metrics
@@ -147,9 +116,13 @@ type Engine struct {
 }
 
 // EngineOption is a functional option for New().
+//
+// Deprecated: use hive.EngineOption instead.
 type EngineOption func(*Engine)
 
 // WithRecorder attaches a snap.Recorder to the engine.
+//
+// Deprecated: use hive.WithRecorder instead.
 // When set, every HTTP response is passed to recorder.Record() after the body
 // is drained. When nil (the default), the hot-path incurs zero overhead.
 func WithRecorder(r snap.Recorder) EngineOption {
@@ -159,6 +132,8 @@ func WithRecorder(r snap.Recorder) EngineOption {
 // WithSampleRate sets the fraction of responses whose body is captured for
 // schema inference (0.0–1.0). Default is 0.05 (5 %).
 // The rate is rounded to the nearest 1-in-N integer slot, so 0.05 → 1-in-20.
+//
+// Deprecated: use hive.WithSampleRate instead.
 func WithSampleRate(rate float64) EngineOption {
 	return func(e *Engine) {
 		if rate <= 0 {
@@ -177,6 +152,9 @@ func WithSampleRate(rate float64) EngineOption {
 	}
 }
 
+// New creates a legacy Engine.
+//
+// Deprecated: use hive.New() instead.
 func New(opts ...EngineOption) *Engine {
 	e := &Engine{
 		client: &http.Client{
@@ -261,12 +239,15 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 		g.Go(func() error {
 			for spec := range work {
 				e.activeVPU.Add(1)
+				// Increment totalRequests first so total is always ≥ success+failure.
+				// A concurrent GetMetrics snapshot may see total=N, success/failure=N-1
+				// for an instant, but will never see success+failure > total.
+				e.metrics.totalRequests.Add(1)
 				if err := e.executeRequest(gCtx, spec); err != nil {
 					e.metrics.failureCount.Add(1)
 				} else {
 					e.metrics.successCount.Add(1)
 				}
-				e.metrics.totalRequests.Add(1)
 				e.rpsWin.record(1)
 				e.activeVPU.Add(-1)
 			}

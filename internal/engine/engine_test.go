@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/shyam-s00/gopher-glide/internal/config"
-	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/shyam-s00/gopher-glide/internal/config"
+	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -84,7 +85,7 @@ func TestRpsWindow_ZeroBeforeRecord(t *testing.T) {
 
 func TestRpsWindow_RecordAndRate(t *testing.T) {
 	var w rpsWindow
-	// Back-fill the previous second's bucket manually so rate() sees a full second.
+	// Back-fill the previous second's bucket manually so Rate() sees a full second.
 	prev := time.Now().Unix() - 1
 	slot := int(prev % rpsWindowSize)
 	w.seconds[slot] = prev

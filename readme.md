@@ -55,12 +55,22 @@ Gopher Glide features an official [JetBrains plugin](https://plugins.jetbrains.c
 
 ---
 
-## Roadmap
-- [x] Snap – Behavioral Profiling
-- [ ] VPU mode — fixed virtual users instead of fixed RPS
-- [ ] Circuit breaker — auto-stop on a configurable error-rate threshold
-- [ ] Prometheus `/metrics` endpoint
-- [ ] HTML / JSON result export
+## 🚀 Performance
+
+The Hive Engine is built for maximum throughput with zero garbage-collection penalties. 
+- **Sequential Peak:** ~31,000 Requests Per Second (RPS) per core.
+- **Parallel Aggregate:** ~89,000+ RPS total system throughput on standard 12-core hardware.
+- **Zero Garbage on the hot path:** Each Actor's per-request counter-updates (RPS window, sharded totals) use lock-free atomics with no heap allocations. The ~10 Hz TUI snapshot (`GetMetrics`) does allocate a fixed-size `[]float64` of 4 096 entries to compute latency percentiles, but this is well outside the request dispatch path and has negligible GC impact.
+
+For full technical breakdown and latency details, see the **[Official Benchmarks](docs/BENCHMARKS.md)**.
+
+---
+
+## Planned Features
+- [ ] **Chaos / Fault Injection** — Simulate poor network conditions (3G packet loss, latency jitter) to see how APIs handle degradation.
+- [ ] **Distributed Simulation Mesh** — Run `gg worker` nodes across multiple servers/regions, controlled by a central `gg master` UI.
+- [ ] **Auto-Pilot (Smart Scaling)** — Set a `--target-latency` and let the engine automatically ramp RPS to find your API's exact breaking point.
+
 
 ## License
 [MIT](LICENSE)
