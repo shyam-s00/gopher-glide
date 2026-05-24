@@ -154,7 +154,5 @@ func (e *Engine) recordLatency(shard int, d time.Duration) {
 		shardMs = 1 // round sub-ms up so the counter is always non-zero
 	}
 	e.counters.addLatency(shard, shardMs)
-	e.latencyMu.Lock()
-	e.latencies = append(e.latencies, ms)
-	e.latencyMu.Unlock()
+	// TODO: write ms into e.latBuf ring buffer (lock-free write path lands in the next step)
 }

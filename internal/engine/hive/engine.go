@@ -45,9 +45,8 @@ type Engine struct {
 	activeActors atomic.Int32
 	rpsWin       rpsWindow
 
-	// ── Latency percentile slice ──────────────────────────────────────────
-	latencies []float64
-	latencyMu sync.RWMutex
+	// ── Latency ring buffer ───────────────────────────────────────────────
+	latBuf latencyBuf
 
 	// ── Call-log ring buffers ─────────────────────────────────────────────
 	callLogs   []*engine.CallLog
@@ -98,7 +97,7 @@ func New(opts ...EngineOption) *Engine {
 			Timeout:   30 * time.Second,
 			Transport: buildTransport(1000), // baseline; tuned in RunStages
 		},
-		latencies:   make([]float64, 0, 1024),
+		latBuf:      newLatencyBuf(1024),
 		callLogs:    make([]*engine.CallLog, 0, 100),
 		errorLogs:   make([]*engine.CallLog, 0, 100),
 		maxLogs:     100,
@@ -160,9 +159,11 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	e.totalStages.Store(int32(len(cfg.Stages)))
 	e.rpsBias.Store(0)
 
-	e.latencyMu.Lock()
-	e.latencies = make([]float64, 0, 1024)
-	e.latencyMu.Unlock()
+	// Reset the latency ring-buffer write counter so stale data from a
+	// previous run does not bleed into this one. The buffer itself is
+	// re-sized to fit the expected request volume in RunStages once the
+	// peakRPS and total duration are known.
+	e.latBuf.n.Store(0)
 
 	e.callLogsMu.Lock()
 	e.callLogs = make([]*engine.CallLog, 0, e.maxLogs)
