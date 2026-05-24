@@ -103,3 +103,49 @@ func TestHiveSnapRecorderEndToEnd(t *testing.T) {
 		t.Errorf("EndpointSnap.Latency.P99 should be >= 0, got %v", ep.Latency.P99)
 	}
 }
+
+// TestHiveProfileShapedMultiStage verifies that the Hive engine correctly
+// handles a profile-shaped 3-stage config (ramp-up → sustain → ramp-down),
+// mirroring what profile.InflateSegments produces at runtime.
+//
+// TimeScale: 100 compresses each 2-second logical stage to ~20ms wall time so
+// the test completes in ~60ms. At that scale every stage duration is well below
+// 1 second, meaning each stage triggers only the Queen's stageTimer (not the
+// heartbeat ticker), which guarantees exactly one SpawnManifest per stage.
+//
+// Assertions:
+//   - GetMetrics().TotalRequests > 0  (actors executed HTTP requests)
+//   - GetMetrics().TotalStages == 3   (engine tracked all three stages)
+func TestHiveProfileShapedMultiStage(t *testing.T) {
+	srv := newSnapTestServer(t)
+
+	e := hive.New()
+
+	// Three-stage profile: ramp-up (0→5 RPS), sustain (5 RPS), ramp-down (5→1 RPS).
+	// TimeScale:100 → scaledDur = 2s/100 = 20ms per stage (total ~60ms wall time).
+	cfg := &config.Config{
+		ConfigSection: config.Section{TimeScale: 100.0},
+		Stages: []config.Stage{
+			{Duration: 2 * time.Second, TargetRPS: 5}, // ramp-up
+			{Duration: 2 * time.Second, TargetRPS: 5}, // sustain
+			{Duration: 2 * time.Second, TargetRPS: 1}, // ramp-down
+		},
+	}
+	specs := []httpreader.RequestSpec{{Method: "GET", URL: srv.URL}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := e.RunStages(ctx, cfg, specs); err != nil {
+		t.Fatalf("RunStages: %v", err)
+	}
+
+	m := e.GetMetrics()
+
+	if m.TotalRequests == 0 {
+		t.Error("expected TotalRequests > 0 after multi-stage run")
+	}
+	if m.TotalStages != 3 {
+		t.Errorf("expected TotalStages == 3, got %d", m.TotalStages)
+	}
+}
