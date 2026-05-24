@@ -13,6 +13,6 @@ type TUIRenderer struct{}
 
 // Run launches the BubbleTea TUI and blocks until the user quits or all
 // engine stages complete.
-func (r *TUIRenderer) Run(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpec, opts RunOptions) error {
+func (r *TUIRenderer) Run(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec, opts RunOptions) error {
 	return tui.Start(eng, cfg, specs, opts.Snapping, opts.SnapDir, opts.OnRunComplete)
 }

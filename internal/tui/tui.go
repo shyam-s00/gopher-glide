@@ -30,7 +30,7 @@ const (
 // ── model ─────────────────────────────────────────────────────────────────────
 
 type model struct {
-	engine     *engine.Engine
+	engine     engine.Runner
 	config     *config.Config
 	specs      []httpreader.RequestSpec
 	ctx        context.Context
@@ -79,7 +79,7 @@ type snapFinalizedMsg struct{ status string }
 
 // ── init ──────────────────────────────────────────────────────────────────────
 
-func initialModel(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpec) model {
+func initialModel(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec) model {
 	ctx, cancel := context.WithCancel(context.Background())
 	vp := viewport.New(0, 0)
 	return model{
@@ -869,7 +869,7 @@ func (m model) View() string {
 //   - onRunComplete       → called in a background goroutine once the engine
 //     finishes all stages; must not write to stdout/stderr. The returned
 //     string is shown in the director bar. nil is safe (no-op).
-func Start(eng *engine.Engine, cfg *config.Config, specs []httpreader.RequestSpec, snapping bool, snapDir string, onRunComplete func() string) error {
+func Start(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec, snapping bool, snapDir string, onRunComplete func() string) error {
 	m := initialModel(eng, cfg, specs)
 	m.snapping = snapping
 	m.snapDir = snapDir

@@ -323,7 +323,7 @@ func main() {
 			engine.WithSampleRate(effectiveSampleRate),
 		)
 	}
-	eng := engine.New(engineOpts...)
+	var eng engine.Runner = engine.New(engineOpts...)
 
 	// ── start TUI ─────────────────────────────────────────────────────────────
 	// onRunComplete is dispatched by the TUI as a background goroutine once
@@ -393,7 +393,7 @@ func main() {
 // .snap file to dir. Returns a human-readable status line on success.
 // It does not write to stdout or stderr, making it safe to call while the
 // TUI alt-screen is active.
-func finalizeSnapResult(rec *snap.DefaultRecorder, eng *engine.Engine, cfg *config.Config,
+func finalizeSnapResult(rec *snap.DefaultRecorder, eng engine.Runner, cfg *config.Config,
 	tag, dir string, sampleRate float64, maxSamples, maxBodyKB int) (string, error) {
 	endTime := eng.GetEndTime()
 	if endTime.IsZero() {
