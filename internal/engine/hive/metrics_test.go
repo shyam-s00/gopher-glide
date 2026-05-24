@@ -1,6 +1,7 @@
 package hive
 
 import (
+	"sync"
 	"testing"
 	"time"
 	"unsafe"
@@ -150,8 +151,8 @@ func TestRpsWindow_RecordAndRate(t *testing.T) {
 	var w rpsWindow
 	prev := time.Now().Unix() - 1
 	slot := int(prev % rpsWindowSize)
-	w.seconds[slot] = prev
-	w.buckets[slot] = 50
+	w.seconds[slot].Store(prev)
+	w.buckets[slot].Store(50)
 
 	if r := w.rate(); r <= 0 {
 		t.Errorf("want rate > 0 after recording, got %f", r)
@@ -162,8 +163,8 @@ func TestRpsWindow_ClearsStaleSlot(t *testing.T) {
 	var w rpsWindow
 	old := time.Now().Unix() - 100
 	slot := int(old % rpsWindowSize)
-	w.seconds[slot] = old
-	w.buckets[slot] = 999
+	w.seconds[slot].Store(old)
+	w.buckets[slot].Store(999)
 
 	if r := w.rate(); r != 0 {
 		t.Errorf("stale bucket must not affect rate, got %f", r)
@@ -174,19 +175,17 @@ func TestRpsWindow_RecordResetsStaleSlot(t *testing.T) {
 	var w rpsWindow
 	now := time.Now().Unix()
 	slot := int(now % rpsWindowSize)
-	w.seconds[slot] = now - 1000
-	w.buckets[slot] = 999
+	w.seconds[slot].Store(now - 1000)
+	w.buckets[slot].Store(999)
 
 	w.record(1)
 
-	w.mu.Lock()
-	if w.seconds[slot] != now {
-		t.Errorf("Record() should have reset Seconds[%d] to %d, got %d", slot, now, w.seconds[slot])
+	if got := w.seconds[slot].Load(); got != now {
+		t.Errorf("Record() should have reset Seconds[%d] to %d, got %d", slot, now, got)
 	}
-	if w.buckets[slot] != 1 {
-		t.Errorf("Record() should have reset Buckets[%d] to 1, got %d", slot, w.buckets[slot])
+	if got := w.buckets[slot].Load(); got != 1 {
+		t.Errorf("Record() should have reset Buckets[%d] to 1, got %d", slot, got)
 	}
-	w.mu.Unlock()
 }
 
 func TestRpsWindow_AccumulatesWithinSameSecond(t *testing.T) {
@@ -198,11 +197,7 @@ func TestRpsWindow_AccumulatesWithinSameSecond(t *testing.T) {
 	now := time.Now().Unix()
 	slot := int(now % rpsWindowSize)
 
-	w.mu.Lock()
-	got := w.buckets[slot]
-	w.mu.Unlock()
-
-	if got != 18 {
+	if got := w.buckets[slot].Load(); got != 18 {
 		t.Errorf("multiple Record() calls in same second: want 18, got %d", got)
 	}
 }
@@ -213,10 +208,109 @@ func TestRpsWindow_RateAveragesOverWindow(t *testing.T) {
 	for age := int64(1); age < rpsWindowSize; age++ {
 		sec := now - age
 		s := int(sec % rpsWindowSize)
-		w.seconds[s] = sec
-		w.buckets[s] = 100
+		w.seconds[s].Store(sec)
+		w.buckets[s].Store(100)
 	}
 	if rate := w.rate(); rate != 100 {
 		t.Errorf("rate: want 100.0, got %f", rate)
+	}
+}
+
+// ── rpsWindow: concurrent access under -race ──────────────────────────────────
+
+// TestRpsWindow_Concurrent_Record verifies that many goroutines calling
+// record() simultaneously produce no data races. The exact final count in
+// any slot is not asserted — the window's second-boundary reset intentionally
+// allows a bounded clobber — but no slot must go negative and the call must
+// not panic.
+func TestRpsWindow_Concurrent_Record(t *testing.T) {
+	t.Parallel()
+	var w rpsWindow
+	const goroutines = 100
+	const opsEach = 500
+
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < opsEach; j++ {
+				w.record(1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Buckets must be non-negative — no goroutine may have stored a negative value.
+	for i := range w.buckets {
+		if v := w.buckets[i].Load(); v < 0 {
+			t.Errorf("buckets[%d] went negative: %d", i, v)
+		}
+	}
+}
+
+// TestRpsWindow_Concurrent_RecordAndRate verifies that concurrent writers
+// (record) and readers (rate) produce no data races and that rate() never
+// returns a negative value.
+func TestRpsWindow_Concurrent_RecordAndRate(t *testing.T) {
+	t.Parallel()
+	var w rpsWindow
+	const goroutines = 50
+	const opsEach = 300
+
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < opsEach; j++ {
+				w.record(1)
+			}
+		}()
+	}
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < opsEach; j++ {
+				if r := w.rate(); r < 0 {
+					t.Errorf("rate() returned negative value: %f", r)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// TestRpsWindow_Concurrent_ResetRaceWithRecord verifies that reset() and
+// record() can run concurrently without a data race. After all goroutines
+// finish, every slot must have a non-negative bucket value.
+func TestRpsWindow_Concurrent_ResetRaceWithRecord(t *testing.T) {
+	t.Parallel()
+	var w rpsWindow
+	const goroutines = 40
+	const opsEach = 200
+
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		even := i%2 == 0
+		go func() {
+			defer wg.Done()
+			for j := 0; j < opsEach; j++ {
+				if even {
+					w.record(1)
+				} else {
+					w.reset()
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	for i := range w.buckets {
+		if v := w.buckets[i].Load(); v < 0 {
+			t.Errorf("buckets[%d] negative after concurrent reset+record: %d", i, v)
+		}
 	}
 }

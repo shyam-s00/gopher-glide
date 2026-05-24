@@ -1,7 +1,6 @@
 package hive
 
 import (
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -108,52 +107,61 @@ const rpsWindowSize = 3
 // Each slot in the ring owns one calendar second (unix timestamp).
 // When record() is called in a new second it resets the stale slot first,
 // so old data never bleeds forward.
+//
+// All fields use atomic.Int64 — no mutex is held on the hot request path.
 type rpsWindow struct {
-	mu      sync.Mutex
-	buckets [rpsWindowSize]int64 // request count recorded in that second
-	seconds [rpsWindowSize]int64 // unix second the corresponding bucket belongs to
+	buckets [rpsWindowSize]atomic.Int64 // request count recorded in that second
+	seconds [rpsWindowSize]atomic.Int64 // unix second the corresponding bucket belongs to
 }
 
-// reset zeroes the window's data buckets under the lock.
+// reset zeroes all slots atomically.
 //
-// Use this instead of struct reassignment (e.g. w = rpsWindow{}) which would
-// race against concurrent calls to record/rate that are accessing the mutex
-// state. By locking first we ensure the zeroing is fully serialised with any
-// in-flight reader or writer.
+// Callers may observe a transient zero across slots if rate() is called
+// concurrently — this is acceptable for a display-only metric.
 func (w *rpsWindow) reset() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	for i := range w.buckets {
-		w.buckets[i] = 0
-		w.seconds[i] = 0
+		w.seconds[i].Store(0)
+		w.buckets[i].Store(0)
 	}
 }
 
 // record increments the count for the current second.
+//
+// The slot for the current unix second is identified via modulo. If the slot's
+// stored timestamp differs from now it belongs to a past second, so the bucket
+// is reset before incrementing. Swap is used atomically: the goroutine that
+// wins the Swap transition (old ≠ now) performs the Store(0). Any goroutine
+// that arrives after the transition sees old == now and skips the reset.
+//
+// At a second boundary there is a narrow window where a late-arriving goroutine
+// may Store(0) after an earlier goroutine already incremented the fresh bucket,
+// clobbering that count. This is accepted — the metric is display-only and
+// self-corrects within one second.
 func (w *rpsWindow) record(count int64) {
 	now := time.Now().Unix()
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	slot := int(now % rpsWindowSize)
-	if w.seconds[slot] != now {
-		w.seconds[slot] = now
-		w.buckets[slot] = 0
+	if w.seconds[slot].Swap(now) != now {
+		w.buckets[slot].Store(0)
 	}
-	w.buckets[slot] += count
+	w.buckets[slot].Add(count)
 }
 
 // rate returns the average request rate over the past (rpsWindowSize-1)
 // fully-completed seconds. The current (still-accumulating) second is
 // excluded so the reading never oscillates at second boundaries.
+//
+// Each slot is read with two independent atomic loads (seconds then buckets).
+// A concurrent record() call may land between the two loads, causing the
+// bucket to be read before the second is updated, or vice-versa. The
+// resulting off-by-one is bounded to a single request and is acceptable for
+// a display-only metric sampled at ~10 Hz.
 func (w *rpsWindow) rate() float64 {
 	now := time.Now().Unix()
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	var total int64
 	for i := 0; i < rpsWindowSize; i++ {
-		age := now - w.seconds[i]
+		age := now - w.seconds[i].Load()
 		if age >= 1 && age < rpsWindowSize {
-			total += w.buckets[i]
+			total += w.buckets[i].Load()
 		}
 	}
 	windowSecs := float64(rpsWindowSize - 1)

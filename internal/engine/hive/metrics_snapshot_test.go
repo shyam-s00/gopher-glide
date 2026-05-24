@@ -203,11 +203,9 @@ func TestGetMetrics_ThroughputFromRpsWindow(t *testing.T) {
 
 	// Record 100 requests in the previous second slot so rate() returns > 0.
 	prev := time.Now().Unix() - 1
-	e.rpsWin.mu.Lock()
 	slot := int(prev % rpsWindowSize)
-	e.rpsWin.seconds[slot] = prev
-	e.rpsWin.buckets[slot] = 100
-	e.rpsWin.mu.Unlock()
+	e.rpsWin.seconds[slot].Store(prev)
+	e.rpsWin.buckets[slot].Store(100)
 
 	m := e.GetMetrics()
 	if m.Throughput <= 0 {
