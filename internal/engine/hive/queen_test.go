@@ -2,6 +2,7 @@ package hive
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -77,7 +78,7 @@ func TestQueen_SingleStage_ManifestCountMatchesTargetRPS(t *testing.T) {
 }
 
 func TestQueen_ManifestCount_ReflectsTargetRPS(t *testing.T) {
-	// 30s stage at 10x scale = 3s real. The 1s ticker fires ~3 times.
+	// 30s stage at 10x scale = 3s real → 3 windows of 1s each.
 	stages := singleStage(30*time.Second, 50)
 	manifests, _ := runQueen(t, stages, 10.0, makeSpecs(1), 64, 5*time.Second)
 	if len(manifests) == 0 {
@@ -362,34 +363,32 @@ func TestQueen_FullChannel_DoesNotBlock(t *testing.T) {
 // ── manifest Duration field ────────────────────────────────────────────────────
 
 func TestQueen_NormalTick_ManifestDurationIsOneSecond(t *testing.T) {
-	// 30s at 10x = 3s real; ticker fires ~3 times, each with Duration=1s.
-	// The FINAL manifest always comes from the stageTimer (fractional remainder,
-	// clamped to hatcheryTick). Only the intermediate ticker manifests are 1s.
+	// 30s at 10x = 3s real → exactly 3 windows of 1s each.
+	// With the proactive emit-then-sleep loop, every window in a stage whose
+	// scaled duration is an exact multiple of 1s will be exactly 1s.
 	stages := singleStage(30*time.Second, 10)
 	manifests, _ := runQueen(t, stages, 10.0, makeSpecs(1), 64, 5*time.Second)
 	if len(manifests) == 0 {
 		t.Fatal("expected at least 1 manifest")
 	}
-	// All manifests must have a positive, non-zero Duration.
+	// Every manifest must have a positive Duration.
 	for i, m := range manifests {
 		if m.Duration <= 0 {
 			t.Errorf("manifest[%d]: expected Duration > 0, got %v", i, m.Duration)
 		}
 	}
-	// All but the final manifest are ticker emits and must be exactly 1s.
-	// The final manifest is the stageTimer emit (fractional remainder ≤ 1s).
-	if len(manifests) > 1 {
-		for i, m := range manifests[:len(manifests)-1] {
-			if m.Duration != time.Second {
-				t.Errorf("ticker manifest[%d]: expected Duration=1s, got %v", i, m.Duration)
-			}
+	// For a 30s/10x = 3s stage, all windows are exactly 1s.
+	for i, m := range manifests {
+		if m.Duration != time.Second {
+			t.Errorf("manifest[%d]: expected Duration=1s, got %v", i, m.Duration)
 		}
 	}
 }
 
 func TestQueen_SubSecondStage_ManifestDurationIsSubSecond(t *testing.T) {
-	// A 100ms stage at timeScale=1 fires the stageTimer immediately.
-	// The emitted manifest must carry a Duration < 1s (the fractional remainder).
+	// A 100ms stage at timeScale=1 produces a single 100ms window.
+	// The emitted manifest must carry Duration=100ms and a proportionally
+	// scaled Count (≈ round(rps × 0.1)).
 	stages := singleStage(100*time.Millisecond, 10)
 	e := New()
 	q := &queen{e: e}
@@ -405,9 +404,41 @@ func TestQueen_SubSecondStage_ManifestDurationIsSubSecond(t *testing.T) {
 	}
 	last := manifests[len(manifests)-1]
 	if last.Duration >= time.Second {
-		t.Errorf("sub-second stage final manifest: expected Duration < 1s, got %v", last.Duration)
+		t.Errorf("sub-second stage manifest: expected Duration < 1s, got %v", last.Duration)
 	}
 	if last.Duration <= 0 {
-		t.Errorf("sub-second stage final manifest: expected Duration > 0, got %v", last.Duration)
+		t.Errorf("sub-second stage manifest: expected Duration > 0, got %v", last.Duration)
+	}
+}
+
+// ── 1.5.2 proportional count scaling ─────────────────────────────────────────
+
+func TestQueen_FractionalLastWindow_CountIsProportional(t *testing.T) {
+	// 2500ms stage at 1x with 100 RPS produces:
+	//   window 1 [0s, 1s]:    Duration=1s,    Count=100
+	//   window 2 [1s, 2s]:    Duration=1s,    Count=100
+	//   window 3 [2s, 2.5s]:  Duration=500ms, Count=50  ← proportional
+	//
+	// Without the fix (RC3), the final manifest would have Count=100 and
+	// Duration≈10ms, causing a massive burst at the stage boundary.
+	stages := singleStage(2500*time.Millisecond, 100)
+	manifests, _ := runQueen(t, stages, 1.0, makeSpecs(1), 64, 5*time.Second)
+
+	if len(manifests) < 3 {
+		t.Fatalf("expected at least 3 manifests, got %d", len(manifests))
+	}
+
+	last := manifests[len(manifests)-1]
+
+	// Final window must be sub-second (the 500ms remainder).
+	if last.Duration >= time.Second {
+		t.Errorf("final manifest Duration should be < 1s, got %v", last.Duration)
+	}
+
+	// Count must be proportionally scaled: 100 RPS × 500ms = 50 actors (±1 for rounding).
+	expectedCount := int(math.Round(100 * float64(last.Duration) / float64(time.Second)))
+	if last.Count < expectedCount-1 || last.Count > expectedCount+1 {
+		t.Errorf("final manifest Count=%d, expected ~%d (proportional to %v window)",
+			last.Count, expectedCount, last.Duration)
 	}
 }

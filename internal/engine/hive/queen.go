@@ -11,31 +11,28 @@ import (
 
 // ── queen ─────────────────────────────────────────────────────────────────────
 
-// queen is the Simulation Scheduler. It runs on a fixed 1-second heartbeat
-// ticker, evaluates the current stage position, interpolates (LERPs) the
-// target RPS, applies any pending Director bias, and emits one SpawnManifest
-// per tick onto manifestCh for the Hatchery to consume.
+// queen is the Simulation Scheduler. It operates on a proactive emit-then-sleep
+// loop rather than a reactive ticker:
 //
-// The Queen owns:
-//   - Stage iteration (including zero-duration step jumps)
-//   - rpsBias accumulation from biasCh
-//   - targetRPS / currentStage atomics
-//   - round-robin spec index across all manifests
+//  1. Compute the next window: up to 1 second ahead, capped at the stage boundary.
+//  2. Emit one SpawnManifest whose Count is proportionally scaled to the window
+//     duration (e.g. 1000 actors for a 0.5 s window at 2000 RPS, not 2000).
+//  3. Sleep for exactly that window duration (or return on context cancel).
+//  4. Advance windowStart and repeat until the stage ends.
 //
-// The Queen does NOT own HTTP execution — that belongs to the Hatchery/Actor.
+// This three-step design eliminates three classes of stage-transition artefacts:
+//   - RC1 Lagging 1 s dip: no detached global ticker means stages start
+//     dispatching immediately with zero idle gap.
+//   - RC2 Overlapping manifests: a single code path emits manifests — there is
+//     no race between a ticker case and a stageTimer case at boundaries.
+//   - RC3 Full-count burst: Count is always scaled to windowDur / 1 s, so a
+//     10 ms fractional window never receives a full second's worth of actors.
 type queen struct {
 	e *Engine // back-pointer to shared atomics and channels
 }
 
 // run is the Queen's main loop. It is launched as a goroutine by RunStages and
 // returns when ctx is cancelled or all stages complete.
-//
-//   - stages is the ordered list of load stages from the config.
-//   - timeScale compresses/expands stage durations (1.0 = real-time).
-//   - specs is the request spec slice; the Queen advances a round-robin index
-//     and embeds it in each SpawnManifest so the Hatchery knows which spec to use.
-//   - manifestCh is written non-blocking; a full channel drops the manifest
-//     (Hatchery is behind — acceptable under overload).
 func (q *queen) run(
 	ctx context.Context,
 	stages []config.Stage,
@@ -47,26 +44,19 @@ func (q *queen) run(
 		timeScale = 1.0
 	}
 
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
 	specIdx := 0 // global round-robin position advanced by every manifest
 	prevRPS := 0 // RPS at the end of the previous stage (starts at 0)
 
 	for stageIdx, stage := range stages {
-		// ── Zero-duration stage: instant step, no tick ─────────────────────
-		// Emit at most one manifest for the step, update state, then
-		// immediately advance to the next stage without waiting for a tick.
+		// ── Zero-duration stage: instant step, no sleep ────────────────────
 		if stage.Duration == 0 {
 			prevRPS = stage.TargetRPS
-			q.e.targetRPS.Store(int64(stage.TargetRPS))
 			q.e.currentStage.Store(int32(stageIdx))
 
 			rps := stage.TargetRPS
 			if rps < 1 {
 				rps = 1
 			}
-			// Drain any pending bias (keeps the atomic consistent).
 			q.drainBias()
 			biasedRPS := rps + int(q.e.rpsBias.Load())
 			if biasedRPS < 1 {
@@ -82,7 +72,11 @@ func (q *queen) run(
 			continue
 		}
 
-		// ── Normal (timed) stage ───────────────────────────────────────────
+		// ── Normal (timed) stage: proactive emit-then-sleep loop ───────────
+		//
+		// The window boundaries are anchored to the fixed stageStart time, not
+		// to time.Now() after each sleep, so OS scheduler jitter never
+		// accumulates into drift across a long stage.
 		scaledDur := time.Duration(float64(stage.Duration) / timeScale)
 		q.e.currentStage.Store(int32(stageIdx))
 
@@ -92,70 +86,82 @@ func (q *queen) run(
 		startRPS := float64(prevRPS)
 		endRPS := float64(stage.TargetRPS)
 
-		// stageTimer fires when the stage's wall-clock duration elapses.
-		// Without it the Queen blocks on ticker.C for up to 1 second even
-		// after the stage has already ended — wrong for sub-second stages.
-		stageTimer := time.NewTimer(scaledDur)
+		windowStart := stageStart
 
-		// emitAt is a small helper that evaluates the LERP at a given
-		// instant, applies bias, and emits a SpawnManifest non-blocking.
-		emitAt := func(now time.Time, windowDur time.Duration) {
-			q.drainBias()
-			elapsed := now.Sub(stageStart)
+		for windowStart.Before(stageEnd) {
+			// ── 1. Compute the window ──────────────────────────────────────
+			windowEnd := windowStart.Add(time.Second)
+			if windowEnd.After(stageEnd) {
+				windowEnd = stageEnd
+			}
+			windowDur := windowEnd.Sub(windowStart)
+
+			// Skip windows shorter than one Hatchery tick — nothing meaningful
+			// can be dispatched and a divide-by-zero is possible in the Hatchery.
+			if windowDur < hatcheryTick {
+				break
+			}
+
+			// ── 2. LERP + bias + proportional count (1.5.2) ───────────────
+			//
+			// Evaluate the LERP at windowEnd (the end of the upcoming window)
+			// so the ramp progresses smoothly over the stage.
+			elapsed := windowEnd.Sub(stageStart)
 			pct := float64(elapsed) / float64(scaledDur)
 			if pct > 1 {
 				pct = 1
 			} else if pct < 0 {
 				pct = 0
 			}
+
+			q.drainBias()
 			currentRPS := startRPS + (endRPS-startRPS)*pct
 			biasedRPS := currentRPS + float64(q.e.rpsBias.Load())
 			if biasedRPS < 1 {
 				biasedRPS = 1
 			}
-			roundedRPS := int(math.Round(biasedRPS))
-			q.e.targetRPS.Store(int64(roundedRPS))
+
+			// fullSecondRPS is what the TUI shows as "target RPS".
+			// count is scaled to the actual window so the Hatchery spawns the
+			// right number of actors regardless of how long the window is.
+			fullSecondRPS := int(math.Round(biasedRPS))
+			count := int(math.Round(biasedRPS * float64(windowDur) / float64(time.Second)))
+			if count < 1 {
+				count = 1
+			}
+
+			q.e.targetRPS.Store(int64(fullSecondRPS))
+
+			// ── 3. Emit manifest for the upcoming window ───────────────────
 			select {
-			case manifestCh <- SpawnManifest{Count: roundedRPS, Duration: windowDur, SpecIndex: specIdx % len(specs)}:
-				specIdx += roundedRPS
+			case manifestCh <- SpawnManifest{Count: count, Duration: windowDur, SpecIndex: specIdx % len(specs)}:
+				specIdx += count
 			default:
 				// Hatchery is behind — drop this manifest silently.
 			}
-		}
 
-	stageLoop:
-		for {
+			// ── 4. Sleep for the window duration (1.5.3) ──────────────────
+			//
+			// Emit first, then sleep. The Hatchery begins dispatching
+			// immediately; the Queen wakes up just as dispatching finishes.
+			// Using a timer + select ensures context cancellation is honoured
+			// without delaying the shutdown by up to one full window.
+			// After the timer fires, drain biasCh so any bias that arrived
+			// during the sleep is reflected in rpsBias (visible via GetBias())
+			// and will be factored into the very next window's LERP.
+			timer := time.NewTimer(windowDur)
 			select {
 			case <-ctx.Done():
-				stageTimer.Stop()
+				timer.Stop()
 				return nil
-
-			case <-stageTimer.C:
-				// Stage duration elapsed. Calculate exactly how much time
-				// remains in the current second window so the Hatchery spreads
-				// actors over the true fractional remainder, not a full second.
-				remaining := time.Until(stageEnd)
-				if remaining < 0 {
-					remaining = 0
-				}
-				// Clamp to at least one micro-batch tick so the Hatchery can
-				// always compute a valid batch size (avoids divide-by-zero).
-				if remaining < hatcheryTick {
-					remaining = hatcheryTick
-				}
-				emitAt(stageEnd, remaining)
-				break stageLoop
-
-			case now := <-ticker.C:
-				if now.After(stageEnd) {
-					// Tick arrived after stage end (race between timer and
-					// ticker). The stageTimer case handles the final emit.
-					break stageLoop
-				}
-				emitAt(now, time.Second)
+			case <-timer.C:
+				q.drainBias()
 			}
+
+			// Advance to the next window using the computed boundary (not
+			// time.Now()) to prevent jitter from accumulating into drift.
+			windowStart = windowEnd
 		}
-		stageTimer.Stop()
 
 		prevRPS = stage.TargetRPS
 	}

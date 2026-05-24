@@ -40,7 +40,13 @@ func TestExecuteActor_200_ReturnsNil(t *testing.T) {
 }
 
 func TestExecuteActor_200_LatencyRecorded(t *testing.T) {
-	t.Skip("latency write path not yet implemented")
+	srv := newTestServer(http.StatusOK, "hi")
+	defer srv.Close()
+	e := New()
+	_ = e.executeActor(context.Background(), specFor(t, http.MethodGet, srv.URL), 0)
+	if n := e.latBuf.Load().n.Load(); n != 1 {
+		t.Fatalf("expected 1 latency, got %d", n)
+	}
 }
 
 func TestExecuteActor_200_ShardedLatencyIncremented(t *testing.T) {
@@ -105,7 +111,11 @@ func TestExecuteActor_TransportError_RoutedToErrorLog(t *testing.T) {
 }
 
 func TestExecuteActor_TransportError_LatencyRecorded(t *testing.T) {
-	t.Skip("latency write path not yet implemented")
+	e := New()
+	_ = e.executeActor(context.Background(), specFor(t, http.MethodGet, "http://127.0.0.1:1"), 0)
+	if n := e.latBuf.Load().n.Load(); n != 1 {
+		t.Fatalf("expected 1 latency entry, got %d", n)
+	}
 }
 
 func TestExecuteActor_SetsUserAgentHeader(t *testing.T) {
@@ -256,7 +266,11 @@ func TestExecuteActor_InvalidURL_ReturnsError(t *testing.T) {
 }
 
 func TestExecuteActor_InvalidURL_LatencyRecorded(t *testing.T) {
-	t.Skip("latency write path not yet implemented")
+	e := New()
+	_ = e.executeActor(context.Background(), httpreader.RequestSpec{Method: http.MethodGet, URL: "://bad"}, 0)
+	if n := e.latBuf.Load().n.Load(); n != 1 {
+		t.Fatalf("expected 1 latency entry, got %d", n)
+	}
 }
 
 func TestSpawnManifest_Fields(t *testing.T) {
