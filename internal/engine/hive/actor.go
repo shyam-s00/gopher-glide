@@ -3,6 +3,7 @@ package hive
 import (
 	"context"
 	"io"
+	"math"
 	"time"
 
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
@@ -141,18 +142,34 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 	return nil
 }
 
-// recordLatency appends the duration to the percentile slice and adds the
-// millisecond value to the sharded totalLatency counter.
+// recordLatency appends the duration to the lock-free latency ring buffer and
+// adds the millisecond value to the sharded totalLatency counter.
+//
+// Ring-buffer write protocol (lock-free):
+//  1. Atomically claim a slot: idx = latBuf.n.Add(1) - 1
+//  2. Compute ring position: pos = idx % cap(buf)
+//  3. Store the IEEE-754 bit representation of the ms value.
+//
+// Wrapping at capacity (pos = idx % cap) prevents unbounded growth. A slot
+// overwritten mid-flight by a subsequent writer produces at most one slightly
+// stale percentile sample — acceptable for a display-only metric.
 //
 // Sub-millisecond durations are rounded up to 1 ms for the sharded counter so
-// that the counter is always non-zero after any real request. The float64 slice
-// used for percentile computation retains the true (possibly zero) ms value.
+// that the counter is always non-zero after any real request. The float64 ring
+// buffer retains the true (possibly sub-ms) value for accurate percentiles.
 func (e *Engine) recordLatency(shard int, d time.Duration) {
-	ms := float64(d.Milliseconds())
+	ms := float64(d) / float64(time.Millisecond)
 	shardMs := int64(ms)
 	if shardMs == 0 && d > 0 {
 		shardMs = 1 // round sub-ms up so the counter is always non-zero
 	}
 	e.counters.addLatency(shard, shardMs)
-	// TODO: write ms into e.latBuf ring buffer (lock-free write path lands in the next step)
+
+	// Lock-free ring-buffer write.
+	lb := e.latBuf.Load()
+	if lb != nil && len(lb.buf) > 0 {
+		idx := lb.n.Add(1) - 1
+		pos := idx % int64(len(lb.buf))
+		lb.buf[pos].Store(math.Float64bits(ms))
+	}
 }

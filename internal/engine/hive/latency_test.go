@@ -1,8 +1,13 @@
 package hive
 
 import (
+	"context"
 	"math"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 )
 
 // seedLatBuf writes values directly into e.latBuf, simulating what
@@ -180,5 +185,142 @@ func TestComputeLatency_P99GeP95GeP50(t *testing.T) {
 	}
 	if p95 < p50 {
 		t.Errorf("p95 (%f) should be >= p50 (%f)", p95, p50)
+	}
+}
+
+// ── 1.4.1i — lock-free latencyBuf integration tests ──────────────────────────
+
+// TestLatencyBuf_RecordAndSnapshot verifies that a value written via the real
+// recordLatency() hot-path is visible in computeLatency().
+func TestLatencyBuf_RecordAndSnapshot(t *testing.T) {
+	e := New()
+	// recordLatency internally uses float64(d) / float64(time.Millisecond), so
+	// 50ms → 50.0 ms stored in the ring buffer.
+	e.recordLatency(0, 50*time.Millisecond)
+
+	minL, maxL, p50, p95, p99 := e.computeLatency()
+	for name, got := range map[string]float64{"min": minL, "max": maxL, "p50": p50, "p95": p95, "p99": p99} {
+		if math.Abs(got-50.0) > 0.001 {
+			t.Errorf("%s: want 50.0 ms, got %f", name, got)
+		}
+	}
+}
+
+// TestLatencyBuf_WrapAround confirms that, once the ring is full, new writes
+// overwrite the oldest entry (capacity cap respected, no unbounded growth).
+func TestLatencyBuf_WrapAround(t *testing.T) {
+	const cap = 4
+	e := New()
+	// Replace the default buffer with a tiny 4-slot ring.
+	smallBuf := newLatencyBuf(cap)
+	e.latBuf.Store(&smallBuf)
+
+	// Write cap+1 values: 1.0, 2.0, 3.0, 4.0, 5.0 ms
+	// After wrap, slot 0 is overwritten with 5.0; slots 1-3 hold 2-4.
+	for i := 1; i <= cap+1; i++ {
+		e.recordLatency(0, time.Duration(i)*time.Millisecond)
+	}
+
+	lb := e.latBuf.Load()
+	n := lb.n.Load() // total writes = cap+1 = 5
+	if n != int64(cap+1) {
+		t.Errorf("n: want %d, got %d", cap+1, n)
+	}
+
+	// computeLatency reads min(n, cap) = cap entries — no single read exceeds cap.
+	minL, maxL, _, _, _ := e.computeLatency()
+
+	// After wrap: the ring holds values {2, 3, 4, 5} (not the original 1.0).
+	// min must be ≥ 2.0 (slot 0 was overwritten by 5.0).
+	if minL < 2.0-0.001 {
+		t.Errorf("min after wrap: want ≥ 2.0, got %f (oldest entry not overwritten)", minL)
+	}
+	if maxL < 5.0-0.001 {
+		t.Errorf("max after wrap: want ≥ 5.0, got %f (newest entry missing)", maxL)
+	}
+}
+
+// TestLatencyBuf_ConcurrentAppends fires many goroutines simultaneously writing
+// to the ring buffer via recordLatency(). Passes under -race with no data races.
+func TestLatencyBuf_ConcurrentAppends(t *testing.T) {
+	const goroutines = 64
+	const writesEach = 50
+	e := New()
+
+	var wg sync.WaitGroup
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for i := 0; i < writesEach; i++ {
+				e.recordLatency(id%numShards, time.Duration(i+1)*time.Millisecond)
+			}
+		}(g)
+	}
+	wg.Wait()
+
+	lb := e.latBuf.Load()
+	totalWrites := int64(goroutines * writesEach)
+	n := lb.n.Load()
+	if n != totalWrites {
+		t.Errorf("n: want %d total writes, got %d", totalWrites, n)
+	}
+
+	// At least some latency must be non-zero.
+	minL, maxL, _, _, _ := e.computeLatency()
+	if maxL <= 0 {
+		t.Errorf("max latency after concurrent writes should be > 0, got %f", maxL)
+	}
+	if minL < 0 {
+		t.Errorf("min latency should be ≥ 0, got %f", minL)
+	}
+}
+
+// TestLatencyBuf_LiveEngine_Consistency polls computeLatency() repeatedly
+// during a live RunStages run and asserts that min ≤ p50 ≤ p99 ≤ max at
+// every sample point.
+func TestLatencyBuf_LiveEngine_Consistency(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	e := New()
+	cfg := hiveStage(600*time.Millisecond, 20)
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = e.RunStages(context.Background(), cfg, specsFor(srv.URL))
+	}()
+
+	// Poll computeLatency until the run finishes.
+	violations := 0
+	for {
+		minL, maxL, p50, _, p99 := e.computeLatency()
+		// Only validate once we have at least one sample (all zeros before first write).
+		if maxL > 0 {
+			if minL > p50 {
+				t.Errorf("invariant broken: min (%f) > p50 (%f)", minL, p50)
+				violations++
+			}
+			if p50 > p99 {
+				t.Errorf("invariant broken: p50 (%f) > p99 (%f)", p50, p99)
+				violations++
+			}
+			if p99 > maxL {
+				t.Errorf("invariant broken: p99 (%f) > max (%f)", p99, maxL)
+				violations++
+			}
+		}
+		if violations >= 3 {
+			break // avoid flooding output
+		}
+		select {
+		case <-runDone:
+			return
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
 	}
 }
