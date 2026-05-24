@@ -13,9 +13,6 @@ import (
 // IEEE-754 bit representation in the corresponding atomic.Uint64 cell.
 // Reads snapshot the count once, then load each cell independently — no lock
 // is ever held. Wrapping at capacity bounds memory use regardless of run length.
-//
-// TODO: recordLatency() (actor.go) and computeLatency() are wired to this
-// buffer in subsequent steps.
 type latencyBuf struct {
 	buf []atomic.Uint64 // ring of float64 values stored as Float64bits
 	n   atomic.Int64    // total writes; pos = (n-1) % len(buf)
@@ -37,12 +34,13 @@ func newLatencyBuf(cap int) latencyBuf {
 // writer may update a slot between the n read and the slot load; the resulting
 // off-by-one is bounded to one entry and is acceptable for a display-only
 // metric sampled at ~10 Hz.
-//
-// TODO: full implementation wires to latBuf; currently returns zeros until
-// the ring-buffer write path is live.
 func (e *Engine) computeLatency() (min, max, p50, p95, p99 float64) {
-	count := e.latBuf.n.Load()
-	cap := int64(len(e.latBuf.buf))
+	lb := e.latBuf.Load()
+	if lb == nil {
+		return
+	}
+	count := lb.n.Load()
+	cap := int64(len(lb.buf))
 	if count == 0 || cap == 0 {
 		return
 	}
@@ -56,7 +54,7 @@ func (e *Engine) computeLatency() (min, max, p50, p95, p99 float64) {
 
 	data := make([]float64, n)
 	for i := int64(0); i < n; i++ {
-		data[i] = math.Float64frombits(e.latBuf.buf[i].Load())
+		data[i] = math.Float64frombits(lb.buf[i].Load())
 	}
 
 	sort.Float64s(data)

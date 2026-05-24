@@ -10,6 +10,7 @@ package hive
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -46,7 +47,7 @@ type Engine struct {
 	rpsWin       rpsWindow
 
 	// ── Latency ring buffer ───────────────────────────────────────────────
-	latBuf latencyBuf
+	latBuf atomic.Pointer[latencyBuf]
 
 	// ── Call-log ring buffers ─────────────────────────────────────────────
 	callLogs   []*engine.CallLog
@@ -97,13 +98,14 @@ func New(opts ...EngineOption) *Engine {
 			Timeout:   30 * time.Second,
 			Transport: buildTransport(1000), // baseline; tuned in RunStages
 		},
-		latBuf:      newLatencyBuf(1024),
 		callLogs:    make([]*engine.CallLog, 0, 100),
 		errorLogs:   make([]*engine.CallLog, 0, 100),
 		maxLogs:     100,
 		biasCh:      make(chan int, 16),
 		sampleEvery: 20, // 5 % default — 1-in-20 responses body-sampled
 	}
+	initialBuf := newLatencyBuf(1024)
+	e.latBuf.Store(&initialBuf)
 	for _, opt := range opts {
 		opt(e)
 	}
@@ -139,6 +141,21 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 		timeScale = 1.0
 	}
 
+	// Compute peakRPS and buffer capacity up front — both are needed in the
+	// reset section (before isRunning is set) and later for connection pooling.
+	peakRPS := cfg.PeakRPS()
+	if peakRPS < 1 {
+		peakRPS = 1
+	}
+	totalSecs := math.Ceil(cfg.TotalDuration().Seconds())
+	if totalSecs < 1 {
+		totalSecs = 1
+	}
+	bufCap := int(float64(peakRPS)*totalSecs*1.1 + 0.5) // +10 %, round up
+	if bufCap < 1024 {
+		bufCap = 1024
+	}
+
 	// ── Reset state ───────────────────────────────────────────────────────
 	// activeActors must be zero here because either:
 	//   - this is the first call (always zero), or
@@ -159,11 +176,13 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	e.totalStages.Store(int32(len(cfg.Stages)))
 	e.rpsBias.Store(0)
 
-	// Reset the latency ring-buffer write counter so stale data from a
-	// previous run does not bleed into this one. The buffer itself is
-	// re-sized to fit the expected request volume in RunStages once the
-	// peakRPS and total duration are known.
-	e.latBuf.n.Store(0)
+	// Re-allocate the latency ring buffer sized for this run.
+	// cap = peakRPS × ⌈totalDurationSeconds⌉  +  10 % headroom, minimum 1024.
+	// atomic.Pointer swap makes the replacement race-free: any concurrent
+	// computeLatency() reader atomically loads either the old or the new pointer
+	// — it can never observe a torn slice header.
+	newBuf := newLatencyBuf(bufCap)
+	e.latBuf.Store(&newBuf)
 
 	e.callLogsMu.Lock()
 	e.callLogs = make([]*engine.CallLog, 0, e.maxLogs)
@@ -190,10 +209,7 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	// custom client via WithHTTPClient (e.g. in tests) we leave it untouched;
 	// the sentinel is a nil Transport, which only the default client has after
 	// New() sets it via buildTransport the first time below.
-	peakRPS := cfg.PeakRPS()
-	if peakRPS < 1 {
-		peakRPS = 1
-	}
+
 	// Only update the transport when the client is the engine-owned one
 	// (not an externally injected test client). We detect this by checking
 	// whether the transport is an *http.Transport we can safely replace.
