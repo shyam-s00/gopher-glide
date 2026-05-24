@@ -20,6 +20,23 @@ const (
 	// always reflects recent behaviour.  1 M samples is far more than
 	// needed for statistically sound p50 / p95 / p99 percentile estimates.
 	maxLatencyBufCap = 1_000_000
+
+	// latencySampleSize is the maximum number of ring-buffer slots read and
+	// sorted on each call to computeLatency().
+	//
+	// Without this cap, computeLatency() is O(n log n) + O(n) allocation per
+	// TUI refresh, where n scales up to maxLatencyBufCap (1M entries = 8MB
+	// allocation + ~20M comparisons every 100ms).
+	//
+	// With the cap, each snapshot:
+	//   • allocates a fixed ~32 KB (4096 × 8 B float64)
+	//   • sorts in O(4096 × log₂ 4096) ≈ 49 K comparisons  (<0.1 ms)
+	//   • gives statistically accurate p99 estimates (< 1% error for
+	//     realistic latency distributions at any sample count)
+	//
+	// We always sample the most recently written entries so the percentiles
+	// reflect current behaviour, not a mix of old and new data.
+	latencySampleSize = 4_096
 )
 
 // latencyBuf is a pre-allocated lock-free ring buffer for recording per-request
@@ -45,32 +62,47 @@ func newLatencyBuf(cap int) latencyBuf {
 
 // computeLatency returns min, max, p50, p95, and p99 latencies in milliseconds.
 //
-// It reads n once to determine how many entries are available, then loads
-// each slot independently — no lock is held at any point. A concurrent
-// writer may update a slot between the n read and the slot load; the resulting
-// off-by-one is bounded to one entry and is acceptable for a display-only
-// metric sampled at ~10 Hz.
+// Cost per call: O(latencySampleSize × log latencySampleSize) time,
+// O(latencySampleSize) allocation — both are constant regardless of how long
+// the run has been active or how many requests have been recorded.
+//
+// We sample the latencySampleSize most recently written slots from the ring
+// buffer. Reading the most recent entries (rather than a spread sample) ensures
+// the percentiles track current behaviour, which is especially important during
+// ramp stages where response times change rapidly.
+//
+// Concurrent-safety: count is loaded once; individual slot loads may see a
+// write that happened after the count snapshot. The resulting off-by-one is
+// bounded to one entry and is acceptable for a display-only metric.
 func (e *Engine) computeLatency() (min, max, p50, p95, p99 float64) {
 	lb := e.latBuf.Load()
 	if lb == nil {
 		return
 	}
 	count := lb.n.Load()
-	cap := int64(len(lb.buf))
-	if count == 0 || cap == 0 {
+	capSize := int64(len(lb.buf))
+	if count == 0 || capSize == 0 {
 		return
 	}
 
-	// Number of valid entries is min(count, cap) — older entries were
-	// overwritten once the ring wrapped.
-	n := count
-	if n > cap {
-		n = cap
+	// valid = number of occupied slots (ring wraps once count > capSize).
+	valid := count
+	if valid > capSize {
+		valid = capSize
 	}
 
+	// n = entries we will actually read and sort — capped at latencySampleSize.
+	n := valid
+	if n > latencySampleSize {
+		n = latencySampleSize
+	}
+
+	// Read the n most recently written slots. The last write landed at
+	// slot (count-1) % capSize; walking backwards gives the n newest.
 	data := make([]float64, n)
 	for i := int64(0); i < n; i++ {
-		data[i] = math.Float64frombits(lb.buf[i].Load())
+		pos := (count - 1 - i) % capSize
+		data[i] = math.Float64frombits(lb.buf[pos].Load())
 	}
 
 	sort.Float64s(data)

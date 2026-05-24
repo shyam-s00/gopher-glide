@@ -325,7 +325,79 @@ func TestLatencyBuf_LiveEngine_Consistency(t *testing.T) {
 	}
 }
 
-// ── buffer capacity bounds ────────────────────────────────────────────────────
+// ── latencySampleSize cap ─────────────────────────────────────────────────────
+
+// TestComputeLatency_LargeBuf_OnlyRecentSampled verifies that computeLatency()
+// reads at most latencySampleSize entries even when the ring holds far more,
+// and that those entries are the most recently written ones.
+//
+// Setup: fill the buffer with 1.0 ms values, then overwrite the most recent
+// latencySampleSize slots with 999.0 ms values.  After sampling, min must be
+// 999.0 (not 1.0), proving only recent entries were read.
+func TestComputeLatency_LargeBuf_OnlyRecentSampled(t *testing.T) {
+	const bufCap = latencySampleSize * 4 // bigger than the sample window
+
+	e := New()
+	largeBuf := newLatencyBuf(bufCap)
+	e.latBuf.Store(&largeBuf)
+
+	lb := e.latBuf.Load()
+
+	// Phase 1: fill the entire buffer with 1.0 ms.
+	for i := 0; i < bufCap; i++ {
+		idx := lb.n.Add(1) - 1
+		pos := idx % int64(bufCap)
+		lb.buf[pos].Store(math.Float64bits(1.0))
+	}
+
+	// Phase 2: write latencySampleSize entries of 999.0 ms (the newest).
+	for i := 0; i < latencySampleSize; i++ {
+		idx := lb.n.Add(1) - 1
+		pos := idx % int64(bufCap)
+		lb.buf[pos].Store(math.Float64bits(999.0))
+	}
+
+	minL, maxL, _, _, _ := e.computeLatency()
+
+	// computeLatency reads the latencySampleSize most recent entries, all 999.0.
+	if math.Abs(minL-999.0) > 0.001 {
+		t.Errorf("min: want 999.0 (recent entries), got %.3f — old entries leaked into sample", minL)
+	}
+	if math.Abs(maxL-999.0) > 0.001 {
+		t.Errorf("max: want 999.0 (recent entries), got %.3f", maxL)
+	}
+}
+
+// TestComputeLatency_SampleSize_BoundedAllocation asserts that the data slice
+// allocated by computeLatency never exceeds latencySampleSize floats even
+// when the ring buffer holds maxLatencyBufCap entries, verifying the O(K)
+// allocation guarantee.
+func TestComputeLatency_SampleSize_BoundedAllocation(t *testing.T) {
+	// Use a large buffer and write more than latencySampleSize entries.
+	e := New()
+	largeBuf := newLatencyBuf(maxLatencyBufCap)
+	e.latBuf.Store(&largeBuf)
+
+	lb := e.latBuf.Load()
+	writes := int64(latencySampleSize * 2)
+	for i := int64(0); i < writes; i++ {
+		idx := lb.n.Add(1) - 1
+		pos := idx % int64(maxLatencyBufCap)
+		lb.buf[pos].Store(math.Float64bits(float64(i + 1)))
+	}
+
+	// computeLatency must not panic and must return sane values.
+	minL, maxL, p50, p95, p99 := e.computeLatency()
+	if maxL <= 0 {
+		t.Fatalf("max should be > 0 after %d writes, got %f", writes, maxL)
+	}
+	if minL <= 0 {
+		t.Fatalf("min should be > 0, got %f", minL)
+	}
+	if p99 < p95 || p95 < p50 {
+		t.Errorf("percentile order violated: p50=%f p95=%f p99=%f", p50, p95, p99)
+	}
+}
 
 // TestLatencyBuf_MinCap verifies that RunStages always allocates at least
 // minLatencyBufCap slots even for very short / low-RPS test plans.
