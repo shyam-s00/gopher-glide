@@ -25,24 +25,25 @@ jobs:
       - name: Run benchmark on PR branch
         run: go test -bench=. -benchmem -run='^$' -count=5 ./internal/engine/hive/ > pr_bench.txt
 
-      - name: Checkout main branch
-        run: git checkout origin/main
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-benchmarks
+          path: pr_bench.txt
 
-      - name: Run benchmark on main branch
-        run: go test -bench=. -benchmem -run='^$' -count=5 ./internal/engine/hive/ > main_bench.txt
-
-      - name: Compare with benchstat
-        run: |
-          echo "Comparing PR against main..."
-          benchstat main_bench.txt pr_bench.txt > bench_diff.txt
-          cat bench_diff.txt
-          
-          # Check for performance drops (increases in execution time by >=15%)
-          # benchstat outputs +X.XX% for increases in time/op. 
-          # The regex looks for any +15.XX% to +99.XX%, or +100.XX% and above.
-          if grep -E '\+(1[5-9]|[2-9][0-9]|[1-9][0-9]{2,})\.[0-9]+%' bench_diff.txt; then
-            echo "::error::Performance degraded by 15% or more! Please check the benchstat output."
-            exit 1
-          fi
-          
-          echo "Performance is within acceptable limits."
+      # TODO: restore once hive-engine is merged into main
+      # - name: Checkout main branch
+      #   run: git checkout origin/main
+      #
+      # - name: Run benchmark on main branch
+      #   run: go test -bench=. -benchmem -run='^$' -count=5 ./internal/engine/hive/ > main_bench.txt
+      #
+      # - name: Compare with benchstat
+      #   run: |
+      #     benchstat main_bench.txt pr_bench.txt > bench_diff.txt
+      #     cat bench_diff.txt
+      #     if grep -E '\+(1[5-9]|[2-9][0-9]|[1-9][0-9]{2,})\.[0-9]+%' bench_diff.txt; then
+      #       echo "::error::Performance degraded by 15% or more!"
+      #       exit 1
+      #     fi
+      #     echo "Performance is within acceptable limits."

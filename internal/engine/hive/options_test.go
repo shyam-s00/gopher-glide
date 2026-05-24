@@ -118,6 +118,16 @@ func TestWithSampleRate_50Percent(t *testing.T) {
 	}
 }
 
+func TestWithSampleRate_Rounding_NotTruncation(t *testing.T) {
+	// rate=0.34 → 1/0.34 ≈ 2.941
+	// floor  → sampleEvery=2  (actual 50 % — far from requested 34 %)
+	// round  → sampleEvery=3  (actual 33 % — close to requested 34 %)
+	e := New(WithSampleRate(0.34))
+	if e.sampleEvery != 3 {
+		t.Fatalf("expected sampleEvery=3 (math.Round), got %d (truncation would give 2)", e.sampleEvery)
+	}
+}
+
 // ── shouldSample ──────────────────────────────────────────────────────────────
 
 func TestShouldSample_DisabledWhenSampleEveryZero(t *testing.T) {

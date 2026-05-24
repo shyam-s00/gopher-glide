@@ -1,6 +1,7 @@
 package hive
 
 import (
+	"math"
 	"net/http"
 
 	"github.com/shyam-s00/gopher-glide/internal/snap"
@@ -10,7 +11,8 @@ import (
 //
 // Primarily useful in tests to inject an httptest.Server-backed client without
 // going through the network stack. Production callers should prefer the default
-// client built by New(), which is tuned via WithPeakRPS / buildTransport.
+// client built by New(), whose transport is automatically re-tuned to the
+// run's peak RPS at the start of each RunStages call.
 func WithHTTPClient(c *http.Client) EngineOption {
 	return func(e *Engine) { e.client = c }
 }
@@ -44,7 +46,7 @@ func WithSampleRate(rate float64) EngineOption {
 			e.sampleEvery = 1 // capture every response
 			return
 		}
-		n := int(1.0 / rate)
+		n := int(math.Round(1.0 / rate))
 		if n < 1 {
 			n = 1
 		}

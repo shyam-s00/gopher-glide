@@ -159,7 +159,7 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	//
 	// With the cap we allocate at most 8 MB (1 M × 8 B). The ring buffer
 	// already wraps, so only the oldest entries are evicted — percentile
-	// accuracy is unaffected; 1 M recent samples is more than sufficient
+	// accuracy is unaffected; 1 M recent samples are more than enough
 	// for statistically sound p50/p95/p99 estimates at any RPS.
 	bufCap := int(float64(peakRPS)*totalSecs*1.1 + 0.5) // +10 %, round up
 	if bufCap < minLatencyBufCap {
@@ -217,15 +217,14 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	}()
 
 	// ── Dynamic connection pool ───────────────────────────────────────────
-	// Rebuild the transport before every run so that pool sizes are always
-	// tuned to the current test plan's peak RPS.  If the caller injected a
-	// custom client via WithHTTPClient (e.g. in tests) we leave it untouched;
-	// the sentinel is a nil Transport, which only the default client has after
-	// New() sets it via buildTransport the first time below.
-
-	// Only update the transport when the client is the engine-owned one
-	// (not an externally injected test client). We detect this by checking
-	// whether the transport is an *http.Transport we can safely replace.
+	// Rebuild the transport before every run so pool sizes are always tuned
+	// to the current test plan's peak RPS.
+	//
+	// Detection: the engine-owned client always has an *http.Transport (set
+	// by New() via buildTransport). A caller that injected their own client
+	// via WithHTTPClient will typically supply a different RoundTripper type
+	// (e.g. httptest's internal transport), so the type-assertion fails and
+	// we leave the custom client untouched.
 	if _, ok := e.client.Transport.(*http.Transport); ok {
 		e.client.Transport = buildTransport(peakRPS)
 	}
