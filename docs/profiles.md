@@ -11,7 +11,7 @@ Profiles define the *shape* of the traffic abstractly using percentages, rather 
 You can run complex tests with a single command without needing a `config.yaml` file:
 
 ```bash
-gg --profile flash-sale --http-file target.http
+gg --hive-engine --profile flash-sale --http-file target.http
 ```
 
 ### Scaling Profiles
@@ -23,7 +23,7 @@ Profiles are flexible. You can scale the peak RPS (Y-Axis) and stretch the time 
 
 ```bash
 # Run a flash-sale with a 5000 RPS peak over 10 minutes
-gg --profile flash-sale --peak-rps 5000 --duration 10m --http-file target.http
+gg --hive-engine --profile flash-sale --peak-rps 5000 --duration 10m --http-file target.http
 ```
 
 ---
@@ -100,7 +100,7 @@ gg profile export flash-sale
 Once renamed (e.g., `my-custom-sale.yaml`), you can use it like any other profile:
 
 ```bash
-gg --profile my-custom-sale --http-file target.http
+gg --hive-engine --profile my-custom-sale --http-file target.http
 ```
 
 ### Snapshots Compatibility

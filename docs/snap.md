@@ -22,13 +22,13 @@ With `gg snap`, you can:
 To take a snapshot, simply add the `--snap` flag to any load test. 
 
 ```bash
-gg config.yaml --snap
+gg config.yaml --snap --hive-engine
 ```
 
 You can optionally **tag** your snapshot to easily identify it later (e.g., baseline vs. PR branch):
 
 ```bash
-gg config.yaml --snap --snap-tag "v1-baseline"
+gg config.yaml --snap --snap-tag "v1-baseline" --hive-engine
 ```
 
 A lightweight JSON `.snap` file is written to your system's configuration directory (e.g., `~/.config/gg/snapshots/` on Linux/macOS). An indicator (`📸 Snapping`) will appear in your TUI during the run.
@@ -121,7 +121,7 @@ Instead of a dashboard, `gg` will stream structured heartbeat logs to `stdout`.
 
 ```bash
 # Capture the snapshot in headless mode
-gg config.yaml --snap --snap-tag "pr-123" --headless
+gg config.yaml --snap --snap-tag "pr-123" --headless --hive-engine
 
 # Make your assertions, outputting the result in Markdown format for a PR Comment
 gg snap assert --baseline main --current pr-123 \

@@ -1,5 +1,5 @@
 site_name: Gopher Glide (gg)
-site_description: High-fidelity API traffic simulation from your IDE. Beyond brute-force load testing.
+site_description: Gopher-Glide is an open-source, high-fidelity API load testing and traffic simulation tool. An intuitive, lock-free alternative to k6 and JMeter built in Go.
 site_url: https://gopherglide.dev
 repo_url: https://github.com/shyam-s00/gopher-glide
 copyright: Released under the MIT License. Built with ❤️ by Shiyam.
@@ -34,7 +34,11 @@ markdown_extensions:
   - md_in_html
   - admonition
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
