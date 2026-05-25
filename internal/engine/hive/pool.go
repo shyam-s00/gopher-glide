@@ -2,7 +2,6 @@ package hive
 
 import (
 	"net/http"
-	"syscall"
 	"time"
 )
 
@@ -49,6 +48,8 @@ func buildTransport(peakRPS int) *http.Transport {
 	total := perHost * poolHostMultiplier
 
 	// Clamp to OS file-descriptor budget when it can be determined.
+	// fdBudget() is implemented per-platform (pool_unix.go / pool_windows.go);
+	// returns 0 when the limit cannot be queried — caller treats as uncapped.
 	if budget := fdBudget(); budget > 0 {
 		if total > budget {
 			total = budget
@@ -72,22 +73,4 @@ func buildTransport(peakRPS int) *http.Transport {
 		// Keep-alives on — connection reuse is essential for high-RPS loads.
 		DisableKeepAlives: false,
 	}
-}
-
-// fdBudget returns the number of file descriptors available to the process
-// after reserving fdReserve slots for non-connection overhead.
-//
-// Returns 0 if the OS limit cannot be queried (caller treats as uncapped).
-func fdBudget() int {
-	var rl syscall.Rlimit
-	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rl); err != nil {
-		// Limit unreadable — leave pool uncapped rather than crash.
-		return 0
-	}
-	cur := int(rl.Cur)
-	available := cur - fdReserve
-	if available <= 0 {
-		return 0
-	}
-	return available
 }
