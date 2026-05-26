@@ -205,7 +205,7 @@ jobs:
 | **API Snapshots** | ✅ `--snap` | ❌ No | ❌ No | ❌ No |
 | **Real-time TUI** | ✅ Yes (Director) | ❌ No | ❌ No | ❌ No |
 | **CI/CD Native** | ✅ Yes (Headless) | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Stateful Simulation** | ✅ Yes (Hive Engine) | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Stateful Simulation** | ⏳ Coming (v1.0) | ✅ Yes | ✅ Yes | ✅ Yes |
 | **Memory Footprint** | Extremely Low | Medium | High | High |
 
 </div>

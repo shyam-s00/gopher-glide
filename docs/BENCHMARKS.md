@@ -28,10 +28,10 @@ In the Hive Engine, each request is managed by an "Actor." These actors are incr
 
 | Operation | Execution Time | Max Theoretical RPS |
 | :--- | :--- | :--- |
-| **Parallel Execution (Multi-Core Aggregate)** | 11.2 µs | ~89,000 RPS (Total System) |
+| **Goroutine Dispatch (Per Actor)** | 2.1 µs | N/A |
 | **Sequential Execution (Single-Core Peak)** | 32.1 µs | ~31,000 RPS (Per Core) |
 
-* **Real-world impact:** A single CPU core can process over **31,000 back-to-back requests per second**. When running in parallel across multiple cores, the total system throughput aggregates to handle even more massive loads (e.g., ~89,000 total RPS on this 12-core test rig). Your bottleneck will almost always be your network bandwidth, not the Hive Engine.
+* **Real-world impact:** A single CPU core can dispatch and process over **31,000 back-to-back requests per second**. Because the engine uses independent lock-free Goroutines, it scales smoothly across available CPU cores. At scale, your bottleneck will almost always be your OS network stack and external bandwidth limits, not the Hive Engine.
 
 ---
 

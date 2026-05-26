@@ -2,30 +2,32 @@
 
 ## TUI Dashboard
 
-```
-  gg — Gopher Glide  v0.1.0  ●  RUNNING  ⏱ 00:42
+```text
+  gg ─ Gopher Glide  v1.0.0      ● RUNNING      ⏱  00:42 
 
- ╭─ Configuration ──────╮ ╭─ Throughput ─────────╮ ╭─ Latency ────────────╮
- │  Target RPS    50    │ │  RPS         48.2    │ │  Avg      142.3 ms   │
- │  Duration      70s   │ │  Completed   1 446   │ │  Min       88.1 ms   │
- │  Uptime       00:42  │ │  Errors         12   │ │  Max      310.5 ms   │
- │  Active VPUs    18   │ │  Error Rate   0.8%   │ │  P50      138.0 ms   │
- │                      │ │  Jitter       ±10%   │ │  P95      278.4 ms   │
- │                      │ │                      │ │  P99      305.2 ms   │
- ╰──────────────────────╯ ╰──────────────────────╯ ╰──────────────────────╯
+ ╭─ Configuration ───────╮ ╭─ Throughput ──────────╮ ╭─ Latency ─────────────╮
+ │ Target RPS       50   │ │ RPS           48.2    │ │ Avg       142.3 ms    │
+ │ Active Actors    18   │ │ Completed    1,446    │ │ Min        88.1 ms    │
+ │ Duration        70s   │ │ Errors          12    │ │ Max       310.5 ms    │
+ │ Jitter         ±10%   │ │ Error Rate    0.8%    │ │ p95       278.4 ms    │
+ │ Profile  flash-sale   │ │                       │ │ p99       305.2 ms    │
+ ╰───────────────────────╯ ╰───────────────────────╯ ╰───────────────────────╯
 
  ╭─ Stage Timeline ──────────────────────────────────────────────────────────╮
- │  500 ┤                      ▓▓▓▓▓▓▓▓▓                                    │
- │      │              ░░░░░░░░▓▓▓▓▓▓▓▓▓░░░░░░                              │
- │      │       ░░░░░░░░░░░░░░░                    ░░░░░░░░                  │
- │    0 ┤░░░░░░░                                           ░░░░░░░░░         │
- │      [1/5] Ramp Up  •  stage 0:10 / 0:10  •  total 0:42 / 1:10           │
+ │ 500 ┤                       █████████                                     │
+ │     │               ▒▒▒▒▒▒▒▒█████████▒▒▒▒▒▒                               │
+ │     │        ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒                   ▒▒▒▒▒▒▒▒                   │
+ │   0 ┤▒▒▒▒▒▒▒                                           ▒▒▒▒▒▒▒▒▒          │
+ │                                                                           │
+ │      [1/5] Ramp Up  •  stage 0:10 / 0:10  •  total 0:42 / 1:10            │
  ╰───────────────────────────────────────────────────────────────────────────╯
 
- [↑] +5 rps  [↓] -5 rps  [f] logs (FAILURES ONLY)  [q] quit   BIAS +10 RPS
+  ↑ +5 rps    ↓ -5 rps    f toggle logs (ALL)    q quit        BIAS +10 RPS 
 
  ╭─ Call Log ────────────────────────────────────────────────────────────────╮
- │  …scrollable call log…                                                    │
+ │ [200] GET  /api/v1/users/me           142ms                               │
+ │ [201] POST /api/v1/checkout           210ms                               │
+ │ [500] POST /api/v1/auth               305ms  (connection reset by peer)   │
  ╰───────────────────────────────────────────────────────────────────────────╯
 ```
 

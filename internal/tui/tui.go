@@ -105,7 +105,7 @@ func (m model) Init() tea.Cmd {
 }
 
 func tickCmd() tea.Cmd {
-	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
+	return tea.Tick(42*time.Millisecond, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -225,7 +225,7 @@ func (m model) renderHeader() string {
 		valueStyle.Render(fmt.Sprintf("%.2fs", elapsed)),
 		labelStyle.Render("Http File:"),
 		valueStyle.Render(m.config.ConfigSection.HTTPFile),
-		labelStyle.Render("Active VPU:"),
+		labelStyle.Render("Active Actors:"),
 		valueStyle.Render(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
 		labelStyle.Render("Target RPS:"),
 		valueStyle.Render(fmt.Sprintf("%d", m.metrics.TargetRPS)),
@@ -523,12 +523,14 @@ func (m model) renderTimeline() string {
 	// Assemble
 	var sb strings.Builder
 
+	activeActorsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD700")).Bold(true)
 	sb.WriteString(sectionStyle.Render("STAGE PLAN"))
-	sb.WriteString(fmt.Sprintf("  %s %s · %s %s · %s on-target · %s off-target\n",
+	sb.WriteString(fmt.Sprintf("  %s %s · %s %s · %s · %s on-target · %s off-target\n",
 		targetLiveStyle.Render("target"),
 		targetLiveStyle.Render(fmt.Sprintf("%d rps", m.metrics.TargetRPS)),
 		actualStyle.Render("actual"),
 		actualStyle.Render(fmt.Sprintf("%.0f rps", m.metrics.Throughput)),
+		activeActorsStyle.Render(fmt.Sprintf("active actors: %d", m.metrics.ActiveVPUs)),
 		markerOkStyle.Render("▸"),
 		markerMissStyle.Render("▸"),
 	))
