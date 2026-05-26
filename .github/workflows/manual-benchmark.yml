@@ -1,0 +1,52 @@
+name: Manual Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_results:
+        description: 'Publish results to the website (gh-pages branch)'
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run benchmark
+        run: go test -bench=. -benchmem -run='^$' ./internal/engine/hive/ > benchmark_results.txt
+
+      - name: Upload results artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark_results.txt
+
+      - name: Publish results to gh-pages
+        if: ${{ inputs.publish_results == true }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git clone --depth=1 --branch gh-pages https://x-token-auth:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages-dir
+          cp benchmark_results.txt gh-pages-dir/
+          cd gh-pages-dir
+          git add benchmark_results.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "Update manual benchmark results"
+            git push origin gh-pages
+          else
+            echo "No changes in benchmark results."
+          fi
