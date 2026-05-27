@@ -4,14 +4,6 @@
   transform-origin: center;
 }
 
-/* Switch header logo based on theme toggle */
-[data-md-color-scheme="default"] .md-header__button.md-logo img {
-  content: url("../assets/ggToolIcon.svg");
-}
-
-[data-md-color-scheme="slate"] .md-header__button.md-logo img {
-  content: url("../assets/ggToolIcon_dark.svg");
-}
 
 /* Base overrides for homepage */
 .tx-hero {
