@@ -23,7 +23,9 @@ hide:
 ## The Hive Engine 🐝
 **A modern architecture for massive scale.** While older tools rely on heavy OS threads or memory-intensive Virtual Machines, the newly released Hive Engine (v0.9.0) flips the paradigm with a pure-Go Actor Model.
 
-By isolating each concurrent connection into an ultra-lightweight Goroutine and utilizing lock-free message passing, Gopher-Glide bypasses traditional memory and scheduling bottlenecks. A single instance can now easily generate **over 50,000 RPS** on a standard laptop, laying the groundwork for fully stateful, chained API journeys coming in v1.0. Check out the full [Performance Benchmarks](BENCHMARKS.md) to see how it scales.
+By isolating each concurrent connection into an ultra-lightweight Goroutine and utilizing lock-free message passing, Gopher-Glide bypasses traditional memory and scheduling bottlenecks. A single instance can easily generate **over 50,000 RPS on a standard multi-core machine** with a proven zero-garbage (`0 allocs/op`) metrics subsystem. 
+
+Whether you are running on a high-end developer workstation, a standard laptop, or a virtualized cloud runner, the engine scales linearly to extract maximum value from your hardware. Check out the full [Performance Benchmarks](BENCHMARKS.md) to see the cross-platform scaling data.
 
 </div>
 <div class="tx-feature-visual" markdown="1">
