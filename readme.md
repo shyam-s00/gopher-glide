@@ -17,6 +17,10 @@
   <a href="https://plugins.jetbrains.com/plugin/30983-gopher-glide"><img src="https://img.shields.io/jetbrains/plugin/v/dev.gopherglide.gg-plugin" alt="JetBrains Plugin Version"></a>
 </p>
 
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="Gopher Glide TUI Demo" width="800" />
+</p>
+
 ---
 
 **Gopher-Glide (gg)** is an open-source, high-fidelity **API traffic simulator** built in Go. Designed to move beyond brute-force load testing, `gg` runs your standard IDE `.http` REST Client files right out of the box. 

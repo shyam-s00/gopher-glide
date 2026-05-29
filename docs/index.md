@@ -110,16 +110,7 @@ Combined with the `--snap` flag, you can record behavioral snapshots of your API
 </div>
 <div class="tx-feature-visual" markdown="1">
 
-```bash
-# Adjust traffic dynamically during a run
-$ gg --hive-engine \
-    --http-file api.http \
-    --profile sustain
-
-[↑] Increase Load (+50 RPS)
-[↓] Decrease Load (-50 RPS)
-[Q] Quit & Generate Report
-```
+<img src="assets/demo.gif" alt="Interactive Chaos TUI Demo" style="border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%;" />
 
 </div>
 </div>
