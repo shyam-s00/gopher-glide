@@ -7,7 +7,7 @@
 </div>
 
 <h1 align="center">Gopher-Glide (gg) 🚀</h1>
-<p align="center"><b>High-fidelity API traffic simulation from your IDE. Beyond brute-force load testing.</b></p>
+<p align="center"><b>Run your IDE `.http` files under heavy concurrent load. Zero scripting required.</b></p>
 
 <p align="center">
   <a href="https://github.com/shyam-s00/gopher-glide/actions/workflows/ci.yml"><img src="https://github.com/shyam-s00/gopher-glide/actions/workflows/ci.yml/badge.svg" alt="Build"></a>
@@ -23,58 +23,66 @@
 
 ---
 
-**Gopher-Glide (gg)** is an open-source, high-fidelity **API traffic simulator** built in Go. Designed to move beyond brute-force load testing, `gg` runs your standard IDE `.http` REST Client files right out of the box. 
+## 🤷‍♂️ Why not just use wrk, k6, or JMeter?
 
-Generate perfectly smooth, high-concurrency traffic using the lock-free Actor Model. Adjust RPS in real-time via the interactive TUI, catch API regressions using semantic snapshots (`gg snap`), and integrate natively into your CI/CD pipelines. No scripting, no boilerplate code.
+If you want to run a quick concurrency test on an endpoint, you usually have to write a custom JavaScript file for `k6`, a Python script for `Locust`, or learn a heavy configuration language. 
+
+**Gopher-Glide (gg)** is an API traffic simulator that lets you skip the boilerplate. It directly executes standard IDE `.http` REST Client files that you probably already have sitting in your workspace. 
+
+| Feature | Gopher-Glide (`gg`) | k6 / Locust | wrk / hey / vegeta |
+| :--- | :--- | :--- | :--- |
+| **Scripting** | **None** (Reads `.http` natively) | JavaScript / Python | None (CLI flags only) |
+| **Traffic Control** | **Live Interactive TUI** (Arrow keys) | Requires configs | Fixed concurrency only |
+| **CI/CD Assertions** | **Semantic JSON Diffing** (`gg snap`) | Pass/Fail Thresholds | Raw latencies only |
+| **Built-in Profiles** | **Yes** (`--profile flash-sale`) | Requires scripting | No |
+| **IDE Integration** | **Native JetBrains Plugin** | External scripts | External tools |
+| **Performance** | **30k+ RPS per core (Actor Model)** | Medium-High | Extremely High |
 
 👉 **[Read the Full Documentation](https://gopherglide.dev/)**
 
 ---
 
-## Quick Start
+## ⚡ 30-Second Quickstart
 
-### 1. macOS / Linux (Homebrew)
-The easiest way to install is via Homebrew:
+### 1. Install via Homebrew
 ```bash
 brew install shyam-s00/tap/gg
 ```
 
-### 2. Docker
-Perfect for CI/CD pipelines:
-```bash
-docker run --rm -v $(pwd):/workspace ghcr.io/shyam-s00/gopher-glide:latest config.yaml
+### 2. Point it at any `.http` file
+Create a simple `api.http` file (or use an existing one from your IDE):
+```http
+GET http://localhost:8080/health
+Accept: application/json
 ```
 
-### 3. Pre-built binary
-Go to the [Releases](https://github.com/shyam-s00/gopher-glide/releases) page and download the archive for your platform. Extract the binary and place it in your `$PATH`.
+### 3. Run the simulation
+Use a built-in profile to automatically shape the traffic (e.g., ramping up, sustaining, and cooling down):
+```bash
+gg --hive-engine --profile flash-sale --http-file api.http
+```
+
+You will instantly drop into the Interactive Chaos TUI where you can monitor latencies and adjust the load in real-time.
 
 ---
 
-## 🔌 JetBrains IDE Integration 
+## 🛠 Feature Deep-Dives
 
-Gopher Glide features an official [JetBrains plugin](https://plugins.jetbrains.com/plugin/30983-gopher-glide) that brings **load testing** directly into your IDE. 
-- Smart YAML editing for `config.yaml`
-- Terminal-First Execution
-- Snap UI Tool Window for exploring Snapshots
+### 🐝 The Hive Engine (Zero-Allocation Architecture)
+The core of `gg` is built on a pure-Go lock-free Actor Model. By isolating connections into ultra-lightweight Goroutines and tracking metrics via sharded lock-free atomics, `gg` operates at **`0 allocs/op`** on the hot path. This means you can comfortably push over **30,000+ RPS** on a standard developer machine without garbage-collection pauses destroying your latency percentiles.
 
----
+### 🔬 Semantic Regression Gates (`gg snap`)
+Don't just test if your API is slow—test if it's broken. By passing the `--snap` flag, Gopher-Glide infers your API's JSON schema in real-time. You can then use `gg snap assert` in your CI/CD pipeline to automatically break the build if a pull request spikes latency or alters a JSON payload contract.
 
-## 🚀 Performance
-
-The Hive Engine is built for maximum throughput with zero garbage-collection penalties. 
-- **Sequential Peak:** ~31,000 Requests Per Second (RPS) per core.
-- **Parallel Aggregate:** ~89,000+ RPS total system throughput on standard 12-core hardware.
-- **Zero Garbage on the hot path:** Each Actor's per-request counter-updates (RPS window, sharded totals) use lock-free atomics with no heap allocations. The ~10 Hz TUI snapshot (`GetMetrics`) does allocate a fixed-size `[]float64` of 4 096 entries to compute latency percentiles, but this is well outside the request dispatch path and has negligible GC impact.
-
-For full technical breakdown and latency details, see the **[Official Benchmarks](docs/BENCHMARKS.md)**.
+### 🔌 JetBrains IDE Integration 
+Gopher Glide features an official [JetBrains plugin](https://plugins.jetbrains.com/plugin/30983-gopher-glide) that brings load testing directly into your IDE. Run profiles directly from your `.http` files via the gutter icon, and explore semantic diffs using the Snap UI Tool Window.
 
 ---
 
 ## Planned Features
 - [ ] **Chaos / Fault Injection** — Simulate poor network conditions (3G packet loss, latency jitter) to see how APIs handle degradation.
 - [ ] **Distributed Simulation Mesh** — Run `gg worker` nodes across multiple servers/regions, controlled by a central `gg master` UI.
-- [ ] **Auto-Pilot (Smart Scaling)** — Set a `--target-latency` and let the engine automatically ramp RPS to find your API's exact breaking point.
-
+- [ ] **Stateful Journeys** — Chained multi-step user journeys and complex persona behaviors.
 
 ## License
 [MIT](LICENSE)

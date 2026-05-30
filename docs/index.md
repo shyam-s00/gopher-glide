@@ -45,8 +45,8 @@ graph TD
 <div class="tx-feature-row reverse" markdown="1">
 <div class="tx-feature-text" markdown="1">
 
-## Code-to-Load Pipeline
-Reuse your existing `.http` REST Client files directly. Featuring a native JetBrains IDE plugin, there is no need to rewrite requests in JavaScript or Python. Just point `gg` at your file and go.
+## Zero Scripting Required
+Reuse your existing `.http` REST Client files directly. If you want to run a quick load test, there is no need to rewrite your API calls in JavaScript or Python. Just point `gg` at your existing IDE scratch files and go.
 
 </div>
 <div class="tx-feature-visual" markdown="1">
@@ -188,18 +188,16 @@ jobs:
 
 <div class="tx-steps-section" style="background: transparent; padding-top: 2rem; padding-bottom: 0;" markdown="1">
 <h2>Why Gopher-Glide?</h2>
-<p style="margin-bottom: 2rem; color: var(--md-default-fg-color--light);">Feature comparison against traditional load testing tools.</p>
+<p style="margin-bottom: 2rem; color: var(--md-default-fg-color--light);">If you want to run a quick concurrency test, you usually have to write a custom script or learn a heavy configuration language. <code>gg</code> lets you skip the boilerplate.</p>
 
-| Feature | Gopher-Glide (gg) | k6 | Locust | JMeter |
-|---------|-------------------|----|--------|--------|
-| **Scripting Language** | IDE `.http` (Zero Code) | JavaScript | Python | XML / UI |
-| **IDE Integration** | ✅ Native Plugin | ❌ External | ❌ External | ❌ External |
-| **Pre-built Profiles** | ✅ Built-in Patterns | ❌ Scripted | ❌ Scripted | ❌ Configured |
-| **API Snapshots** | ✅ `--snap` | ❌ No | ❌ No | ❌ No |
-| **Real-time TUI** | ✅ Yes (Director) | ❌ No | ❌ No | ❌ No |
-| **CI/CD Native** | ✅ Yes (Headless) | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Stateful Simulation** | ⏳ Coming (v1.0) | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Memory Footprint** | Extremely Low | Medium | High | High |
+| Feature | Gopher-Glide (`gg`) | k6 / Locust | wrk / hey / vegeta |
+| :--- | :--- | :--- | :--- |
+| **Scripting** | **None** (Reads `.http` natively) | JavaScript / Python | None (CLI flags only) |
+| **Traffic Control** | **Live Interactive TUI** (Arrow keys) | Requires configs | Fixed concurrency only |
+| **CI/CD Assertions** | **Semantic JSON Diffing** (`gg snap`) | Pass/Fail Thresholds | Raw latencies only |
+| **Built-in Profiles** | **Yes** (`--profile flash-sale`) | Requires scripting | No |
+| **IDE Integration** | **Native JetBrains Plugin** | External scripts | External tools |
+| **Performance** | **30k+ RPS per core (Actor Model)** | Medium-High | Extremely High |
 
 </div>
 <div class="tx-steps-section" markdown="1" id="quick-start">
