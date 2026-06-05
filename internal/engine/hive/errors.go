@@ -14,4 +14,8 @@ var (
 
 	// ErrHttpError is recorded when a response status code is ≥ 400.
 	ErrHttpError = errors.New("hive: http request failed")
+
+	// ErrExtractionFailed is recorded when a @gg-export directive cannot
+	// extract a value from the response body (bad path, no regex match, etc.).
+	ErrExtractionFailed = errors.New("hive: variable extraction failed")
 )

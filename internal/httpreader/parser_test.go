@@ -3,6 +3,7 @@ package httpreader
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -411,5 +412,286 @@ X-Custom: value2
 	vals := specs[0].Headers["X-Custom"]
 	if len(vals) != 2 {
 		t.Fatalf("expected 2 values for X-Custom, got %d", len(vals))
+	}
+}
+
+// ── Parse — @gg-export directives ────────────────────────────────────────────
+
+func TestParse_ExportDirective_JSONPath_AfterBody(t *testing.T) {
+	content := `### Login
+POST https://api.example.com/auth/login
+Content-Type: application/json
+
+{"username": "user", "password": "pass"}
+
+# @gg-export auth_token = jsonpath: $.data.token
+`
+	specs, err := Parse(content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(specs))
+	}
+	r := specs[0]
+	if len(r.Exports) != 1 {
+		t.Fatalf("expected 1 export directive, got %d", len(r.Exports))
+	}
+	d := r.Exports[0]
+	if d.VarName != "auth_token" {
+		t.Errorf("expected VarName=auth_token, got %q", d.VarName)
+	}
+	if d.Engine != ExportEngineJSONPath {
+		t.Errorf("expected Engine=jsonpath, got %q", d.Engine)
+	}
+	if d.Pattern != "$.data.token" {
+		t.Errorf("expected Pattern=$.data.token, got %q", d.Pattern)
+	}
+	// export pragma must NOT appear in the body
+	if strings.Contains(r.Body, "@gg-export") {
+		t.Errorf("export pragma leaked into body: %q", r.Body)
+	}
+}
+
+func TestParse_ExportDirective_Regex_AfterBody(t *testing.T) {
+	content := `### Login
+POST https://api.example.com/auth/login
+Content-Type: application/json
+
+{"username": "user"}
+
+# @gg-export session_id = regex: session_id=([a-zA-Z0-9]+)
+`
+	specs, err := Parse(content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(specs[0].Exports) != 1 {
+		t.Fatalf("expected 1 export, got %d", len(specs[0].Exports))
+	}
+	d := specs[0].Exports[0]
+	if d.Engine != ExportEngineRegex {
+		t.Errorf("expected Engine=regex, got %q", d.Engine)
+	}
+	if d.Pattern != "session_id=([a-zA-Z0-9]+)" {
+		t.Errorf("unexpected pattern: %q", d.Pattern)
+	}
+}
+
+func TestParse_ExportDirective_MultipleExports(t *testing.T) {
+	content := `### Login
+POST https://api.example.com/auth/login
+Content-Type: application/json
+
+{"username": "user", "password": "pass"}
+
+# @gg-export auth_token = jsonpath: $.data.token
+# @gg-export session_id = regex: session_id=([a-zA-Z0-9]+)
+`
+	specs, err := Parse(content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(specs[0].Exports) != 2 {
+		t.Fatalf("expected 2 exports, got %d", len(specs[0].Exports))
+	}
+	if specs[0].Exports[0].VarName != "auth_token" {
+		t.Errorf("unexpected first export: %+v", specs[0].Exports[0])
+	}
+	if specs[0].Exports[1].VarName != "session_id" {
+		t.Errorf("unexpected second export: %+v", specs[0].Exports[1])
+	}
+}
+
+func TestParse_ExportDirective_AfterGETHeaders(t *testing.T) {
+	// GET request has no body; @gg-export comes right after headers (via the blank line → body state)
+	content := `### Get Profile
+GET https://api.example.com/v1/users/me
+Authorization: Bearer some-token
+
+# @gg-export user_id = jsonpath: $.data.id
+`
+	specs, err := Parse(content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(specs))
+	}
+	if len(specs[0].Exports) != 1 {
+		t.Fatalf("expected 1 export, got %d", len(specs[0].Exports))
+	}
+	if specs[0].Exports[0].VarName != "user_id" {
+		t.Errorf("unexpected VarName: %q", specs[0].Exports[0].VarName)
+	}
+	if specs[0].Body != "" {
+		t.Errorf("expected empty body, got %q", specs[0].Body)
+	}
+}
+
+func TestParse_ExportDirective_MultiRequestJourney(t *testing.T) {
+	content := `### 1. Login
+POST https://api.example.com/auth/login
+Content-Type: application/json
+
+{"username": "user", "password": "pass"}
+
+# @gg-export auth_token = jsonpath: $.data.token
+
+### 2. Get Profile
+GET https://api.example.com/v1/users/me
+Authorization: Bearer {{auth_token}}
+
+# @gg-export user_id = jsonpath: $.data.id
+
+### 3. Update User
+PUT https://api.example.com/v1/users/{{user_id}}
+Authorization: Bearer {{auth_token}}
+Content-Type: application/json
+
+{"last_action": "profile_view"}
+`
+	specs, err := Parse(content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(specs) != 3 {
+		t.Fatalf("expected 3 requests, got %d", len(specs))
+	}
+
+	// Step 1: login with one export
+	if len(specs[0].Exports) != 1 || specs[0].Exports[0].VarName != "auth_token" {
+		t.Errorf("step 1: unexpected exports: %+v", specs[0].Exports)
+	}
+
+	// Step 2: profile fetch with variable injection URL and one export
+	if specs[1].URL != "https://api.example.com/v1/users/me" {
+		t.Errorf("step 2: unexpected URL: %s", specs[1].URL)
+	}
+	if specs[1].Headers.Get("Authorization") != "Bearer {{auth_token}}" {
+		t.Errorf("step 2: unexpected Authorization: %s", specs[1].Headers.Get("Authorization"))
+	}
+	if len(specs[1].Exports) != 1 || specs[1].Exports[0].VarName != "user_id" {
+		t.Errorf("step 2: unexpected exports: %+v", specs[1].Exports)
+	}
+
+	// Step 3: update with no exports
+	if len(specs[2].Exports) != 0 {
+		t.Errorf("step 3: unexpected exports: %+v", specs[2].Exports)
+	}
+	if specs[2].URL != "https://api.example.com/v1/users/{{user_id}}" {
+		t.Errorf("step 3: unexpected URL: %s", specs[2].URL)
+	}
+}
+
+func TestParse_ExportDirective_DoesNotLeakIntoBody(t *testing.T) {
+	content := `### POST with export
+POST https://example.com
+Content-Type: application/json
+
+{"key": "value"}
+
+# @gg-export result = jsonpath: $.result
+`
+	specs, err := Parse(content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	body := specs[0].Body
+	if strings.Contains(body, "@gg-export") {
+		t.Errorf("export pragma leaked into body: %q", body)
+	}
+	if body != `{"key": "value"}` {
+		t.Errorf("unexpected body: %q", body)
+	}
+}
+
+// ── Parse — JS embed safety ───────────────────────────────────────────────────
+
+func TestParse_JSEmbed_IsIgnored(t *testing.T) {
+	content := `### Request with JS handler
+POST https://api.example.com/auth
+Content-Type: application/json
+
+{"username": "user"}
+
+> {%
+client.global.set("token", response.body.token);
+client.test("Status is 200", function() {
+  client.assert(response.status === 200);
+});
+%}
+`
+	specs, err := Parse(content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(specs))
+	}
+	body := specs[0].Body
+	if strings.Contains(body, "client.global.set") {
+		t.Errorf("JS embed content leaked into body: %q", body)
+	}
+	if strings.Contains(body, "> {%") || strings.Contains(body, "%}") {
+		t.Errorf("JS embed delimiters leaked into body: %q", body)
+	}
+}
+
+func TestParse_JSEmbed_ExportAfterBlock(t *testing.T) {
+	// An @gg-export pragma may appear after the JS-embed closing %}.
+	content := `### Request with JS handler then export
+POST https://api.example.com/auth
+Content-Type: application/json
+
+{"username": "user"}
+
+> {%
+client.global.set("token", response.body.token);
+%}
+
+# @gg-export auth_token = jsonpath: $.token
+`
+	specs, err := Parse(content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(specs[0].Exports) != 1 {
+		t.Fatalf("expected 1 export after JS embed, got %d", len(specs[0].Exports))
+	}
+	if specs[0].Exports[0].VarName != "auth_token" {
+		t.Errorf("unexpected VarName: %q", specs[0].Exports[0].VarName)
+	}
+}
+
+func TestParse_JSEmbed_MultipleRequestsOneHasEmbed(t *testing.T) {
+	content := `### Step 1
+POST https://api.example.com/login
+Content-Type: application/json
+
+{"user": "test"}
+
+> {%
+client.test("ok", function() {});
+%}
+
+# @gg-export token = jsonpath: $.token
+
+### Step 2
+GET https://api.example.com/profile
+Authorization: Bearer {{token}}
+`
+	specs, err := Parse(content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(specs) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(specs))
+	}
+	if len(specs[0].Exports) != 1 {
+		t.Fatalf("step 1: expected 1 export, got %d", len(specs[0].Exports))
+	}
+	if len(specs[1].Exports) != 0 {
+		t.Fatalf("step 2: expected 0 exports, got %d", len(specs[1].Exports))
 	}
 }
