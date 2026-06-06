@@ -2,6 +2,7 @@ package hive
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"time"
@@ -10,35 +11,54 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
 
-// executeActor performs a single HTTP request on behalf of one Actor goroutine.
+// executeJourney runs every spec in the journey sequentially using a single
+// shared ActorMemory. Variables extracted by a @gg-export directive on step N
+// are automatically injected into the URL, headers, and body of step N+1…M.
 //
-// It is the goroutine body for every Actor spawned by the Hatchery.
-// Each invocation is independent — there is no shared mutable state beyond
-// the thread-safe fields of Engine.
+// The journey aborts on the first failed step (HTTP 4xx/5xx, transport error,
+// or variable-extraction failure); subsequent steps are not executed.
 //
-// Responsibilities in order:
-//  1. Increment sharded totalRequests counter and rpsWindow.
-//  2. Build the *http.Request via spec.ToHTTPRequest.
-//  3. Attach context + User-Agent header.
-//  4. Execute via the shared http.Client.
-//  5. Drain or capture the response body (sampling gate).
-//  6. Record latency into the sharded counter and the percentile slice.
-//  7. Log the call (success or failure) into the ring buffer.
-//  8. Increment sharded success/failure counter.
-//  9. Forward the entry to snap.Recorder when configured.
-//  10. Return ErrHttpError for any HTTP 4xx/5xx; transport errors propagate as-is.
+// shard is passed through to executeActor unchanged so that counter writes
+// are distributed across shards without rand overhead.
+func (e *Engine) executeJourney(ctx context.Context, specs []httpreader.RequestSpec, shard int) error {
+	mem := newActorMemory()
+	for _, spec := range specs {
+		if err := e.executeActor(ctx, spec, shard, &mem); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// executeActor performs a single HTTP request step within a Journey.
 //
-// shard is the counter shard index passed by the Hatchery
-// (actorIndex % numShards) to distribute writes without rand overhead.
-func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, shard int) error {
+// mem carries the Actor's private variable store across steps; it is nil only
+// in stateless (single-request) callers. When non-nil:
+//   - Variables already in mem are injected into the spec's URL, headers, and
+//     body via RequestSpec.ToHTTPRequest before the request is built.
+//   - After a 2xx response, every @gg-export directive attached to the spec is
+//     evaluated against the response body and the result is stored in mem for
+//     use by subsequent steps.
+//
+// Failure policy (per the Phase-2 design):
+//   - Transport error         → incFailure, return the error.
+//   - HTTP 4xx / 5xx          → incFailure, return ErrHttpError.
+//   - @gg-export extract fail → incFailure, return ErrExtractionFailed.
+//
+// shard is the counter-shard index (actorIndex % numShards).
+func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, shard int, mem *ActorMemory) error {
 	start := time.Now()
 
 	// ── 1. Record request count and RPS window tick ───────────────────────
 	e.counters.incTotalRequests(shard)
 	e.rpsWin.record(1)
 
-	// ── 2. Build request ─────────────────────────────────────────────────
-	req, err := spec.ToHTTPRequest(nil)
+	// ── 2. Build request (inject variables from actor memory) ────────────
+	var vars map[string]string
+	if mem != nil {
+		vars = mem.ToMap()
+	}
+	req, err := spec.ToHTTPRequest(vars)
 	if err != nil {
 		duration := time.Since(start)
 		e.counters.incFailure(shard)
@@ -56,11 +76,11 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		return err
 	}
 
-	// ── 2. Attach context + User-Agent ───────────────────────────────────
+	// ── 3. Attach context + User-Agent ───────────────────────────────────
 	req = req.WithContext(ctx)
 	req.Header.Set("User-Agent", userAgent)
 
-	// ── 3. Execute ───────────────────────────────────────────────────────
+	// ── 4. Execute ───────────────────────────────────────────────────────
 	resp, err := e.client.Do(req)
 	duration := time.Since(start)
 
@@ -81,47 +101,101 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	// ── 4. Drain or capture body ─────────────────────────────────────────
-	// When a recorder is active and this request falls within the sample
-	// window, the body is captured for schema inference. Otherwise it is
-	// discarded so the TCP connection is returned to the pool immediately.
+	// ── 5. Drain or capture body ─────────────────────────────────────────
+	// The body must be read (not discarded) when either:
+	//   a) the snap recorder is active and this request is within the sample
+	//      window (schema inference), or
+	//   b) the spec has @gg-export directives (variable extraction).
+	doSample := e.recorder != nil && e.shouldSample()
+	needBody := doSample || (mem != nil && len(spec.Exports) > 0)
+
 	var respBody []byte
-	sampled := false
-	if e.recorder != nil && e.shouldSample() {
-		sampled = true
+	if needBody {
 		respBody, _ = io.ReadAll(resp.Body)
 	} else {
 		_, _ = io.Copy(io.Discard, resp.Body)
 	}
 
-	// Determine body size: prefer Content-Length (zero-cost for all
-	// requests); fall back to actual read length for sampled responses.
+	// Prefer Content-Length for body-size reporting (zero extra cost);
+	// fall back to actual byte count only for sampled responses.
 	bodySize := int64(-1)
 	if resp.ContentLength >= 0 {
 		bodySize = resp.ContentLength
-	} else if sampled {
+	} else if doSample {
 		bodySize = int64(len(respBody))
 	}
 
-	// ── 5. Record latency ─────────────────────────────────────────────────
+	// ── 6. Record latency ─────────────────────────────────────────────────
 	e.recordLatency(shard, duration)
 
-	// ── 6. Log call ───────────────────────────────────────────────────────
-	var callErr error
+	// ── 7. HTTP error gate ────────────────────────────────────────────────
+	// Log, count, snap, and abort — extraction is never attempted on a
+	// failed HTTP response.
 	if resp.StatusCode >= 400 {
-		callErr = ErrHttpError
-	}
-	e.logCall(spec.Method, spec.URL, resp.StatusCode, duration, callErr)
-
-	// ── 8. Increment success/failure counter ──────────────────────────────
-	if resp.StatusCode >= 400 {
+		e.logCall(spec.Method, spec.URL, resp.StatusCode, duration, ErrHttpError)
 		e.counters.incFailure(shard)
-	} else {
-		e.counters.incSuccess(shard)
+		if e.recorder != nil {
+			snapBody := respBody
+			if !doSample {
+				snapBody = nil
+			}
+			e.recorder.Record(snap.RecordEntry{
+				Timestamp:  start,
+				Method:     spec.Method,
+				URL:        spec.URL,
+				StatusCode: resp.StatusCode,
+				Duration:   duration,
+				Headers:    resp.Header,
+				RespBody:   snapBody,
+				BodySize:   bodySize,
+				Error:      ErrHttpError,
+			})
+		}
+		return ErrHttpError
 	}
 
-	// ── 9. Snap record ────────────────────────────────────────────────────
+	// ── 8. @gg-export variable extraction (2xx only) ─────────────────────
+	// Each directive is evaluated in declaration order. The first extraction
+	// failure aborts the journey: the variable would be empty/wrong, making
+	// every downstream step invalid.
+	if mem != nil && len(spec.Exports) > 0 {
+		for _, d := range spec.Exports {
+			val, exErr := Extract(respBody, d)
+			if exErr != nil {
+				extractErr := fmt.Errorf("%w: %s: %v", ErrExtractionFailed, d.VarName, exErr)
+				e.logCall(spec.Method, spec.URL, resp.StatusCode, duration, extractErr)
+				e.counters.incFailure(shard)
+				if e.recorder != nil {
+					// Include the full body so the operator can debug the
+					// missing path / regex regardless of the sample gate.
+					e.recorder.Record(snap.RecordEntry{
+						Timestamp:  start,
+						Method:     spec.Method,
+						URL:        spec.URL,
+						StatusCode: resp.StatusCode,
+						Duration:   duration,
+						Headers:    resp.Header,
+						RespBody:   respBody,
+						BodySize:   int64(len(respBody)),
+						Error:      extractErr,
+					})
+				}
+				return extractErr
+			}
+			mem.Set(d.VarName, val)
+		}
+	}
+
+	// ── 9. Log + count success ────────────────────────────────────────────
+	e.logCall(spec.Method, spec.URL, resp.StatusCode, duration, nil)
+	e.counters.incSuccess(shard)
+
+	// ── 10. Snap record ───────────────────────────────────────────────────
 	if e.recorder != nil {
+		snapBody := respBody
+		if !doSample {
+			snapBody = nil
+		}
 		e.recorder.Record(snap.RecordEntry{
 			Timestamp:  start,
 			Method:     spec.Method,
@@ -129,16 +203,11 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 			StatusCode: resp.StatusCode,
 			Duration:   duration,
 			Headers:    resp.Header,
-			RespBody:   respBody,
+			RespBody:   snapBody,
 			BodySize:   bodySize,
-			Error:      callErr,
 		})
 	}
 
-	// ── 10. Return error for 4xx/5xx ─────────────────────────────────────
-	if resp.StatusCode >= 400 {
-		return ErrHttpError
-	}
 	return nil
 }
 

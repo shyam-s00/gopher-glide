@@ -164,10 +164,12 @@ func TestHatchery_Dispatch_SpawnIdx_Advances(t *testing.T) {
 	}
 }
 
-// ── dispatch: spec round-robin via SpecIndex ──────────────────────────────────
+// ── dispatch: journey runs all specs ─────────────────────────────────────────
 
-func TestHatchery_Dispatch_UsesSpecIndex(t *testing.T) {
-	// Two different servers; spec[0] → server0, spec[1] → server1.
+func TestHatchery_Dispatch_JourneyRunsAllSpecs(t *testing.T) {
+	// In journey mode each spawned Actor goroutine executes ALL specs in the
+	// slice sequentially.  With Count=2 and a 2-spec journey both servers
+	// must be hit by every actor (2 actors × 2 specs = 4 total hits).
 	var hit0, hit1 atomic.Int32
 	srv0 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hit0.Add(1)
@@ -189,13 +191,11 @@ func TestHatchery_Dispatch_UsesSpecIndex(t *testing.T) {
 	h := &hatchery{e: e}
 	idx := 0
 
-	// SpecIndex=1 → starts at specs[1], i.e. srv1.
-	h.dispatch(context.Background(), SpawnManifest{Count: 2, Duration: time.Second, SpecIndex: 1}, specs, &idx)
+	// Count=2 actors × 2-spec journey → srv0 hit 2×, srv1 hit 2×.
+	h.dispatch(context.Background(), SpawnManifest{Count: 2, Duration: time.Second}, specs, &idx)
 	waitForActors(t, e, 3*time.Second)
 
-	// First actor → specs[1%2]=specs[1]=srv1
-	// Second actor → specs[2%2]=specs[0]=srv0
-	if hit1.Load() == 0 || hit0.Load() == 0 {
+	if hit0.Load() == 0 || hit1.Load() == 0 {
 		t.Fatalf("expected both servers hit; srv0=%d srv1=%d", hit0.Load(), hit1.Load())
 	}
 }

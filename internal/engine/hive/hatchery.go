@@ -84,8 +84,6 @@ func (h *hatchery) dispatch(
 		return
 	}
 
-	specIdx := manifest.SpecIndex
-
 	// Compute the number of micro-batch ticks that fit within the manifest
 	// window. A minimum of 1 tick prevents divide-by-zero for tiny durations.
 	window := manifest.Duration
@@ -120,15 +118,17 @@ func (h *hatchery) dispatch(
 
 		for i := 0; i < batch && spawned < count; i++ {
 			shard := *spawnIdx % numShards
-			spec := specs[specIdx%len(specs)]
-			specIdx++
 
+			// Each Actor goroutine executes the entire Journey (all specs
+			// in order) with its own private ActorMemory.  Variables
+			// extracted from step N are automatically injected into step N+1.
+			// A single-spec journey is behaviourally identical to the old
+			// stateless single-request model.
 			h.e.activeActors.Add(1)
-			capturedSpec := spec
 			capturedShard := shard
 			go func() {
 				defer h.e.activeActors.Add(-1)
-				_ = h.e.executeActor(ctx, capturedSpec, capturedShard)
+				_ = h.e.executeJourney(ctx, specs, capturedShard)
 			}()
 
 			*spawnIdx++

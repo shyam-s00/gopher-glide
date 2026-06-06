@@ -115,13 +115,13 @@ func BenchmarkActor_ConnectionReuse(b *testing.B) {
 
 	// Warm: force a TCP connection into the pool before the timed loop.
 	for i := 0; i < 10; i++ {
-		_ = e.executeActor(context.Background(), spec, 0)
+		_ = e.executeActor(context.Background(), spec, 0, nil)
 	}
 
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = e.executeActor(context.Background(), spec, i%numShards)
+		_ = e.executeActor(context.Background(), spec, i%numShards, nil)
 	}
 }
 
@@ -140,7 +140,7 @@ func BenchmarkActor_Parallel(b *testing.B) {
 
 	// Warm the connection pool before the timed loop.
 	for i := 0; i < 10; i++ {
-		_ = e.executeActor(context.Background(), spec, 0)
+		_ = e.executeActor(context.Background(), spec, 0, nil)
 	}
 
 	b.ReportAllocs()
@@ -148,7 +148,7 @@ func BenchmarkActor_Parallel(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		shard := 0
 		for pb.Next() {
-			_ = e.executeActor(context.Background(), spec, shard%numShards)
+			_ = e.executeActor(context.Background(), spec, shard%numShards, nil)
 			shard++
 		}
 	})
@@ -169,13 +169,13 @@ func BenchmarkEngine_MaxRPS_SingleCore(b *testing.B) {
 
 	// Warm the connection pool
 	for i := 0; i < 10; i++ {
-		_ = e.executeActor(context.Background(), spec, 0)
+		_ = e.executeActor(context.Background(), spec, 0, nil)
 	}
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = e.executeActor(context.Background(), spec, i%numShards)
+		_ = e.executeActor(context.Background(), spec, i%numShards, nil)
 	}
 	b.ReportMetric(float64(b.N)/b.Elapsed().Seconds(), "RPS")
 }
