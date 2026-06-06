@@ -35,6 +35,9 @@ jobs:
       - name: Show coverage summary
         run: go tool cover -func=coverage.out
 
+      - name: Import Codecov GPG key (Fix for signature verification)
+        run: curl -s https://keybase.io/codecovsecurity/pgp_keys.asc | gpg --no-default-keyring --keyring trustedkeys.gpg --import || true
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
