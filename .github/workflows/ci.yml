@@ -39,7 +39,7 @@ jobs:
         run: curl -s https://keybase.io/codecovsecurity/pgp_keys.asc | gpg --no-default-keyring --keyring trustedkeys.gpg --import || true
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6.0.1
         with:
           files: coverage.out
           fail_ci_if_error: true
