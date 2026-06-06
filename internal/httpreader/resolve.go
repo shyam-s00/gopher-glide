@@ -2,17 +2,88 @@ package httpreader
 
 import (
 	"bytes"
+	"crypto/rand"
 	"fmt"
+	mathrand "math/rand"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
+
+// resolveDynamic replaces each occurrence of a dynamic placeholder with a
+// freshly-generated value so that multiple occurrences in one field each
+// receive a distinct value (e.g. two {{$uuid}} tokens → two different UUIDs).
+//
+// Supported placeholders:
+//
+//	{{$uuid}}       – RFC-4122 UUID v4
+//	{{$randomInt}}  – random integer in [0, 1 000 000]
+//	{{$timestamp}}  – current UNIX epoch in milliseconds
+func resolveDynamic(s string) string {
+	const open = "{{$"
+	if !strings.Contains(s, open) {
+		return s
+	}
+
+	var b strings.Builder
+	b.Grow(len(s))
+
+	for len(s) > 0 {
+		idx := strings.Index(s, open)
+		if idx == -1 {
+			b.WriteString(s)
+			break
+		}
+		b.WriteString(s[:idx])
+		s = s[idx:]
+
+		end := strings.Index(s, "}}")
+		if end == -1 {
+			// No closing braces — write the rest as-is.
+			b.WriteString(s)
+			break
+		}
+
+		placeholder := s[:end+2] // includes the closing "}}"
+		s = s[end+2:]
+
+		switch placeholder {
+		case "{{$uuid}}":
+			b.WriteString(newUUID())
+		case "{{$randomInt}}":
+			b.WriteString(strconv.Itoa(mathrand.Intn(1_000_001)))
+		case "{{$timestamp}}":
+			b.WriteString(strconv.FormatInt(time.Now().UnixMilli(), 10))
+		default:
+			// Unknown dynamic placeholder — leave it untouched.
+			b.WriteString(placeholder)
+		}
+	}
+
+	return b.String()
+}
+
+// newUUID generates a random RFC-4122 UUID v4 using crypto/rand.
+func newUUID() string {
+	var uuid [16]byte
+	_, _ = rand.Read(uuid[:])
+	uuid[6] = (uuid[6] & 0x0f) | 0x40 // version 4
+	uuid[8] = (uuid[8] & 0x3f) | 0x80 // variant 10xx
+	return fmt.Sprintf(
+		"%08x-%04x-%04x-%04x-%012x",
+		uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:],
+	)
+}
 
 // ToHTTPRequest converts the spec into an executable http.Request, substituting variables.
 func (r *RequestSpec) ToHTTPRequest(vars map[string]string) (*http.Request, error) {
-	url := r.URL
-	body := r.Body
+	// Resolve dynamic placeholders first so that user-defined vars can still
+	// reference/override anything that isn't a built-in dynamic placeholder.
+	url := resolveDynamic(r.URL)
+	body := resolveDynamic(r.Body)
 
-	// Simple substitution
+	// User-defined variable substitution
 	for k, v := range vars {
 		placeholder := "{{" + k + "}}"
 		url = strings.ReplaceAll(url, placeholder, v)
@@ -34,8 +105,7 @@ func (r *RequestSpec) ToHTTPRequest(vars map[string]string) (*http.Request, erro
 	// Headers
 	for k, vv := range r.Headers {
 		for _, v := range vv {
-			// Substitute in headers too
-			val := v
+			val := resolveDynamic(v)
 			for vk, vv := range vars {
 				placeholder := "{{" + vk + "}}"
 				val = strings.ReplaceAll(val, placeholder, vv)
