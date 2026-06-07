@@ -37,6 +37,8 @@ jobs:
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6.0.1
+        env:
+          CODECOV_SKIP_VALIDATION: true
         with:
           files: coverage.out
           fail_ci_if_error: true
