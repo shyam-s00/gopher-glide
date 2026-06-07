@@ -59,6 +59,77 @@ func TestHatchery_Dispatch_EmptySpecs_SpawnsNothing(t *testing.T) {
 	}
 }
 
+// ── dispatch: MaxActors safeguard ────────────────────────────────────────────
+
+// TestHatchery_Dispatch_AtMaxActors_SkipsSpawning pre-saturates activeActors
+// to the maxActiveActors ceiling and verifies the Hatchery refuses to launch
+// any further Actor goroutines — protecting the host from OOM under the
+// Arrival Rate model (slow targets would otherwise pile up parked goroutines).
+func TestHatchery_Dispatch_AtMaxActors_SkipsSpawning(t *testing.T) {
+	var served atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		served.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	e := New()
+	h := &hatchery{e: e}
+	idx := 0
+
+	// Saturate the engine to the ceiling before dispatching.
+	e.activeActors.Store(maxActiveActors)
+
+	const count = 10
+	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: 50 * time.Millisecond, SpecIndex: 0}, makeURLSpecs(1, srv.URL), &idx)
+
+	// Give any wrongly-spawned actor a moment to hit the test server.
+	time.Sleep(100 * time.Millisecond)
+
+	if served.Load() != 0 {
+		t.Fatalf("expected 0 requests while at the MaxActors ceiling, got %d", served.Load())
+	}
+	if got := e.activeActors.Load(); got != maxActiveActors {
+		t.Fatalf("expected activeActors to remain at the ceiling %d, got %d", maxActiveActors, got)
+	}
+	if idx != count {
+		t.Fatalf("expected spawnIdx to advance by %d even when spawns are skipped, got %d", count, idx)
+	}
+}
+
+// TestHatchery_Dispatch_BelowMaxActors_SpawnsNormally verifies the safeguard
+// only engages once the ceiling is reached — normal dispatch is unaffected
+// while headroom remains.
+func TestHatchery_Dispatch_BelowMaxActors_SpawnsNormally(t *testing.T) {
+	var served atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		served.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	e := New()
+	h := &hatchery{e: e}
+	idx := 0
+
+	// Plenty of headroom below the ceiling.
+	e.activeActors.Store(maxActiveActors - 10)
+
+	const count = 5
+	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second, SpecIndex: 0}, makeURLSpecs(1, srv.URL), &idx)
+
+	deadline := time.Now().Add(3 * time.Second)
+	for served.Load() < count {
+		if time.Now().After(deadline) {
+			t.Fatalf("expected %d requests, got %d after timeout", count, served.Load())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if served.Load() != count {
+		t.Fatalf("expected exactly %d requests, got %d", count, served.Load())
+	}
+}
+
 // ── dispatch: correct actor count ────────────────────────────────────────────
 
 func TestHatchery_Dispatch_SmallCount_AllActorsSpawned(t *testing.T) {
