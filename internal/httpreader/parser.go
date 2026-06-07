@@ -8,13 +8,20 @@ import (
 	"strings"
 )
 
-// ParseFile reads a .http file and returns a list of RequestSpec.
-func ParseFile(path string) ([]RequestSpec, error) {
+// ParseFile reads a .http file, parses it into an ordered list of
+// RequestSpecs, and applies Smart Detection (GroupJourneys) to group stateful
+// @gg-export → {{var}} chains into Journeys. Requests that neither export nor
+// consume a chained variable are returned as their own single-step Journey.
+func ParseFile(path string) ([]Journey, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read http file: %w", err)
 	}
-	return Parse(string(content))
+	specs, err := Parse(string(content))
+	if err != nil {
+		return nil, err
+	}
+	return GroupJourneys(specs), nil
 }
 
 // Parse parses the content of a .http file into an ordered slice of

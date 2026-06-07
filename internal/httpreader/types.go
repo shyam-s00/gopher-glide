@@ -31,3 +31,14 @@ type RequestSpec struct {
 	Body    string
 	Exports []ExportDirective
 }
+
+// Journey is an ordered, contiguous run of RequestSpecs that an Actor
+// executes sequentially as a single stateful unit, sharing one ActorMemory.
+//
+// Smart Detection (see GroupJourneys) produces these automatically: requests
+// linked by a `# @gg-export` → `{{var}}` chain are grouped into a multi-step
+// Journey, while every other request becomes its own independent single-step
+// Journey — so a purely stateless `.http` file behaves exactly as before.
+type Journey struct {
+	Specs []RequestSpec
+}

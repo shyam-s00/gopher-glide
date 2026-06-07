@@ -276,17 +276,23 @@ func main() {
 	}
 
 	// ── parse .http file ──────────────────────────────────────────────────────
-	specs, err := httpreader.ParseFile(cfg.ConfigSection.HTTPFilePath)
+	// Smart Detection (httpreader.ParseFile) groups @gg-export → {{var}}
+	// chains into stateful Journeys; every other request stays its own
+	// single-step Journey. Flatten back to a flat, ordered spec list for the
+	// engines, which are not yet Journey-aware (Milestone 3 threads
+	// []Journey through the Hive engine's dispatch directly).
+	journeys, err := httpreader.ParseFile(cfg.ConfigSection.HTTPFilePath)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error parsing http file: %v\n", err)
 		os.Exit(1)
 	}
-	if len(specs) == 0 {
+	if len(journeys) == 0 {
 		_, _ = fmt.Fprintf(os.Stderr, "No requests found in http file: %s\n", cfg.ConfigSection.HTTPFile)
 		os.Exit(1)
 	}
+	specs := httpreader.Flatten(journeys)
 
-	fmt.Printf("✓ Loaded %d request(s) from %s\n", len(specs), cfg.ConfigSection.HTTPFile)
+	fmt.Printf("✓ Loaded %d request(s) across %d journey(s) from %s\n", len(specs), len(journeys), cfg.ConfigSection.HTTPFile)
 	for i, s := range specs {
 		fmt.Printf("  [%d] %s %s\n", i+1, s.Method, s.URL)
 	}
