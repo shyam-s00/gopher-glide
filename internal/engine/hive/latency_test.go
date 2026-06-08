@@ -343,14 +343,14 @@ func TestComputeLatency_LargeBuf_OnlyRecentSampled(t *testing.T) {
 
 	lb := e.latBuf.Load()
 
-	// Phase 1: fill the entire buffer with 1.0 ms.
+	// fill the entire buffer with 1.0 ms.
 	for i := 0; i < bufCap; i++ {
 		idx := lb.n.Add(1) - 1
 		pos := idx % int64(bufCap)
 		lb.buf[pos].Store(math.Float64bits(1.0))
 	}
 
-	// Phase 2: write latencySampleSize entries of 999.0 ms (the newest).
+	// write latencySampleSize entries of 999.0 ms (the newest).
 	for i := 0; i < latencySampleSize; i++ {
 		idx := lb.n.Add(1) - 1
 		pos := idx % int64(bufCap)

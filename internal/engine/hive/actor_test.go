@@ -275,15 +275,15 @@ func TestExecuteActor_InvalidURL_LatencyRecorded(t *testing.T) {
 }
 
 func TestSpawnManifest_Fields(t *testing.T) {
-	m := SpawnManifest{Count: 100, SpecIndex: 3}
-	if m.Count != 100 || m.SpecIndex != 3 {
+	m := SpawnManifest{Count: 100, Duration: 3 * time.Second}
+	if m.Count != 100 || m.Duration != 3*time.Second {
 		t.Fatalf("unexpected: %+v", m)
 	}
 }
 
 func TestSpawnManifest_ZeroValue(t *testing.T) {
 	var m SpawnManifest
-	if m.Count != 0 || m.SpecIndex != 0 {
+	if m.Count != 0 || m.Duration != 0 {
 		t.Fatalf("expected zero, got %+v", m)
 	}
 }

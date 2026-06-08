@@ -146,7 +146,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// ── apply --http-file override (Task 6) ───────────────────────────────────
+	// ── apply --http-file override  ───────────────────────────────────
 	// --http-file takes the highest precedence for the requests file.
 	// The path is resolved from the current working directory (not the config
 	// file directory) so that CLI callers don't need to know where config lives.
@@ -175,7 +175,7 @@ func main() {
 		}
 	}
 
-	// ── load and inflate profile (Phase 3) ────────────────────────────────────
+	// ── load and inflate profile  ────────────────────────────────────
 	// Precedence hierarchy for profiles:
 	//   Base Defaults → config.yaml → --profile → --peak-rps / --duration
 	//

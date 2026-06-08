@@ -40,7 +40,7 @@ func (e *Engine) executeJourney(ctx context.Context, specs []httpreader.RequestS
 //     evaluated against the response body and the result is stored in mem for
 //     use by subsequent steps.
 //
-// Failure policy (per the Phase-2 design):
+// Failure policy:
 //   - Transport error         → incFailure, return the error.
 //   - HTTP 4xx / 5xx          → incFailure, return ErrHttpError.
 //   - @gg-export extract fail → incFailure, return ErrExtractionFailed.

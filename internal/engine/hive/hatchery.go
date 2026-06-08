@@ -52,9 +52,9 @@ type hatchery struct {
 func (h *hatchery) run(
 	ctx context.Context,
 	manifestCh <-chan SpawnManifest,
-	specs []httpreader.RequestSpec,
+	journeys []httpreader.Journey,
 ) error {
-	spawnIdx := 0 // monotonically increasing; drives shard assignment
+	spawnIdx := 0 // monotonically increasing; drives shard + journey assignment
 	for {
 		select {
 		case <-ctx.Done():
@@ -63,7 +63,7 @@ func (h *hatchery) run(
 			if !ok {
 				return nil
 			}
-			h.dispatch(ctx, manifest, specs, &spawnIdx)
+			h.dispatch(ctx, manifest, journeys, &spawnIdx)
 		}
 	}
 }
@@ -85,11 +85,11 @@ func (h *hatchery) run(
 func (h *hatchery) dispatch(
 	ctx context.Context,
 	manifest SpawnManifest,
-	specs []httpreader.RequestSpec,
+	journeys []httpreader.Journey,
 	spawnIdx *int,
 ) {
 	count := manifest.Count
-	if count <= 0 || len(specs) == 0 {
+	if count <= 0 || len(journeys) == 0 {
 		return
 	}
 
@@ -138,16 +138,22 @@ func (h *hatchery) dispatch(
 
 			shard := *spawnIdx % numShards
 
-			// Each Actor goroutine executes the entire Journey (all specs
-			// in order) with its own private ActorMemory.  Variables
-			// extracted from step N are automatically injected into step N+1.
-			// A single-spec journey is behaviourally identical to the old
+			// Round-robin across Journeys using the monotonic spawn counter:
+			// Actor 0 gets journeys[0], Actor 1 gets journeys[1], etc.,
+			// wrapping back to journeys[0] once every Journey has been
+			// assigned once. Each Actor then executes its entire Journey
+			// (all specs in order) with its own private ActorMemory —
+			// variables extracted from step N are injected into step N+1.
+			// A single-step Journey is behaviourally identical to the old
 			// stateless single-request model.
+			journeyIdx := *spawnIdx % len(journeys)
+			steps := journeys[journeyIdx].Specs
+
 			h.e.activeActors.Add(1)
 			capturedShard := shard
 			go func() {
 				defer h.e.activeActors.Add(-1)
-				_ = h.e.executeJourney(ctx, specs, capturedShard)
+				_ = h.e.executeJourney(ctx, steps, capturedShard)
 			}()
 
 			*spawnIdx++

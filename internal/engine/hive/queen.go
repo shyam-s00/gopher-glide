@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/shyam-s00/gopher-glide/internal/config"
-	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 )
 
 // ── queen ─────────────────────────────────────────────────────────────────────
@@ -37,14 +36,12 @@ func (q *queen) run(
 	ctx context.Context,
 	stages []config.Stage,
 	timeScale float64,
-	specs []httpreader.RequestSpec,
 	manifestCh chan<- SpawnManifest,
 ) error {
 	if timeScale <= 0 {
 		timeScale = 1.0
 	}
 
-	specIdx := 0 // global round-robin position advanced by every manifest
 	prevRPS := 0 // RPS at the end of the previous stage (starts at 0)
 
 	for stageIdx, stage := range stages {
@@ -65,8 +62,7 @@ func (q *queen) run(
 			q.e.targetRPS.Store(int64(biasedRPS))
 
 			select {
-			case manifestCh <- SpawnManifest{Count: biasedRPS, Duration: time.Second, SpecIndex: specIdx % len(specs)}:
-				specIdx += biasedRPS
+			case manifestCh <- SpawnManifest{Count: biasedRPS, Duration: time.Second}:
 			default:
 			}
 			continue
@@ -134,8 +130,7 @@ func (q *queen) run(
 
 			// ── 3. Emit manifest for the upcoming window ───────────────────
 			select {
-			case manifestCh <- SpawnManifest{Count: count, Duration: windowDur, SpecIndex: specIdx % len(specs)}:
-				specIdx += count
+			case manifestCh <- SpawnManifest{Count: count, Duration: windowDur}:
 			default:
 				// Hatchery is behind — drop this manifest silently.
 			}

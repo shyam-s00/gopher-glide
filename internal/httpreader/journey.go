@@ -32,7 +32,7 @@ func referencedVars(spec RequestSpec) map[string]bool {
 // grouping contiguous runs that are linked by an @gg-export → {{var}} chain
 // into a single stateful Journey. Every other request becomes its own
 // independent single-step Journey — so a purely stateless .http file produces
-// exactly one Journey per request, round-robin'd just like before Phase 2.
+// exactly one Journey per request, round-robin'd just like before.
 //
 // Heuristic, applied in declaration order:
 //  1. A spec carrying its own `# @gg-export` directive(s) starts (or

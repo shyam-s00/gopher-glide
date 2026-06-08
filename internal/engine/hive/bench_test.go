@@ -211,7 +211,7 @@ func BenchmarkDispatch_Throughput(b *testing.B) {
 
 			e := New()
 			h := &hatchery{e: e}
-			specs := []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv.URL}}
+			journeys := []httpreader.Journey{{Specs: []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv.URL}}}}
 
 			b.SetBytes(int64(tc.count)) // actors launched per iteration
 			b.ReportAllocs()
@@ -221,7 +221,7 @@ func BenchmarkDispatch_Throughput(b *testing.B) {
 				idx := 0
 				h.dispatch(context.Background(),
 					SpawnManifest{Count: tc.count, Duration: tc.duration},
-					specs, &idx)
+					journeys, &idx)
 				drainActors(e, 15*time.Second)
 			}
 		})
@@ -251,7 +251,7 @@ func BenchmarkDispatch_SubSecondWindow(b *testing.B) {
 
 			e := New()
 			h := &hatchery{e: e}
-			specs := []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv.URL}}
+			journeys := []httpreader.Journey{{Specs: []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv.URL}}}}
 
 			b.SetBytes(int64(tc.count))
 			b.ReportAllocs()
@@ -260,7 +260,7 @@ func BenchmarkDispatch_SubSecondWindow(b *testing.B) {
 				idx := 0
 				h.dispatch(context.Background(),
 					SpawnManifest{Count: tc.count, Duration: tc.duration},
-					specs, &idx)
+					journeys, &idx)
 				drainActors(e, 5*time.Second)
 			}
 		})
@@ -303,7 +303,7 @@ func BenchmarkDispatch_ManifestChannelRoundTrip(b *testing.B) {
 	srv := fastServer()
 	defer srv.Close()
 
-	specs := []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv.URL}}
+	journeys := []httpreader.Journey{{Specs: []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv.URL}}}}
 	e := New()
 	h := &hatchery{e: e}
 
@@ -311,10 +311,10 @@ func BenchmarkDispatch_ManifestChannelRoundTrip(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		manifestCh := make(chan SpawnManifest, 1)
-		manifestCh <- SpawnManifest{Count: 1, Duration: 50 * time.Millisecond, SpecIndex: 0}
+		manifestCh <- SpawnManifest{Count: 1, Duration: 50 * time.Millisecond}
 		close(manifestCh)
 		// run drains from the channel and dispatches the single manifest.
-		_ = h.run(context.Background(), manifestCh, specs)
+		_ = h.run(context.Background(), manifestCh, journeys)
 		drainActors(e, 2*time.Second)
 	}
 }

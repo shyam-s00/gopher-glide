@@ -14,13 +14,15 @@ import (
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-// makeURLSpecs returns n identical GET specs pointing at the given URL.
-func makeURLSpecs(n int, url string) []httpreader.RequestSpec {
-	specs := make([]httpreader.RequestSpec, n)
-	for i := range specs {
-		specs[i] = httpreader.RequestSpec{Method: http.MethodGet, URL: url}
+// makeURLJourneys returns n independent single-step Journeys, each a GET
+// against the given URL — exactly what Smart Detection produces for a
+// purely stateless .http file.
+func makeURLJourneys(n int, url string) []httpreader.Journey {
+	journeys := make([]httpreader.Journey, n)
+	for i := range journeys {
+		journeys[i] = httpreader.Journey{Specs: []httpreader.RequestSpec{{Method: http.MethodGet, URL: url}}}
 	}
-	return specs
+	return journeys
 }
 
 // waitForActors waits until activeActors reaches zero or the deadline passes.
@@ -43,7 +45,7 @@ func TestHatchery_Dispatch_ZeroCount_SpawnsNothing(t *testing.T) {
 	e := New()
 	h := &hatchery{e: e}
 	idx := 0
-	h.dispatch(context.Background(), SpawnManifest{Count: 0, Duration: time.Second, SpecIndex: 0}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: 0, Duration: time.Second}, makeURLJourneys(1, srv.URL), &idx)
 	if e.activeActors.Load() != 0 {
 		t.Fatalf("expected 0 active actors, got %d", e.activeActors.Load())
 	}
@@ -53,7 +55,7 @@ func TestHatchery_Dispatch_EmptySpecs_SpawnsNothing(t *testing.T) {
 	e := New()
 	h := &hatchery{e: e}
 	idx := 0
-	h.dispatch(context.Background(), SpawnManifest{Count: 5, Duration: time.Second}, []httpreader.RequestSpec{}, &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: 5, Duration: time.Second}, []httpreader.Journey{}, &idx)
 	if e.activeActors.Load() != 0 {
 		t.Fatalf("expected 0 active actors, got %d", e.activeActors.Load())
 	}
@@ -81,7 +83,7 @@ func TestHatchery_Dispatch_AtMaxActors_SkipsSpawning(t *testing.T) {
 	e.activeActors.Store(maxActiveActors)
 
 	const count = 10
-	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: 50 * time.Millisecond, SpecIndex: 0}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: 50 * time.Millisecond}, makeURLJourneys(1, srv.URL), &idx)
 
 	// Give any wrongly-spawned actor a moment to hit the test server.
 	time.Sleep(100 * time.Millisecond)
@@ -116,7 +118,7 @@ func TestHatchery_Dispatch_BelowMaxActors_SpawnsNormally(t *testing.T) {
 	e.activeActors.Store(maxActiveActors - 10)
 
 	const count = 5
-	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second, SpecIndex: 0}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second}, makeURLJourneys(1, srv.URL), &idx)
 
 	deadline := time.Now().Add(3 * time.Second)
 	for served.Load() < count {
@@ -144,7 +146,7 @@ func TestHatchery_Dispatch_SmallCount_AllActorsSpawned(t *testing.T) {
 	h := &hatchery{e: e}
 	idx := 0
 	const count = 5
-	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second, SpecIndex: 0}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second}, makeURLJourneys(1, srv.URL), &idx)
 
 	// All actors should eventually finish.
 	deadline := time.Now().Add(3 * time.Second)
@@ -172,7 +174,7 @@ func TestHatchery_Dispatch_ExactlyTicksPerSec_AllActorsSpawned(t *testing.T) {
 	idx := 0
 	// 100 actors over 1 second = 1 per 10ms tick
 	const count = int32(100)
-	h.dispatch(context.Background(), SpawnManifest{Count: int(count), Duration: time.Second}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: int(count), Duration: time.Second}, makeURLJourneys(1, srv.URL), &idx)
 
 	deadline := time.Now().Add(5 * time.Second)
 	for served.Load() < count {
@@ -203,7 +205,7 @@ func TestHatchery_Dispatch_RemainderDistributed_Correctly(t *testing.T) {
 	h := &hatchery{e: e}
 	idx := 0
 	const count = 7
-	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second}, makeURLJourneys(1, srv.URL), &idx)
 
 	deadline := time.Now().Add(3 * time.Second)
 	for served.Load() < count {
@@ -227,7 +229,7 @@ func TestHatchery_Dispatch_SpawnIdx_Advances(t *testing.T) {
 	h := &hatchery{e: e}
 	idx := 0
 	const count = 3
-	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second}, makeURLJourneys(1, srv.URL), &idx)
 	waitForActors(t, e, 3*time.Second)
 
 	if idx != count {
@@ -235,12 +237,11 @@ func TestHatchery_Dispatch_SpawnIdx_Advances(t *testing.T) {
 	}
 }
 
-// ── dispatch: journey runs all specs ─────────────────────────────────────────
+// ── dispatch: multi-step journeys & round-robin ──────────────────────────────
 
-func TestHatchery_Dispatch_JourneyRunsAllSpecs(t *testing.T) {
-	// In journey mode each spawned Actor goroutine executes ALL specs in the
-	// slice sequentially.  With Count=2 and a 2-spec journey both servers
-	// must be hit by every actor (2 actors × 2 specs = 4 total hits).
+func TestHatchery_Dispatch_MultiStepJourney_ExecutesAllStepsInOrder(t *testing.T) {
+	// A single 2-step Journey: every Actor that picks it must hit both
+	// servers in order (2 actors × 2 steps = 2 hits per server).
 	var hit0, hit1 atomic.Int32
 	srv0 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hit0.Add(1)
@@ -253,21 +254,53 @@ func TestHatchery_Dispatch_JourneyRunsAllSpecs(t *testing.T) {
 	defer srv0.Close()
 	defer srv1.Close()
 
-	specs := []httpreader.RequestSpec{
+	journeys := []httpreader.Journey{{Specs: []httpreader.RequestSpec{
 		{Method: http.MethodGet, URL: srv0.URL},
 		{Method: http.MethodGet, URL: srv1.URL},
+	}}}
+
+	e := New()
+	h := &hatchery{e: e}
+	idx := 0
+
+	h.dispatch(context.Background(), SpawnManifest{Count: 2, Duration: time.Second}, journeys, &idx)
+	waitForActors(t, e, 3*time.Second)
+
+	if hit0.Load() != 2 || hit1.Load() != 2 {
+		t.Fatalf("expected each step hit once per actor (2×2); srv0=%d srv1=%d", hit0.Load(), hit1.Load())
+	}
+}
+
+func TestHatchery_Dispatch_RoundRobinsAcrossJourneys(t *testing.T) {
+	// Two independent single-step Journeys: the Hatchery must alternate
+	// between them via journeyIdx = spawnIdx % len(journeys), so 4 actors
+	// produce exactly 2 hits on each server.
+	var hit0, hit1 atomic.Int32
+	srv0 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hit0.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	srv1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hit1.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv0.Close()
+	defer srv1.Close()
+
+	journeys := []httpreader.Journey{
+		{Specs: []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv0.URL}}},
+		{Specs: []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv1.URL}}},
 	}
 
 	e := New()
 	h := &hatchery{e: e}
 	idx := 0
 
-	// Count=2 actors × 2-spec journey → srv0 hit 2×, srv1 hit 2×.
-	h.dispatch(context.Background(), SpawnManifest{Count: 2, Duration: time.Second}, specs, &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: 4, Duration: time.Second}, journeys, &idx)
 	waitForActors(t, e, 3*time.Second)
 
-	if hit0.Load() == 0 || hit1.Load() == 0 {
-		t.Fatalf("expected both servers hit; srv0=%d srv1=%d", hit0.Load(), hit1.Load())
+	if hit0.Load() != 2 || hit1.Load() != 2 {
+		t.Fatalf("expected round-robin to split 4 actors evenly (2/2); srv0=%d srv1=%d", hit0.Load(), hit1.Load())
 	}
 }
 
@@ -281,7 +314,7 @@ func TestHatchery_Dispatch_ActiveActors_ReturnToZero(t *testing.T) {
 	h := &hatchery{e: e}
 	idx := 0
 
-	h.dispatch(context.Background(), SpawnManifest{Count: 4, Duration: time.Second}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: 4, Duration: time.Second}, makeURLJourneys(1, srv.URL), &idx)
 	waitForActors(t, e, 3*time.Second)
 
 	if e.activeActors.Load() != 0 {
@@ -297,7 +330,7 @@ func TestHatchery_Dispatch_ActiveActors_NonNegative(t *testing.T) {
 	h := &hatchery{e: e}
 	idx := 0
 
-	go h.dispatch(context.Background(), SpawnManifest{Count: 5, Duration: time.Second}, makeURLSpecs(1, srv.URL), &idx)
+	go h.dispatch(context.Background(), SpawnManifest{Count: 5, Duration: time.Second}, makeURLJourneys(1, srv.URL), &idx)
 
 	// Poll for negative value (should never happen).
 	deadline := time.Now().Add(2 * time.Second)
@@ -319,7 +352,7 @@ func TestHatchery_Dispatch_TotalRequests_Incremented(t *testing.T) {
 	h := &hatchery{e: e}
 	idx := 0
 	const count = 3
-	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second}, makeURLJourneys(1, srv.URL), &idx)
 	waitForActors(t, e, 3*time.Second)
 
 	if got := e.counters.loadTotalRequests(); got != count {
@@ -335,7 +368,7 @@ func TestHatchery_Dispatch_SuccessCount_Incremented(t *testing.T) {
 	h := &hatchery{e: e}
 	idx := 0
 	const count = 3
-	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second}, makeURLJourneys(1, srv.URL), &idx)
 	waitForActors(t, e, 3*time.Second)
 
 	if got := e.counters.loadSuccessCount(); got != count {
@@ -351,7 +384,7 @@ func TestHatchery_Dispatch_FailureCount_Incremented(t *testing.T) {
 	h := &hatchery{e: e}
 	idx := 0
 	const count = 2
-	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: count, Duration: time.Second}, makeURLJourneys(1, srv.URL), &idx)
 	waitForActors(t, e, 3*time.Second)
 
 	if got := e.counters.loadFailureCount(); got != count {
@@ -383,7 +416,7 @@ func TestHatchery_Dispatch_ContextCancel_StopsMidway(t *testing.T) {
 	go func() {
 		defer close(done)
 		// Large count so dispatch runs for ~1s; cancel will interrupt it.
-		h.dispatch(ctx, SpawnManifest{Count: 1000, Duration: time.Second}, makeURLSpecs(1, srv.URL), &idx)
+		h.dispatch(ctx, SpawnManifest{Count: 1000, Duration: time.Second}, makeURLJourneys(1, srv.URL), &idx)
 	}()
 
 	// Let a few ticks fire then cancel.
@@ -410,7 +443,7 @@ func TestHatchery_Run_ContextCancel_Returns(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- h.run(ctx, manifestCh, makeURLSpecs(1, srv.URL))
+		done <- h.run(ctx, manifestCh, makeURLJourneys(1, srv.URL))
 	}()
 
 	cancel()
@@ -433,7 +466,7 @@ func TestHatchery_Run_ClosedChannel_Returns(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- h.run(context.Background(), manifestCh, makeURLSpecs(1, "http://localhost"))
+		done <- h.run(context.Background(), manifestCh, makeURLJourneys(1, "http://localhost"))
 	}()
 
 	select {
@@ -459,11 +492,11 @@ func TestHatchery_Run_MultipleManifests_AllActorsSpawned(t *testing.T) {
 	e := New()
 	h := &hatchery{e: e}
 	manifestCh := make(chan SpawnManifest, 2)
-	manifestCh <- SpawnManifest{Count: 3, Duration: time.Second, SpecIndex: 0}
-	manifestCh <- SpawnManifest{Count: 2, Duration: time.Second, SpecIndex: 0}
+	manifestCh <- SpawnManifest{Count: 3, Duration: time.Second}
+	manifestCh <- SpawnManifest{Count: 2, Duration: time.Second}
 	close(manifestCh)
 
-	if err := h.run(context.Background(), manifestCh, makeURLSpecs(1, srv.URL)); err != nil {
+	if err := h.run(context.Background(), manifestCh, makeURLJourneys(1, srv.URL)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -490,7 +523,7 @@ func TestHatchery_Dispatch_SpacingBoundedWithinWindow(t *testing.T) {
 	h := &hatchery{e: e}
 	idx := 0
 	start := time.Now()
-	h.dispatch(context.Background(), SpawnManifest{Count: 5, Duration: time.Second}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: 5, Duration: time.Second}, makeURLJourneys(1, srv.URL), &idx)
 	elapsed := time.Since(start)
 
 	// 5 actors over 1s window: 1 per tick at 10ms each → ~50ms total
@@ -517,7 +550,7 @@ func TestHatchery_Dispatch_400ms_Duration_BoundedWithinWindow(t *testing.T) {
 	idx := 0
 
 	start := time.Now()
-	h.dispatch(context.Background(), SpawnManifest{Count: 5, Duration: 400 * time.Millisecond}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: 5, Duration: 400 * time.Millisecond}, makeURLJourneys(1, srv.URL), &idx)
 	elapsed := time.Since(start)
 
 	// All actors must be spawned.
@@ -544,14 +577,14 @@ func TestHatchery_Dispatch_SubSecond_NoTemporalBleeding(t *testing.T) {
 
 	e := New()
 	h := &hatchery{e: e}
-	specs := makeURLSpecs(1, srv.URL)
+	journeys := makeURLJourneys(1, srv.URL)
 	idx := 0
 
 	start := time.Now()
 	// Stage 1: 5 actors over 400ms
-	h.dispatch(context.Background(), SpawnManifest{Count: 5, Duration: 400 * time.Millisecond}, specs, &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: 5, Duration: 400 * time.Millisecond}, journeys, &idx)
 	// Stage 2: 5 actors over 400ms
-	h.dispatch(context.Background(), SpawnManifest{Count: 5, Duration: 400 * time.Millisecond}, specs, &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: 5, Duration: 400 * time.Millisecond}, journeys, &idx)
 	elapsed := time.Since(start)
 
 	waitForActors(t, e, 5*time.Second)
@@ -578,7 +611,7 @@ func TestHatchery_Dispatch_TinyDuration_ClampedToOneTick(t *testing.T) {
 	h := &hatchery{e: e}
 	idx := 0
 
-	h.dispatch(context.Background(), SpawnManifest{Count: 3, Duration: 5 * time.Millisecond}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: 3, Duration: 5 * time.Millisecond}, makeURLJourneys(1, srv.URL), &idx)
 	waitForActors(t, e, 3*time.Second)
 
 	if served.Load() != 3 {
@@ -600,7 +633,7 @@ func TestHatchery_Dispatch_ZeroDuration_FallsBackToOneTick(t *testing.T) {
 	h := &hatchery{e: e}
 	idx := 0
 
-	h.dispatch(context.Background(), SpawnManifest{Count: 3, Duration: 0}, makeURLSpecs(1, srv.URL), &idx)
+	h.dispatch(context.Background(), SpawnManifest{Count: 3, Duration: 0}, makeURLJourneys(1, srv.URL), &idx)
 	waitForActors(t, e, 5*time.Second)
 
 	if served.Load() != 3 {
@@ -616,7 +649,7 @@ func TestHatchery_Dispatch_ConcurrentCalls_NoRace(t *testing.T) {
 
 	e := New()
 	h := &hatchery{e: e}
-	specs := makeURLSpecs(1, srv.URL)
+	journeys := makeURLJourneys(1, srv.URL)
 
 	var wg atomic.Int32
 	const goroutines = 4
@@ -626,7 +659,7 @@ func TestHatchery_Dispatch_ConcurrentCalls_NoRace(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		go func(g int) {
 			defer wg.Add(-1)
-			h.dispatch(context.Background(), SpawnManifest{Count: 3, Duration: time.Second}, specs, &idxes[g])
+			h.dispatch(context.Background(), SpawnManifest{Count: 3, Duration: time.Second}, journeys, &idxes[g])
 		}(i)
 	}
 
@@ -650,14 +683,14 @@ func BenchmarkHatchery_Dispatch(b *testing.B) {
 	}))
 	defer srv.Close()
 
-	specs := []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv.URL}}
+	journeys := []httpreader.Journey{{Specs: []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv.URL}}}}
 	e := New()
 	h := &hatchery{e: e}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		idx := 0
-		h.dispatch(context.Background(), SpawnManifest{Count: 10, Duration: time.Second}, specs, &idx)
+		h.dispatch(context.Background(), SpawnManifest{Count: 10, Duration: time.Second}, journeys, &idx)
 		waitR := time.Now().Add(3 * time.Second)
 		for e.activeActors.Load() > 0 && time.Now().Before(waitR) {
 			time.Sleep(time.Millisecond)
@@ -671,14 +704,14 @@ func BenchmarkHatchery_HighRPS(b *testing.B) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
-	specs := []httpreader.RequestSpec{{Method: http.MethodGet, URL: fmt.Sprintf("%s", srv.URL)}}
+	journeys := []httpreader.Journey{{Specs: []httpreader.RequestSpec{{Method: http.MethodGet, URL: fmt.Sprintf("%s", srv.URL)}}}}
 	e := New()
 	h := &hatchery{e: e}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		idx := 0
-		h.dispatch(context.Background(), SpawnManifest{Count: 500, Duration: time.Second}, specs, &idx)
+		h.dispatch(context.Background(), SpawnManifest{Count: 500, Duration: time.Second}, journeys, &idx)
 		deadline := time.Now().Add(5 * time.Second)
 		for e.activeActors.Load() > 0 && time.Now().Before(deadline) {
 			time.Sleep(time.Millisecond)
