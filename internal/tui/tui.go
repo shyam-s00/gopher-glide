@@ -174,33 +174,34 @@ func slotToCol(slot, totalSlots, chartWidth int) int {
 
 func (m model) renderHeader() string {
 	elapsed := m.engine.GetElapsedTime()
+	th := theme()
 
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#FAFAFA")).
-		Background(lipgloss.Color("#7D56F4")).
+		Foreground(th.OnAccent).
+		Background(th.Accent).
 		Padding(0, 1).
 		MarginTop(1).
 		MarginBottom(1)
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#63")).
+		BorderForeground(th.Surface).
 		Padding(0, 2).
 		MarginRight(4).
 		Width(28)
 
-	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Bold(true)
-	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
-	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87")).Bold(true)
+	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Accent)
+	labelStyle := lipgloss.NewStyle().Foreground(th.TextMuted)
+	valueStyle := lipgloss.NewStyle().Foreground(th.Text).Bold(true)
+	successStyle := lipgloss.NewStyle().Foreground(th.Success).Bold(true)
+	errorStyle := lipgloss.NewStyle().Foreground(th.Error).Bold(true)
 
 	statusStr := "STOPPED"
-	statusColor := lipgloss.Color("#FF5F87")
+	statusColor := th.Error
 	if m.running {
 		statusStr = "RUNNING"
-		statusColor = lipgloss.Color("#04B575")
+		statusColor = th.Success
 	}
 
 	stages := m.config.Stages
@@ -323,19 +324,20 @@ func (m model) renderTimeline() string {
 
 	l := m.computeLayout()
 	chartWidth := l.chartWidth
+	th := theme()
 
-	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	pastBarStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4"))
-	pastEmptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#2A1F5A")) // dimmed fill above past bar
-	futureBarStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#3A3A3A")) // dark filled future bar
-	futureEmptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#222222"))
-	boundaryStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#444444"))
-	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD700")).Bold(true)
-	actualStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
-	targetLiveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CCBBFF")).Bold(true)
-	markerOkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
-	markerMissStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87")).Bold(true)
+	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Accent)
+	labelStyle := lipgloss.NewStyle().Foreground(th.TextMuted)
+	pastBarStyle := lipgloss.NewStyle().Foreground(th.Accent)
+	pastEmptyStyle := lipgloss.NewStyle().Foreground(th.AccentMuted) // dimmed fill above past bar
+	futureBarStyle := lipgloss.NewStyle().Foreground(th.SurfaceMuted)
+	futureEmptyStyle := lipgloss.NewStyle().Foreground(th.SurfaceMuted).Faint(true)
+	boundaryStyle := lipgloss.NewStyle().Foreground(th.Surface)
+	cursorStyle := lipgloss.NewStyle().Foreground(th.Warning).Bold(true)
+	actualStyle := lipgloss.NewStyle().Foreground(th.Success)
+	targetLiveStyle := lipgloss.NewStyle().Foreground(th.Accent).Bold(true)
+	markerOkStyle := lipgloss.NewStyle().Foreground(th.Success).Bold(true)
+	markerMissStyle := lipgloss.NewStyle().Foreground(th.Error).Bold(true)
 
 	// Total plan duration
 	totalDur := time.Duration(0)
@@ -561,7 +563,7 @@ func (m model) renderTimeline() string {
 		targetUnit = "iter/s"
 	}
 
-	activeActorsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD700")).Bold(true)
+	activeActorsStyle := lipgloss.NewStyle().Foreground(th.Warning).Bold(true)
 	sb.WriteString(sectionStyle.Render("STAGE PLAN"))
 	sb.WriteString(fmt.Sprintf("  %s %s · %s %s · %s · %s on-target · %s off-target\n",
 		targetLiveStyle.Render("target"),
@@ -665,7 +667,7 @@ func (m model) renderTimeline() string {
 
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#63")).
+		BorderForeground(th.Surface).
 		Padding(0, 1).
 		MarginTop(1).
 		Width(m.width - 4).
@@ -697,9 +699,10 @@ func (m model) renderLogContent() string {
 		logs = m.engine.GetRecentLogs(100)
 	}
 
-	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
-	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87"))
-	normalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	th := theme()
+	successStyle := lipgloss.NewStyle().Foreground(th.Success)
+	errorStyle := lipgloss.NewStyle().Foreground(th.Error)
+	normalStyle := lipgloss.NewStyle().Foreground(th.Text)
 
 	var lines []string
 	for _, log := range logs {
@@ -849,12 +852,13 @@ func (m model) View() string {
 	}
 
 	l := m.computeLayout()
+	th := theme()
 
 	// ── director / hint bar ───────────────────────────────────────────────
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	biasUpStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B575"))
-	biasDownStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5F87"))
-	msgStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFD700"))
+	hintStyle := lipgloss.NewStyle().Foreground(th.TextMuted)
+	biasUpStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Success)
+	biasDownStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Error)
+	msgStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Warning)
 
 	biasStr := ""
 	if bias := m.metrics.Bias; bias != 0 {
@@ -878,16 +882,16 @@ func (m model) View() string {
 		biasStr + feedbackStr
 
 	if m.snapStatus != "" {
-		snapStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
+		snapStyle := lipgloss.NewStyle().Foreground(th.Success).Bold(true)
 		directorBar += snapStyle.Render("  " + m.snapStatus)
 	} else if m.snapping {
-		snapStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
+		snapStyle := lipgloss.NewStyle().Foreground(th.Success).Bold(true)
 		directorBar += snapStyle.Render(fmt.Sprintf("  📸 Snapping → %s", m.snapDir))
 	}
 
 	logBox := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#63")).
+		BorderForeground(th.Surface).
 		Padding(0, 1).
 		MarginTop(1).
 		Width(l.logWidth).
