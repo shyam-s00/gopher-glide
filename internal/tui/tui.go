@@ -240,22 +240,54 @@ func (m model) renderHeader() string {
 		jitterStr = fmt.Sprintf("±%.0f%%", jitterVal*100)
 	}
 
-	throughput := lipgloss.JoinVertical(lipgloss.Left,
-		sectionStyle.Render("THROUGHPUT"),
-		labelStyle.Render("RPS:"),
-		valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.Throughput)),
-		labelStyle.Render("Total Requests:"),
-		valueStyle.Render(fmt.Sprintf("%d", m.metrics.TotalRequests)),
-		labelStyle.Render("Success:"),
-		successStyle.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
-		labelStyle.Render("Failed:"),
-		errorStyle.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
-		labelStyle.Render("ErrorRate:"),
-		valueStyle.Render(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
-		labelStyle.Render("Jitter:"),
-		valueStyle.Render(jitterStr),
-		"",
-	)
+	// Journey mode: Target RPS is now an iteration arrival rate, distinct
+	// from the measured HTTP request rate — split THROUGHPUT into
+	// LOAD PROFILE (iterations) and NETWORK (HTTP) so neither is misread.
+	var throughputPanels []string
+	if m.metrics.IsJourneyMode {
+		loadProfile := lipgloss.JoinVertical(lipgloss.Left,
+			sectionStyle.Render("LOAD PROFILE"),
+			labelStyle.Render("Target Iter/s:"),
+			valueStyle.Render(fmt.Sprintf("%d", m.metrics.TargetRPS)),
+			labelStyle.Render("Active Actors:"),
+			valueStyle.Render(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
+			labelStyle.Render("Jitter:"),
+			valueStyle.Render(jitterStr),
+			"", "", "",
+		)
+		network := lipgloss.JoinVertical(lipgloss.Left,
+			sectionStyle.Render("NETWORK"),
+			labelStyle.Render("HTTP RPS:"),
+			valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.Throughput)),
+			labelStyle.Render("Total Requests:"),
+			valueStyle.Render(fmt.Sprintf("%d", m.metrics.TotalRequests)),
+			labelStyle.Render("Success:"),
+			successStyle.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
+			labelStyle.Render("Failed:"),
+			errorStyle.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
+			labelStyle.Render("ErrorRate:"),
+			valueStyle.Render(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
+		)
+		throughputPanels = []string{boxStyle.Render(loadProfile), boxStyle.Render(network)}
+	} else {
+		throughput := lipgloss.JoinVertical(lipgloss.Left,
+			sectionStyle.Render("THROUGHPUT"),
+			labelStyle.Render("RPS:"),
+			valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.Throughput)),
+			labelStyle.Render("Total Requests:"),
+			valueStyle.Render(fmt.Sprintf("%d", m.metrics.TotalRequests)),
+			labelStyle.Render("Success:"),
+			successStyle.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
+			labelStyle.Render("Failed:"),
+			errorStyle.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
+			labelStyle.Render("ErrorRate:"),
+			valueStyle.Render(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
+			labelStyle.Render("Jitter:"),
+			valueStyle.Render(jitterStr),
+			"",
+		)
+		throughputPanels = []string{boxStyle.Render(throughput)}
+	}
 
 	latency := lipgloss.JoinVertical(lipgloss.Left,
 		sectionStyle.Render("LATENCY"),
@@ -272,13 +304,12 @@ func (m model) renderHeader() string {
 		"", "", "",
 	)
 
+	row := append([]string{boxStyle.Render(configuration)}, throughputPanels...)
+	row = append(row, boxStyle.Render(latency))
+
 	return lipgloss.JoinVertical(lipgloss.Left,
 		titleStyle.Render("Gopher Glide (GG)"),
-		lipgloss.JoinHorizontal(lipgloss.Top,
-			boxStyle.Render(configuration),
-			boxStyle.Render(throughput),
-			boxStyle.Render(latency),
-		),
+		lipgloss.JoinHorizontal(lipgloss.Top, row...),
 	)
 }
 
@@ -523,13 +554,20 @@ func (m model) renderTimeline() string {
 	// Assemble
 	var sb strings.Builder
 
+	// In journey mode, Target RPS is an iteration arrival rate while the
+	// measured curve is the HTTP request rate — label units accordingly.
+	targetUnit, actualUnit := "rps", "rps"
+	if m.metrics.IsJourneyMode {
+		targetUnit = "iter/s"
+	}
+
 	activeActorsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD700")).Bold(true)
 	sb.WriteString(sectionStyle.Render("STAGE PLAN"))
 	sb.WriteString(fmt.Sprintf("  %s %s · %s %s · %s · %s on-target · %s off-target\n",
 		targetLiveStyle.Render("target"),
-		targetLiveStyle.Render(fmt.Sprintf("%d rps", m.metrics.TargetRPS)),
+		targetLiveStyle.Render(fmt.Sprintf("%d %s", m.metrics.TargetRPS, targetUnit)),
 		actualStyle.Render("actual"),
-		actualStyle.Render(fmt.Sprintf("%.0f rps", m.metrics.Throughput)),
+		actualStyle.Render(fmt.Sprintf("%.0f %s", m.metrics.Throughput, actualUnit)),
 		activeActorsStyle.Render(fmt.Sprintf("active actors: %d", m.metrics.ActiveVPUs)),
 		markerOkStyle.Render("▸"),
 		markerMissStyle.Render("▸"),

@@ -31,6 +31,8 @@ type MetricsSnapshot struct {
 	TotalStages  int
 	// Director Mode
 	Bias int
+	// IsJourneyMode is true when any parsed Journey has more than one step.
+	IsJourneyMode bool
 }
 
 // CallLog is a single recorded HTTP call (success or failure).

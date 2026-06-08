@@ -58,5 +58,6 @@ func (e *Engine) GetMetrics() *engine.MetricsSnapshot {
 		CurrentStage:  int(e.currentStage.Load()),
 		TotalStages:   int(e.totalStages.Load()),
 		Bias:          int(e.rpsBias.Load()),
+		IsJourneyMode: e.isJourneyMode.Load(),
 	}
 }

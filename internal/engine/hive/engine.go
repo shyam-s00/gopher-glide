@@ -68,6 +68,9 @@ type Engine struct {
 	currentStage atomic.Int32
 	totalStages  atomic.Int32
 
+	// isJourneyMode is true when any parsed Journey has more than one step.
+	isJourneyMode atomic.Bool
+
 	// ── Director / bias controls ──────────────────────────────────────────
 	targetRPS atomic.Int64
 	rpsBias   atomic.Int64
@@ -142,6 +145,15 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	// request becomes its own independent single-step Journey — so a
 	// purely stateless plan dispatches exactly as it did before.
 	journeys := httpreader.GroupJourneys(specs)
+
+	isJourneyMode := false
+	for _, j := range journeys {
+		if len(j.Specs) > 1 {
+			isJourneyMode = true
+			break
+		}
+	}
+	e.isJourneyMode.Store(isJourneyMode)
 
 	timeScale := cfg.ConfigSection.TimeScale
 	if timeScale <= 0 {
