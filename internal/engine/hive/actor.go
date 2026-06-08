@@ -80,6 +80,8 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 	req = req.WithContext(ctx)
 	req.Header.Set("User-Agent", userAgent)
 
+	resolvedURL := req.URL.String()
+
 	// ── 4. Execute ───────────────────────────────────────────────────────
 	resp, err := e.client.Do(req)
 	duration := time.Since(start)
@@ -87,12 +89,12 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 	if err != nil {
 		e.counters.incFailure(shard)
 		e.recordLatency(shard, duration)
-		e.logCall(spec.Method, spec.URL, 0, duration, err)
+		e.logCall(spec.Method, resolvedURL, 0, duration, err)
 		if e.recorder != nil {
 			e.recorder.Record(snap.RecordEntry{
 				Timestamp: start,
 				Method:    spec.Method,
-				URL:       spec.URL,
+				URL:       resolvedURL,
 				Duration:  duration,
 				Error:     err,
 			})
@@ -132,7 +134,7 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 	// Log, count, snap, and abort — extraction is never attempted on a
 	// failed HTTP response.
 	if resp.StatusCode >= 400 {
-		e.logCall(spec.Method, spec.URL, resp.StatusCode, duration, ErrHttpError)
+		e.logCall(spec.Method, resolvedURL, resp.StatusCode, duration, ErrHttpError)
 		e.counters.incFailure(shard)
 		if e.recorder != nil {
 			snapBody := respBody
@@ -142,7 +144,7 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 			e.recorder.Record(snap.RecordEntry{
 				Timestamp:  start,
 				Method:     spec.Method,
-				URL:        spec.URL,
+				URL:        resolvedURL,
 				StatusCode: resp.StatusCode,
 				Duration:   duration,
 				Headers:    resp.Header,
@@ -163,7 +165,7 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 			val, exErr := Extract(respBody, d)
 			if exErr != nil {
 				extractErr := fmt.Errorf("%w: %s: %v", ErrExtractionFailed, d.VarName, exErr)
-				e.logCall(spec.Method, spec.URL, resp.StatusCode, duration, extractErr)
+				e.logCall(spec.Method, resolvedURL, resp.StatusCode, duration, extractErr)
 				e.counters.incFailure(shard)
 				if e.recorder != nil {
 					// Include the full body so the operator can debug the
@@ -171,7 +173,7 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 					e.recorder.Record(snap.RecordEntry{
 						Timestamp:  start,
 						Method:     spec.Method,
-						URL:        spec.URL,
+						URL:        resolvedURL,
 						StatusCode: resp.StatusCode,
 						Duration:   duration,
 						Headers:    resp.Header,
@@ -187,7 +189,7 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 	}
 
 	// ── 9. Log + count success ────────────────────────────────────────────
-	e.logCall(spec.Method, spec.URL, resp.StatusCode, duration, nil)
+	e.logCall(spec.Method, resolvedURL, resp.StatusCode, duration, nil)
 	e.counters.incSuccess(shard)
 
 	// ── 10. Snap record ───────────────────────────────────────────────────
@@ -199,7 +201,7 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		e.recorder.Record(snap.RecordEntry{
 			Timestamp:  start,
 			Method:     spec.Method,
-			URL:        spec.URL,
+			URL:        resolvedURL,
 			StatusCode: resp.StatusCode,
 			Duration:   duration,
 			Headers:    resp.Header,
