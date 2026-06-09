@@ -182,8 +182,8 @@ jobs:
 </div>
 
 <div class="tx-upcoming-banner" markdown="1">
-<h3>🚀 Gopher-Glide v0.9.0: The Hive Engine</h3>
-<p>Experience massive concurrency with the new lock-free Actor Model. <b>Coming in v1.0:</b> Full stateful simulation, chained multi-step user journeys, and complex persona behaviors.</p>
+<h3>🚀 The Hive Engine + Stateful Journeys Live</h3>
+<p>Experience massive concurrency with the pure-Go lock-free Actor Model. Seamlessly simulate complex, multi-step API workflows by extracting and passing variables between requests.</p>
 </div>
 
 <div class="tx-steps-section" style="background: transparent; padding-top: 2rem; padding-bottom: 0;" markdown="1">

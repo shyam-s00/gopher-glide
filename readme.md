@@ -77,12 +77,14 @@ Don't just test if your API is slow—test if it's broken. By passing the `--sna
 ### 🔌 JetBrains IDE Integration 
 Gopher Glide features an official [JetBrains plugin](https://plugins.jetbrains.com/plugin/30983-gopher-glide) that brings load testing directly into your IDE. Run profiles directly from your `.http` files via the gutter icon, and explore semantic diffs using the Snap UI Tool Window.
 
+### 🔄 Stateful Journeys & Variable Extraction
+No more writing custom JavaScript to test multi-step workflows. `gg` natively understands JetBrains HTTP variable extraction syntax. You can authenticate, extract a token using `# @gg-export token = jsonpath: $.data.token`, and instantly inject it into the next request using `{{token}}`.
+
 ---
 
 ## Planned Features
 - [ ] **Chaos / Fault Injection** — Simulate poor network conditions (3G packet loss, latency jitter) to see how APIs handle degradation.
 - [ ] **Distributed Simulation Mesh** — Run `gg worker` nodes across multiple servers/regions, controlled by a central `gg master` UI.
-- [ ] **Stateful Journeys** — Chained multi-step user journeys and complex persona behaviors.
 
 ## License
 [MIT](LICENSE)
