@@ -115,13 +115,13 @@ func BenchmarkActor_ConnectionReuse(b *testing.B) {
 
 	// Warm: force a TCP connection into the pool before the timed loop.
 	for i := 0; i < 10; i++ {
-		_ = e.executeActor(context.Background(), spec, 0)
+		_ = e.executeActor(context.Background(), spec, 0, nil)
 	}
 
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = e.executeActor(context.Background(), spec, i%numShards)
+		_ = e.executeActor(context.Background(), spec, i%numShards, nil)
 	}
 }
 
@@ -140,7 +140,7 @@ func BenchmarkActor_Parallel(b *testing.B) {
 
 	// Warm the connection pool before the timed loop.
 	for i := 0; i < 10; i++ {
-		_ = e.executeActor(context.Background(), spec, 0)
+		_ = e.executeActor(context.Background(), spec, 0, nil)
 	}
 
 	b.ReportAllocs()
@@ -148,7 +148,7 @@ func BenchmarkActor_Parallel(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		shard := 0
 		for pb.Next() {
-			_ = e.executeActor(context.Background(), spec, shard%numShards)
+			_ = e.executeActor(context.Background(), spec, shard%numShards, nil)
 			shard++
 		}
 	})
@@ -169,13 +169,13 @@ func BenchmarkEngine_MaxRPS_SingleCore(b *testing.B) {
 
 	// Warm the connection pool
 	for i := 0; i < 10; i++ {
-		_ = e.executeActor(context.Background(), spec, 0)
+		_ = e.executeActor(context.Background(), spec, 0, nil)
 	}
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = e.executeActor(context.Background(), spec, i%numShards)
+		_ = e.executeActor(context.Background(), spec, i%numShards, nil)
 	}
 	b.ReportMetric(float64(b.N)/b.Elapsed().Seconds(), "RPS")
 }
@@ -211,7 +211,7 @@ func BenchmarkDispatch_Throughput(b *testing.B) {
 
 			e := New()
 			h := &hatchery{e: e}
-			specs := []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv.URL}}
+			journeys := []httpreader.Journey{{Specs: []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv.URL}}}}
 
 			b.SetBytes(int64(tc.count)) // actors launched per iteration
 			b.ReportAllocs()
@@ -221,7 +221,7 @@ func BenchmarkDispatch_Throughput(b *testing.B) {
 				idx := 0
 				h.dispatch(context.Background(),
 					SpawnManifest{Count: tc.count, Duration: tc.duration},
-					specs, &idx)
+					journeys, &idx)
 				drainActors(e, 15*time.Second)
 			}
 		})
@@ -251,7 +251,7 @@ func BenchmarkDispatch_SubSecondWindow(b *testing.B) {
 
 			e := New()
 			h := &hatchery{e: e}
-			specs := []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv.URL}}
+			journeys := []httpreader.Journey{{Specs: []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv.URL}}}}
 
 			b.SetBytes(int64(tc.count))
 			b.ReportAllocs()
@@ -260,7 +260,7 @@ func BenchmarkDispatch_SubSecondWindow(b *testing.B) {
 				idx := 0
 				h.dispatch(context.Background(),
 					SpawnManifest{Count: tc.count, Duration: tc.duration},
-					specs, &idx)
+					journeys, &idx)
 				drainActors(e, 5*time.Second)
 			}
 		})
@@ -303,7 +303,7 @@ func BenchmarkDispatch_ManifestChannelRoundTrip(b *testing.B) {
 	srv := fastServer()
 	defer srv.Close()
 
-	specs := []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv.URL}}
+	journeys := []httpreader.Journey{{Specs: []httpreader.RequestSpec{{Method: http.MethodGet, URL: srv.URL}}}}
 	e := New()
 	h := &hatchery{e: e}
 
@@ -311,10 +311,10 @@ func BenchmarkDispatch_ManifestChannelRoundTrip(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		manifestCh := make(chan SpawnManifest, 1)
-		manifestCh <- SpawnManifest{Count: 1, Duration: 50 * time.Millisecond, SpecIndex: 0}
+		manifestCh <- SpawnManifest{Count: 1, Duration: 50 * time.Millisecond}
 		close(manifestCh)
 		// run drains from the channel and dispatches the single manifest.
-		_ = h.run(context.Background(), manifestCh, specs)
+		_ = h.run(context.Background(), manifestCh, journeys)
 		drainActors(e, 2*time.Second)
 	}
 }

@@ -8,40 +8,61 @@ import (
 	"strings"
 )
 
-// ParseFile reads a .http file and returns a list of RequestSpec
-func ParseFile(path string) ([]RequestSpec, error) {
+// ParseFile reads a .http file, parses it into an ordered list of
+// RequestSpecs, and applies Smart Detection (GroupJourneys) to group stateful
+// @gg-export → {{var}} chains into Journeys. Requests that neither export nor
+// consume a chained variable are returned as their own single-step Journey.
+func ParseFile(path string) ([]Journey, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read http file: %w", err)
 	}
-	return Parse(string(content))
+	specs, err := Parse(string(content))
+	if err != nil {
+		return nil, err
+	}
+	return GroupJourneys(specs), nil
 }
 
-// Parse parses the content from the.http file
+// Parse parses the content of a .http file into an ordered slice of
+// RequestSpec values that together form a single stateful Journey.
+//
+// State machine:
+//
+//	0 – init / expecting request line
+//	1 – headers
+//	2 – body
+//	3 – JS-embed block (JetBrains `> {% … %}` response handler; ignored)
 func Parse(content string) ([]RequestSpec, error) {
 	var requests []RequestSpec
 	var currentRequest *RequestSpec
 
 	scanner := bufio.NewScanner(strings.NewReader(content))
 
-	// states: 0=init (expecting request line), 1=headers, 2=body
-	state := 0
+	state := 0 // see state legend above
 
 	for scanner.Scan() {
 		line := scanner.Text()
 		trimmed := strings.TrimSpace(line)
 
-		// Check for separator
+		// ── JS-embed safety (state 3) ───────────────────────────────────────
+		// JetBrains wraps response scripts in  > {% … %}.
+		// Once we enter this block, ignore everything until the closing %}.
+		if state == 3 {
+			if strings.Contains(trimmed, "%}") {
+				state = 2 // back to post-body; further lines may still hold @gg-export
+			}
+			continue
+		}
+
+		// ── Request separator  ###  ─────────────────────────────────────────
 		if strings.HasPrefix(trimmed, "###") {
 			if currentRequest != nil {
-				// Finalize previous request only if it has a valid URL
 				currentRequest.Body = strings.TrimSpace(currentRequest.Body)
 				if currentRequest.URL != "" {
 					requests = append(requests, *currentRequest)
 				}
 			}
-
-			// New Request
 			currentRequest = &RequestSpec{
 				Name:    strings.TrimSpace(strings.TrimPrefix(trimmed, "###")),
 				Headers: make(http.Header),
@@ -50,25 +71,35 @@ func Parse(content string) ([]RequestSpec, error) {
 			continue
 		}
 
-		// If no request started yet, comments/whitespace are ignored or start a default request
+		// ── Before the first request ────────────────────────────────────────
 		if currentRequest == nil {
 			if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//") {
 				continue
 			}
-			// Implicit start of the first request
+			// Implicit start (no leading ### separator)
 			currentRequest = &RequestSpec{
 				Headers: make(http.Header),
 			}
 			state = 0
 		}
 
-		// Handle comments outside the body
+		// ── @gg-export pragma ───────────────────────────────────────────────
+		// Recognised in states 1 and 2 (after headers or inside/after body).
+		// Must be checked before the general "skip comments" guard below.
+		if state == 1 || state == 2 {
+			if d, ok := parseExportDirective(trimmed); ok {
+				currentRequest.Exports = append(currentRequest.Exports, d)
+				continue
+			}
+		}
+
+		// ── Skip plain comments outside the body ────────────────────────────
 		if state != 2 && (strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//")) {
 			continue
 		}
 
 		switch state {
-		case 0: // Request Line
+		case 0: // Request line
 			if trimmed == "" {
 				continue
 			}
@@ -80,7 +111,6 @@ func Parse(content string) ([]RequestSpec, error) {
 				case "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "CONNECT", "TRACE":
 					isMethod = true
 				}
-
 				if isMethod && len(parts) >= 2 {
 					currentRequest.Method = method
 					currentRequest.URL = parts[1]
@@ -90,9 +120,10 @@ func Parse(content string) ([]RequestSpec, error) {
 				}
 				state = 1
 			}
+
 		case 1: // Headers
 			if trimmed == "" {
-				state = 2 // Empty line -> body starts
+				state = 2 // blank line → body
 			} else {
 				parts := strings.SplitN(line, ":", 2)
 				if len(parts) == 2 {
@@ -101,8 +132,13 @@ func Parse(content string) ([]RequestSpec, error) {
 					currentRequest.Headers.Add(key, val)
 				}
 			}
-			// for now let the body added without any validation.
+
 		case 2: // Body
+			// Detect the start of a JetBrains JS-embed response handler.
+			if strings.HasPrefix(trimmed, "> {%") {
+				state = 3
+				continue
+			}
 			currentRequest.Body += line + "\n"
 		}
 	}
@@ -117,4 +153,42 @@ func Parse(content string) ([]RequestSpec, error) {
 	}
 
 	return requests, nil
+}
+
+// parseExportDirective attempts to parse a `# @gg-export` pragma from line.
+// Expected format:  # @gg-export <varName> = <engine>: <pattern>
+// Returns the parsed directive and true on success; zero value and false otherwise.
+func parseExportDirective(line string) (ExportDirective, bool) {
+	const prefix = "# @gg-export"
+	if !strings.HasPrefix(line, prefix) {
+		return ExportDirective{}, false
+	}
+
+	rest := strings.TrimSpace(line[len(prefix):])
+
+	// Split on the first '=' to get varName and "engine: pattern"
+	eqIdx := strings.Index(rest, "=")
+	if eqIdx < 0 {
+		return ExportDirective{}, false
+	}
+	varName := strings.TrimSpace(rest[:eqIdx])
+	remainder := strings.TrimSpace(rest[eqIdx+1:])
+
+	// Split remainder on the first ':' to separate engine from pattern
+	colonIdx := strings.Index(remainder, ":")
+	if colonIdx < 0 {
+		return ExportDirective{}, false
+	}
+	engine := ExportEngine(strings.TrimSpace(remainder[:colonIdx]))
+	pattern := strings.TrimSpace(remainder[colonIdx+1:])
+
+	if varName == "" || pattern == "" {
+		return ExportDirective{}, false
+	}
+
+	return ExportDirective{
+		VarName: varName,
+		Engine:  engine,
+		Pattern: pattern,
+	}, true
 }

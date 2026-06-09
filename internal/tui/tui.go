@@ -10,6 +10,7 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -37,6 +38,7 @@ type model struct {
 	cancel     context.CancelFunc
 	engineDone chan struct{} // closed by Init's goroutine once RunStages returns
 	logView    viewport.Model
+	spinner    spinner.Model
 
 	width  int
 	height int
@@ -82,6 +84,9 @@ type snapFinalizedMsg struct{ status string }
 func initialModel(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec) model {
 	ctx, cancel := context.WithCancel(context.Background())
 	vp := viewport.New(0, 0)
+	sp := spinner.New()
+	sp.Spinner = spinner.MiniDot
+	sp.Style = lipgloss.NewStyle().Foreground(macchiato.Success)
 	return model{
 		engine:       eng,
 		config:       cfg,
@@ -90,6 +95,7 @@ func initialModel(eng engine.Runner, cfg *config.Config, specs []httpreader.Requ
 		cancel:       cancel,
 		engineDone:   make(chan struct{}),
 		logView:      vp,
+		spinner:      sp,
 		metrics:      &engine.MetricsSnapshot{},
 		showFailures: true,
 		rpsHistory:   make([]float64, 0, 256),
@@ -101,7 +107,7 @@ func (m model) Init() tea.Cmd {
 		_ = m.engine.RunStages(m.ctx, m.config, m.specs)
 		close(m.engineDone) // unblocks Start() so it can return only after the engine is fully stopped
 	}()
-	return tea.Batch(tickCmd(), tea.EnterAltScreen)
+	return tea.Batch(tickCmd(), m.spinner.Tick, tea.EnterAltScreen)
 }
 
 func tickCmd() tea.Cmd {
@@ -118,7 +124,7 @@ type layout struct {
 	logWidth   int
 }
 
-func (m model) computeLayout() layout {
+func (m model) computeChartWidth() int {
 	w := m.width
 	if w < minWidth {
 		w = minWidth
@@ -127,17 +133,49 @@ func (m model) computeLayout() layout {
 	if cw < 20 {
 		cw = 20
 	}
-	// header: title(3) + stat boxes(18) + margin(1) = 22
-	// timeline: title(1) + chart(10) + x-axis(1) + labels(1) + info(2) + border(2) + margin(1) = 18
-	// debug header: 1
-	// log border: 2
-	used := 22 + 18 + 1 + 2
-	logH := m.height - used
+	return cw
+}
+
+func (m model) computeLayout() layout {
+	// Bare/test models (ready=false, nil engine) skip rendering the fixed
+	// sections entirely; computeLayoutForHeights falls back to the static
+	// estimate in that case.
+	var headerH, timelineH int
+	if m.ready {
+		headerH = lipgloss.Height(m.renderHeader())
+		timelineH = lipgloss.Height(m.renderTimeline())
+	}
+	return m.computeLayoutForHeights(headerH, timelineH)
+}
+
+// computeLayoutForHeights derives the layout from the already-rendered
+// heights of the header and timeline sections, avoiding a redundant render
+// of those (expensive) sections purely for measurement purposes.
+//
+// When the model is fully initialised (engine + config present), the actual
+// rendered heights of the fixed sections are used so that logH fills the
+// remaining terminal rows exactly — regardless of journey-mode panel counts,
+// label wrapping, or any other rendering quirk.
+//
+// Bare/test models (ready=false, nil engine) fall back to the static
+// estimate so that geometry unit tests remain valid without a live engine.
+func (m model) computeLayoutForHeights(headerH, timelineH int) layout {
+	w := m.width
+	if w < minWidth {
+		w = minWidth
+	}
+	const fallbackUsed = 41 // header(22) + timeline(16) + hintBar(1) + logBorder(2)
+	var logH int
+	if m.ready {
+		logH = m.height - headerH - timelineH - 1 - 2
+	} else {
+		logH = m.height - fallbackUsed
+	}
 	if logH < 3 {
 		logH = 3
 	}
 	return layout{
-		chartWidth: cw,
+		chartWidth: m.computeChartWidth(),
 		logHeight:  logH,
 		logWidth:   w - 4,
 	}
@@ -175,32 +213,15 @@ func slotToCol(slot, totalSlots, chartWidth int) int {
 func (m model) renderHeader() string {
 	elapsed := m.engine.GetElapsedTime()
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FAFAFA")).
-		Background(lipgloss.Color("#7D56F4")).
-		Padding(0, 1).
-		MarginTop(1).
-		MarginBottom(1)
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#63")).
-		Padding(0, 2).
-		MarginRight(4).
-		Width(28)
-
-	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Bold(true)
-	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
-	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87")).Bold(true)
-
 	statusStr := "STOPPED"
-	statusColor := lipgloss.Color("#FF5F87")
+	statusStyle := styles.ErrorBold
 	if m.running {
 		statusStr = "RUNNING"
-		statusColor = lipgloss.Color("#04B575")
+		statusStyle = styles.SuccessBold
+	}
+	statusLine := statusStyle.Render(statusStr)
+	if m.running {
+		statusLine = statusStyle.Render(statusStr) + " " + m.spinner.View()
 	}
 
 	stages := m.config.Stages
@@ -217,22 +238,10 @@ func (m model) renderHeader() string {
 		stageLabel = fmt.Sprintf("[%d/%d] %s", stageIdx+1, len(stages), stages[stageIdx].Label(prevRPS))
 	}
 
-	configuration := lipgloss.JoinVertical(lipgloss.Left,
-		sectionStyle.Render("CONFIGURATION"),
-		labelStyle.Render("Status:"),
-		lipgloss.NewStyle().Foreground(statusColor).Bold(true).Render(statusStr),
-		labelStyle.Render("Uptime:"),
-		valueStyle.Render(fmt.Sprintf("%.2fs", elapsed)),
-		labelStyle.Render("Http File:"),
-		valueStyle.Render(m.config.ConfigSection.HTTPFile),
-		labelStyle.Render("Active Actors:"),
-		valueStyle.Render(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
-		labelStyle.Render("Target RPS:"),
-		valueStyle.Render(fmt.Sprintf("%d", m.metrics.TargetRPS)),
-		labelStyle.Render("Stage:"),
-		valueStyle.Render(stageLabel),
-		"",
-	)
+	profileStr := "custom"
+	if p := m.config.ConfigSection.ProfileName; p != "" {
+		profileStr = p
+	}
 
 	jitterVal := m.config.ConfigSection.Jitter
 	jitterStr := "off"
@@ -240,45 +249,111 @@ func (m model) renderHeader() string {
 		jitterStr = fmt.Sprintf("±%.0f%%", jitterVal*100)
 	}
 
-	throughput := lipgloss.JoinVertical(lipgloss.Left,
-		sectionStyle.Render("THROUGHPUT"),
-		labelStyle.Render("RPS:"),
-		valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.Throughput)),
-		labelStyle.Render("Total Requests:"),
-		valueStyle.Render(fmt.Sprintf("%d", m.metrics.TotalRequests)),
-		labelStyle.Render("Success:"),
-		successStyle.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
-		labelStyle.Render("Failed:"),
-		errorStyle.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
-		labelStyle.Render("ErrorRate:"),
-		valueStyle.Render(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
-		labelStyle.Render("Jitter:"),
-		valueStyle.Render(jitterStr),
-		"",
-	)
+	// Always 4 panels: CONFIG | LOAD | RESULTS/NETWORK | LATENCY.
+	// Each panel occupies: border(2) + padding(2) + gap = panelChrome+panelGap chars.
+	const panelGap = 2
+	const panelChrome = 4
+	const numPanels = 4
 
-	latency := lipgloss.JoinVertical(lipgloss.Left,
-		sectionStyle.Render("LATENCY"),
-		labelStyle.Render("Min:"),
-		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.MinLatency)),
-		labelStyle.Render("Max:"),
-		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.MaxLatency)),
-		labelStyle.Render("P50:"),
-		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P50Latency)),
-		labelStyle.Render("P95:"),
-		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P95Latency)),
-		labelStyle.Render("P99:"),
-		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P99Latency)),
-		"", "", "",
-	)
+	w := m.width
+	if w < minWidth {
+		w = minWidth
+	}
+	contentWidth := (w - numPanels*(panelChrome+panelGap)) / numPanels
+	if contentWidth < 18 {
+		contentWidth = 18
+	}
+	kpiPanel := styles.PanelBorder.Width(contentWidth).MarginRight(panelGap)
+
+	lbl := func(s string) string { return styles.MetricLabel.Render(s) }
+	val := func(s string) string { return styles.MetricValue.Render(s) }
+	// kv renders label and value inline on a single row.
+	kv := func(label, value string) string { return lbl(label+" ") + val(value) }
+	// kvr renders label inline with a pre-styled value string.
+	kvr := func(label, rendered string) string { return lbl(label+" ") + rendered }
+
+	configRows := []string{
+		styles.SectionTitle.Render("CONFIGURATION"),
+		kvr("Status:", statusLine),
+		kv("Uptime:", fmt.Sprintf("%.2fs", elapsed)),
+		kv("Http File:", m.config.ConfigSection.HTTPFile),
+		kv("Profile:", profileStr),
+		kv("Stage:", stageLabel),
+	}
+
+	// Journey mode splits into LOAD PROFILE (iterations) + NETWORK (HTTP).
+	// Standard mode splits into LOAD (rps targets) + RESULTS (counts/errors).
+	var middleRowSets [][]string
+	if m.metrics.IsJourneyMode {
+		middleRowSets = [][]string{
+			{
+				styles.SectionTitle.Render("LOAD"),
+				kv("Target Iter/s:", fmt.Sprintf("%d", m.metrics.TargetRPS)),
+				kv("Active Actors:", fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
+				kv("Jitter:", jitterStr),
+			},
+			{
+				styles.SectionTitle.Render("RESULTS"),
+				kv("HTTP RPS:", fmt.Sprintf("%.2f", m.metrics.Throughput)),
+				kv("Total Requests:", fmt.Sprintf("%d", m.metrics.TotalRequests)),
+				kvr("Success:", styles.SuccessBold.Render(fmt.Sprintf("%d", m.metrics.SuccessCount))),
+				kvr("Failed:", styles.ErrorBold.Render(fmt.Sprintf("%d", m.metrics.FailureCount))),
+				kv("Error Rate:", fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
+			},
+		}
+	} else {
+		middleRowSets = [][]string{
+			{
+				styles.SectionTitle.Render("LOAD"),
+				kv("Active Actors:", fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
+				kv("Target RPS:", fmt.Sprintf("%d", m.metrics.TargetRPS)),
+				kv("Actual RPS:", fmt.Sprintf("%.2f", m.metrics.Throughput)),
+				kv("Jitter:", jitterStr),
+			},
+			{
+				styles.SectionTitle.Render("RESULTS"),
+				kv("Total Requests:", fmt.Sprintf("%d", m.metrics.TotalRequests)),
+				kvr("Success:", styles.SuccessBold.Render(fmt.Sprintf("%d", m.metrics.SuccessCount))),
+				kvr("Failed:", styles.ErrorBold.Render(fmt.Sprintf("%d", m.metrics.FailureCount))),
+				kv("Error Rate:", fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
+			},
+		}
+	}
+
+	latencyRows := []string{
+		styles.SectionTitle.Render("LATENCY"),
+		kv("Min:", fmt.Sprintf("%.2fms", m.metrics.MinLatency)),
+		kv("Max:", fmt.Sprintf("%.2fms", m.metrics.MaxLatency)),
+		kv("P50:", fmt.Sprintf("%.2fms", m.metrics.P50Latency)),
+		kv("P95:", fmt.Sprintf("%.2fms", m.metrics.P95Latency)),
+		kv("P99:", fmt.Sprintf("%.2fms", m.metrics.P99Latency)),
+	}
+
+	maxRows := len(configRows)
+	for _, rs := range middleRowSets {
+		if len(rs) > maxRows {
+			maxRows = len(rs)
+		}
+	}
+	if len(latencyRows) > maxRows {
+		maxRows = len(latencyRows)
+	}
+
+	renderPanel := func(rows []string) string {
+		padded := make([]string, maxRows)
+		copy(padded, rows)
+		return kpiPanel.Render(lipgloss.JoinVertical(lipgloss.Left, padded...))
+	}
+
+	panels := []string{renderPanel(configRows)}
+	for _, rs := range middleRowSets {
+		panels = append(panels, renderPanel(rs))
+	}
+	panels = append(panels, renderPanel(latencyRows))
 
 	return lipgloss.JoinVertical(lipgloss.Left,
-		titleStyle.Render("Gopher Glide (GG)"),
-		lipgloss.JoinHorizontal(lipgloss.Top,
-			boxStyle.Render(configuration),
-			boxStyle.Render(throughput),
-			boxStyle.Render(latency),
-		),
+		styles.TitleBar.Render("Gopher Glide (GG)"),
+		lipgloss.JoinHorizontal(lipgloss.Top, panels...),
 	)
 }
 
@@ -290,21 +365,7 @@ func (m model) renderTimeline() string {
 		return ""
 	}
 
-	l := m.computeLayout()
-	chartWidth := l.chartWidth
-
-	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	pastBarStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4"))
-	pastEmptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#2A1F5A")) // dimmed fill above past bar
-	futureBarStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#3A3A3A")) // dark filled future bar
-	futureEmptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#222222"))
-	boundaryStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#444444"))
-	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD700")).Bold(true)
-	actualStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
-	targetLiveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CCBBFF")).Bold(true)
-	markerOkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
-	markerMissStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87")).Bold(true)
+	chartWidth := m.computeChartWidth()
 
 	// Total plan duration
 	totalDur := time.Duration(0)
@@ -471,48 +532,48 @@ func (m model) renderTimeline() string {
 				if r == 0 {
 					// Playhead indicator at top of cursor column
 					ch = '▼'
-					st = cursorStyle
+					st = styles.Playhead
 				} else if inBar {
 					ch = blockChar(targetH, rowBase)
-					st = cursorStyle
+					st = styles.Playhead
 				} else {
 					ch = '│'
-					st = cursorStyle
+					st = styles.Playhead
 				}
 			} else if isBoundary {
 				// Boundary line spans full column height
 				ch = '▏'
-				st = boundaryStyle
+				st = styles.Boundary
 			} else if isPast {
 				if inBar {
 					ch = blockChar(targetH, rowBase)
-					st = pastBarStyle
+					st = styles.PastBar
 				} else {
 					// Dimmed fill above the past bar — gives a "filled area" look
 					ch = '░'
-					st = pastEmptyStyle
+					st = styles.PastEmpty
 				}
 				// Overlay ▸ marker at the actual-RPS row
 				if r == markerRow {
 					ch = '▸'
 					if markerOk {
-						st = markerOkStyle
+						st = styles.SuccessBold
 					} else {
-						st = markerMissStyle
+						st = styles.ErrorBold
 					}
 				}
 			} else {
 				// Future
 				if inBar {
 					ch = blockChar(targetH, rowBase)
-					st = futureBarStyle
+					st = styles.FutureBar
 				} else if r == chartHeight-1 {
 					// Floor line showing the plan exists
 					ch = '▁'
-					st = futureEmptyStyle
+					st = styles.FutureEmpty
 				} else {
 					ch = ' '
-					st = futureEmptyStyle
+					st = styles.FutureEmpty
 				}
 			}
 
@@ -523,16 +584,22 @@ func (m model) renderTimeline() string {
 	// Assemble
 	var sb strings.Builder
 
-	activeActorsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD700")).Bold(true)
-	sb.WriteString(sectionStyle.Render("STAGE PLAN"))
+	// In journey mode, Target RPS is an iteration arrival rate while the
+	// measured curve is the HTTP request rate — label units accordingly.
+	targetUnit, actualUnit := "rps", "rps"
+	if m.metrics.IsJourneyMode {
+		targetUnit = "iter/s"
+	}
+
+	sb.WriteString(styles.SectionTitle.Render("STAGE PLAN"))
 	sb.WriteString(fmt.Sprintf("  %s %s · %s %s · %s · %s on-target · %s off-target\n",
-		targetLiveStyle.Render("target"),
-		targetLiveStyle.Render(fmt.Sprintf("%d rps", m.metrics.TargetRPS)),
-		actualStyle.Render("actual"),
-		actualStyle.Render(fmt.Sprintf("%.0f rps", m.metrics.Throughput)),
-		activeActorsStyle.Render(fmt.Sprintf("active actors: %d", m.metrics.ActiveVPUs)),
-		markerOkStyle.Render("▸"),
-		markerMissStyle.Render("▸"),
+		styles.SectionTitle.Render("target"),
+		styles.SectionTitle.Render(fmt.Sprintf("%4d %s", m.metrics.TargetRPS, targetUnit)),
+		styles.Success.Render("actual"),
+		styles.Success.Render(fmt.Sprintf("%4.0f %s", m.metrics.Throughput, actualUnit)),
+		styles.Highlight.Render(fmt.Sprintf("active actors: %3d", m.metrics.ActiveVPUs)),
+		styles.SuccessBold.Render("▸"),
+		styles.ErrorBold.Render("▸"),
 	))
 
 	// y-axis tick positions
@@ -554,7 +621,7 @@ func (m model) renderTimeline() string {
 			yLabel = "    "
 			axisChar = "│"
 		}
-		sb.WriteString(labelStyle.Render(yLabel+" ") + axisChar)
+		sb.WriteString(styles.MetricLabel.Render(yLabel+" ") + styles.Boundary.Render(axisChar))
 		for x := 0; x < chartWidth; x++ {
 			c := grid[r][x]
 			sb.WriteString(c.st.Render(string(c.ch)))
@@ -571,7 +638,7 @@ func (m model) renderTimeline() string {
 			xAxis[i] = '─'
 		}
 	}
-	sb.WriteString(labelStyle.Render(strings.Repeat(" ", yAxisWidth)) + "└" + string(xAxis) + "\n")
+	sb.WriteString(styles.MetricLabel.Render(strings.Repeat(" ", yAxisWidth)) + styles.Boundary.Render("└"+string(xAxis)) + "\n")
 
 	// Stage number labels
 	labelRow := make([]rune, chartWidth)
@@ -604,7 +671,7 @@ func (m model) renderTimeline() string {
 		}
 	}
 	sb.WriteString(strings.Repeat(" ", yAxisWidth+1))
-	sb.WriteString(labelStyle.Render(string(labelRow)) + "\n")
+	sb.WriteString(styles.MetricLabel.Render(string(labelRow)) + "\n")
 
 	// Info bar
 	stageIdx := m.currentStage
@@ -622,16 +689,9 @@ func (m model) renderTimeline() string {
 		formatDuration(m.stageElapsed), formatDuration(scaledStageDur),
 		formatDuration(totalElapsed), formatDuration(scaledTotalDur),
 	)
-	sb.WriteString("\n")
-	sb.WriteString(labelStyle.Render(infoBar))
+	sb.WriteString(styles.MetricLabel.Render(infoBar))
 
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#63")).
-		Padding(0, 1).
-		MarginTop(1).
-		Width(m.width - 4).
-		Render(sb.String())
+	return styles.PanelBase.Width(m.width - 4).Render(sb.String())
 }
 
 // ── formatDuration ────────────────────────────────────────────────────────────
@@ -649,7 +709,74 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%ds", secs)
 }
 
+// ── renderKeycap ─────────────────────────────────────────────────────────────
+
+func renderKeycap(key string) string {
+	return styles.Keycap.Render(key)
+}
+
+// ── renderMethodBadge / renderStatusBadge ────────────────────────────────────
+
+func renderMethodBadge(method string) string {
+	switch method {
+	case "GET":
+		return styles.BadgeGET.Render(method)
+	case "POST":
+		return styles.BadgePOST.Render(method)
+	case "DELETE":
+		return styles.BadgeDELETE.Render(method)
+	default:
+		return styles.BadgeMethod.Render(method)
+	}
+}
+
+func renderStatusBadge(code int, errMsg string) string {
+	if errMsg != "" {
+		return styles.BadgeError.Render("ERR")
+	}
+	text := fmt.Sprintf("%d", code)
+	switch {
+	case code >= 200 && code < 300:
+		return styles.Badge2xx.Render(text)
+	case code >= 400 && code < 500:
+		return styles.Badge4xx.Render(text)
+	case code >= 500:
+		return styles.Badge5xx.Render(text)
+	default:
+		return styles.BadgeMethod.Render(text)
+	}
+}
+
+// padToWidth right-pads a rendered (potentially ANSI-escaped) string to the
+// target visual width by appending plain spaces.
+func padToWidth(s string, width int) string {
+	if v := lipgloss.Width(s); v < width {
+		return s + strings.Repeat(" ", width-v)
+	}
+	return s
+}
+
+// truncatePath truncates a URL path to maxLen runes and space-pads to maxLen.
+func truncatePath(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s + strings.Repeat(" ", maxLen-len(runes))
+	}
+	return string(runes[:maxLen-1]) + "…"
+}
+
 // ── renderLogContent ──────────────────────────────────────────────────────────
+
+// Column widths (visual chars):
+//
+//	timestamp(8) · method(8) · url(dynamic) · status(5) · latency(8)
+const (
+	logColTS      = 8 // "15:04:05"
+	logColMethod  = 8 // widest badge: "DELETE" + 2 padding
+	logColStatus  = 5 // "200" or "ERR" + 2 padding
+	logColLatency = 8 // up to "99999ms"
+	logColGaps    = 4 // four single-space separators
+)
 
 func (m model) renderLogContent() string {
 	var logs []engine.CallLog
@@ -659,34 +786,35 @@ func (m model) renderLogContent() string {
 		logs = m.engine.GetRecentLogs(100)
 	}
 
-	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
-	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87"))
-	normalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	// PanelBase.Width(n) sets the inside-border dimension (content + padding).
+	// Padding(0,1) consumes 2 of those chars, leaving n-2 for actual text.
+	contentWidth := m.logView.Width - 2
+	if contentWidth < 40 {
+		contentWidth = 40
+	}
+	urlWidth := contentWidth - logColTS - logColMethod - logColStatus - logColLatency - logColGaps
+	if urlWidth < 10 {
+		urlWidth = 10
+	}
 
 	var lines []string
 	for _, log := range logs {
-		var statusStr string
-		var ss lipgloss.Style
-		if log.Error != "" {
-			statusStr = fmt.Sprintf("[ERROR] %s", log.Error)
-			ss = errorStyle
-		} else if log.StatusCode >= 200 && log.StatusCode < 300 {
-			statusStr = fmt.Sprintf("[%d]", log.StatusCode)
-			ss = successStyle
-		} else {
-			statusStr = fmt.Sprintf("[%d]", log.StatusCode)
-			ss = errorStyle
+		latencyStr := fmt.Sprintf("%dms", log.Duration.Milliseconds())
+		if len(latencyStr) > logColLatency {
+			latencyStr = latencyStr[:logColLatency]
 		}
-		lines = append(lines, fmt.Sprintf("%s %s %s %s %s",
-			normalStyle.Render(log.Timestamp.Format("15:04:05")),
-			normalStyle.Render(log.Method),
-			normalStyle.Render(log.Url),
-			ss.Render(statusStr),
-			normalStyle.Render(fmt.Sprintf("%dms", log.Duration.Milliseconds())),
-		))
+
+		line := fmt.Sprintf("%s %s %s %s %s",
+			styles.Body.Render(log.Timestamp.Format("15:04:05")),
+			padToWidth(renderMethodBadge(log.Method), logColMethod),
+			styles.Body.Render(truncatePath(log.Url, urlWidth)),
+			padToWidth(renderStatusBadge(log.StatusCode, log.Error), logColStatus),
+			styles.Body.Render(fmt.Sprintf("%*s", logColLatency, latencyStr)),
+		)
+		lines = append(lines, line)
 	}
 	if len(lines) == 0 {
-		return normalStyle.Render("Waiting for traffic (or no errors found)...")
+		return styles.Body.Render("Waiting for traffic (or no errors found)...")
 	}
 	return strings.Join(lines, "\n")
 }
@@ -797,6 +925,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	m.logView, cmd = m.logView.Update(msg)
 	cmds = append(cmds, cmd)
+	m.spinner, cmd = m.spinner.Update(msg)
+	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
 
@@ -810,55 +940,44 @@ func (m model) View() string {
 		return fmt.Sprintf("\n  Terminal too narrow (%d cols). Please resize to at least %d cols.", m.width, minWidth)
 	}
 
-	l := m.computeLayout()
+	header := m.renderHeader()
+	timeline := m.renderTimeline()
+	l := m.computeLayoutForHeights(lipgloss.Height(header), lipgloss.Height(timeline))
 
 	// ── director / hint bar ───────────────────────────────────────────────
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	biasUpStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B575"))
-	biasDownStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5F87"))
-	msgStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFD700"))
-
 	biasStr := ""
 	if bias := m.metrics.Bias; bias != 0 {
-		bs := biasUpStyle
+		bs := styles.SuccessBold
 		if bias < 0 {
-			bs = biasDownStyle
+			bs = styles.ErrorBold
 		}
 		biasStr = "  " + bs.Render(fmt.Sprintf("BIAS %+d RPS", bias))
 	}
 	feedbackStr := ""
 	if m.directorMsg != "" {
-		feedbackStr = "  " + msgStyle.Render(m.directorMsg)
+		feedbackStr = "  " + styles.Highlight.Render(m.directorMsg)
 	}
 	logMode := "FAILURES ONLY"
 	if !m.showFailures {
 		logMode = "ALL LOGS"
 	}
-	directorBar := biasUpStyle.Render("[↑]") + hintStyle.Render(" +5 rps  ") +
-		biasDownStyle.Render("[↓]") + hintStyle.Render(" -5 rps  ") +
-		hintStyle.Render(fmt.Sprintf("[f] logs (%s)  [q] quit", logMode)) +
+	directorBar := renderKeycap("↑") + styles.SuccessBold.Render(" +5 rps") + "  " +
+		renderKeycap("↓") + styles.ErrorBold.Render(" -5 rps") + "  " +
+		renderKeycap("f") + styles.MetricLabel.Render(fmt.Sprintf(" logs (%s)", logMode)) + "  " +
+		renderKeycap("q") + styles.MetricLabel.Render(" quit") +
 		biasStr + feedbackStr
 
 	if m.snapStatus != "" {
-		snapStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
-		directorBar += snapStyle.Render("  " + m.snapStatus)
+		directorBar += styles.SuccessBold.Render("  " + m.snapStatus)
 	} else if m.snapping {
-		snapStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
-		directorBar += snapStyle.Render(fmt.Sprintf("  📸 Snapping → %s", m.snapDir))
+		directorBar += styles.SuccessBold.Render(fmt.Sprintf("  📸 Snapping → %s", m.snapDir))
 	}
 
-	logBox := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#63")).
-		Padding(0, 1).
-		MarginTop(1).
-		Width(l.logWidth).
-		Height(l.logHeight).
-		Render(m.logView.View())
+	logBox := styles.PanelBase.Width(l.logWidth).Height(l.logHeight).Render(m.logView.View())
 
 	return lipgloss.JoinVertical(lipgloss.Left,
-		m.renderHeader(),
-		m.renderTimeline(),
+		header,
+		timeline,
 		directorBar,
 		logBox,
 	)

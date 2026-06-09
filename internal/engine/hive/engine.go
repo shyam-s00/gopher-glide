@@ -68,6 +68,9 @@ type Engine struct {
 	currentStage atomic.Int32
 	totalStages  atomic.Int32
 
+	// isJourneyMode is true when any parsed Journey has more than one step.
+	isJourneyMode atomic.Bool
+
 	// ── Director / bias controls ──────────────────────────────────────────
 	targetRPS atomic.Int64
 	rpsBias   atomic.Int64
@@ -135,6 +138,22 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	if cfg == nil || len(cfg.Stages) == 0 {
 		return ErrNoStages
 	}
+
+	// Smart Detection: group the flat, ordered spec list into Journeys up
+	// front. Requests linked by an @gg-export → {{var}} chain become a
+	// single multi-step Journey sharing one ActorMemory; every other
+	// request becomes its own independent single-step Journey — so a
+	// purely stateless plan dispatches exactly as it did before.
+	journeys := httpreader.GroupJourneys(specs)
+
+	isJourneyMode := false
+	for _, j := range journeys {
+		if len(j.Specs) > 1 {
+			isJourneyMode = true
+			break
+		}
+	}
+	e.isJourneyMode.Store(isJourneyMode)
 
 	timeScale := cfg.ConfigSection.TimeScale
 	if timeScale <= 0 {
@@ -240,7 +259,7 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 
 	q := &queen{e: e}
 	g.Go(func() error {
-		err := q.run(gCtx, cfg.Stages, timeScale, specs, manifestCh)
+		err := q.run(gCtx, cfg.Stages, timeScale, manifestCh)
 		// Queen finished (all stages done or ctx cancelled) — close the
 		// channel so the Hatchery drains remaining manifests and exits.
 		close(manifestCh)
@@ -257,7 +276,7 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 		//   • Actors stop on user/caller cancellation (correct).
 		//   • Actors do NOT stop on errgroup's internal book-keeping cancel.
 		// The Hatchery exits naturally when manifestCh is closed by the Queen.
-		return h.run(ctx, manifestCh, specs)
+		return h.run(ctx, manifestCh, journeys)
 	})
 
 	err := g.Wait()

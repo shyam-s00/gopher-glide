@@ -18,6 +18,15 @@ import (
 // spawns a batch in a tight loop with no sleep between individual goroutines.
 const hatcheryTick = 10 * time.Millisecond
 
+// maxActiveActors is the hard ceiling on concurrent Actor goroutines.
+//
+// Under the Arrival Rate model, Target RPS now drives how many Actors are
+// spawned per second regardless of how long their journeys take to complete.
+// A slow target (e.g. 10 s response latency) at 50 000 iter/s would otherwise
+// accumulate 500 000 parked goroutines in just 10 seconds. This limit caps
+// that growth so the host OS is never driven into OOM territory.
+const maxActiveActors = 500_000
+
 // ── hatchery ─────────────────────────────────────────────────────────────────
 
 // hatchery is the Smooth Dispatcher. It reads SpawnManifests from the Queen
@@ -43,9 +52,9 @@ type hatchery struct {
 func (h *hatchery) run(
 	ctx context.Context,
 	manifestCh <-chan SpawnManifest,
-	specs []httpreader.RequestSpec,
+	journeys []httpreader.Journey,
 ) error {
-	spawnIdx := 0 // monotonically increasing; drives shard assignment
+	spawnIdx := 0 // monotonically increasing; drives shard + journey assignment
 	for {
 		select {
 		case <-ctx.Done():
@@ -54,7 +63,7 @@ func (h *hatchery) run(
 			if !ok {
 				return nil
 			}
-			h.dispatch(ctx, manifest, specs, &spawnIdx)
+			h.dispatch(ctx, manifest, journeys, &spawnIdx)
 		}
 	}
 }
@@ -76,15 +85,13 @@ func (h *hatchery) run(
 func (h *hatchery) dispatch(
 	ctx context.Context,
 	manifest SpawnManifest,
-	specs []httpreader.RequestSpec,
+	journeys []httpreader.Journey,
 	spawnIdx *int,
 ) {
 	count := manifest.Count
-	if count <= 0 || len(specs) == 0 {
+	if count <= 0 || len(journeys) == 0 {
 		return
 	}
-
-	specIdx := manifest.SpecIndex
 
 	// Compute the number of micro-batch ticks that fit within the manifest
 	// window. A minimum of 1 tick prevents divide-by-zero for tiny durations.
@@ -119,16 +126,34 @@ func (h *hatchery) dispatch(
 		}
 
 		for i := 0; i < batch && spawned < count; i++ {
+			// MaxActors safeguard: if the host is already saturated with
+			// parked/in-flight Actors, skip this spawn rather than pile on
+			// more goroutines. Loop counters still advance so the Hatchery
+			// keeps pace with the manifest instead of stalling on a full tick.
+			if h.e.activeActors.Load() >= maxActiveActors {
+				*spawnIdx++
+				spawned++
+				continue
+			}
+
 			shard := *spawnIdx % numShards
-			spec := specs[specIdx%len(specs)]
-			specIdx++
+
+			// Round-robin across Journeys using the monotonic spawn counter:
+			// Actor 0 gets journeys[0], Actor 1 gets journeys[1], etc.,
+			// wrapping back to journeys[0] once every Journey has been
+			// assigned once. Each Actor then executes its entire Journey
+			// (all specs in order) with its own private ActorMemory —
+			// variables extracted from step N are injected into step N+1.
+			// A single-step Journey is behaviourally identical to the old
+			// stateless single-request model.
+			journeyIdx := *spawnIdx % len(journeys)
+			steps := journeys[journeyIdx].Specs
 
 			h.e.activeActors.Add(1)
-			capturedSpec := spec
 			capturedShard := shard
 			go func() {
 				defer h.e.activeActors.Add(-1)
-				_ = h.e.executeActor(ctx, capturedSpec, capturedShard)
+				_ = h.e.executeJourney(ctx, steps, capturedShard)
 			}()
 
 			*spawnIdx++
