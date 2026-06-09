@@ -25,6 +25,9 @@ type Theme struct {
 	Accent      lipgloss.Color
 	AccentMuted lipgloss.Color
 	OnAccent    lipgloss.Color // text rendered atop an Accent background
+
+	// Blue — used for GET method badge.
+	Blue lipgloss.Color
 }
 
 // macchiato is the default theme: a Catppuccin Macchiato-inspired palette
@@ -43,6 +46,8 @@ var macchiato = Theme{
 	Accent:      lipgloss.Color("#c6a0f6"), // Mauve
 	AccentMuted: lipgloss.Color("#3c3458"), // dimmed Mauve — past/inactive fills
 	OnAccent:    lipgloss.Color("#24273a"), // Base
+
+	Blue: lipgloss.Color("#8aadf4"), // Blue
 }
 
 // theme returns the active palette. Centralizing access here keeps the door
@@ -83,6 +88,18 @@ type uiStyles struct {
 	FutureBar   lipgloss.Style
 	FutureEmpty lipgloss.Style
 	Boundary    lipgloss.Style
+
+	// HTTP method badges
+	BadgeGET    lipgloss.Style
+	BadgePOST   lipgloss.Style
+	BadgeDELETE lipgloss.Style
+	BadgeMethod lipgloss.Style // fallback for unrecognised methods
+
+	// HTTP status badges
+	Badge2xx   lipgloss.Style
+	Badge4xx   lipgloss.Style
+	Badge5xx   lipgloss.Style
+	BadgeError lipgloss.Style // non-HTTP / network errors
 }
 
 func newStyles(th Theme) uiStyles {
@@ -123,6 +140,16 @@ func newStyles(th Theme) uiStyles {
 		FutureBar:   lipgloss.NewStyle().Foreground(th.SurfaceMuted),
 		FutureEmpty: lipgloss.NewStyle().Foreground(th.SurfaceMuted).Faint(true),
 		Boundary:    lipgloss.NewStyle().Foreground(th.Surface),
+
+		BadgeGET:    lipgloss.NewStyle().Background(th.Blue).Foreground(th.OnAccent).Bold(true).Padding(0, 1),
+		BadgePOST:   lipgloss.NewStyle().Background(th.Success).Foreground(th.OnAccent).Bold(true).Padding(0, 1),
+		BadgeDELETE: lipgloss.NewStyle().Background(th.Error).Foreground(th.OnAccent).Bold(true).Padding(0, 1),
+		BadgeMethod: lipgloss.NewStyle().Background(th.SurfaceMuted).Foreground(th.Text).Bold(true).Padding(0, 1),
+
+		Badge2xx:   lipgloss.NewStyle().Background(th.Success).Foreground(th.OnAccent).Bold(true).Padding(0, 1),
+		Badge4xx:   lipgloss.NewStyle().Background(th.Warning).Foreground(th.OnAccent).Bold(true).Padding(0, 1),
+		Badge5xx:   lipgloss.NewStyle().Background(th.Error).Foreground(th.OnAccent).Bold(true).Padding(0, 1),
+		BadgeError: lipgloss.NewStyle().Background(th.Error).Foreground(th.OnAccent).Bold(true).Padding(0, 1),
 	}
 }
 

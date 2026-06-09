@@ -683,7 +683,68 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%ds", secs)
 }
 
+// ── renderMethodBadge / renderStatusBadge ────────────────────────────────────
+
+func renderMethodBadge(method string) string {
+	switch method {
+	case "GET":
+		return styles.BadgeGET.Render(method)
+	case "POST":
+		return styles.BadgePOST.Render(method)
+	case "DELETE":
+		return styles.BadgeDELETE.Render(method)
+	default:
+		return styles.BadgeMethod.Render(method)
+	}
+}
+
+func renderStatusBadge(code int, errMsg string) string {
+	if errMsg != "" {
+		return styles.BadgeError.Render("ERR")
+	}
+	text := fmt.Sprintf("%d", code)
+	switch {
+	case code >= 200 && code < 300:
+		return styles.Badge2xx.Render(text)
+	case code >= 400 && code < 500:
+		return styles.Badge4xx.Render(text)
+	case code >= 500:
+		return styles.Badge5xx.Render(text)
+	default:
+		return styles.BadgeMethod.Render(text)
+	}
+}
+
+// padToWidth right-pads a rendered (potentially ANSI-escaped) string to the
+// target visual width by appending plain spaces.
+func padToWidth(s string, width int) string {
+	if v := lipgloss.Width(s); v < width {
+		return s + strings.Repeat(" ", width-v)
+	}
+	return s
+}
+
+// truncatePath truncates a URL path to maxLen runes and space-pads to maxLen.
+func truncatePath(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s + strings.Repeat(" ", maxLen-len(runes))
+	}
+	return string(runes[:maxLen-1]) + "…"
+}
+
 // ── renderLogContent ──────────────────────────────────────────────────────────
+
+// Column widths (visual chars):
+//
+//	timestamp(8) · method(8) · url(dynamic) · status(5) · latency(8)
+const (
+	logColTS      = 8 // "15:04:05"
+	logColMethod  = 8 // widest badge: "DELETE" + 2 padding
+	logColStatus  = 5 // "200" or "ERR" + 2 padding
+	logColLatency = 8 // up to "99999ms"
+	logColGaps    = 4 // four single-space separators
+)
 
 func (m model) renderLogContent() string {
 	var logs []engine.CallLog
@@ -693,27 +754,32 @@ func (m model) renderLogContent() string {
 		logs = m.engine.GetRecentLogs(100)
 	}
 
+	// PanelBase.Width(n) sets the inside-border dimension (content + padding).
+	// Padding(0,1) consumes 2 of those chars, leaving n-2 for actual text.
+	contentWidth := m.logView.Width - 2
+	if contentWidth < 40 {
+		contentWidth = 40
+	}
+	urlWidth := contentWidth - logColTS - logColMethod - logColStatus - logColLatency - logColGaps
+	if urlWidth < 10 {
+		urlWidth = 10
+	}
+
 	var lines []string
 	for _, log := range logs {
-		var statusStr string
-		var ss lipgloss.Style
-		if log.Error != "" {
-			statusStr = fmt.Sprintf("[ERROR] %s", log.Error)
-			ss = styles.Error
-		} else if log.StatusCode >= 200 && log.StatusCode < 300 {
-			statusStr = fmt.Sprintf("[%d]", log.StatusCode)
-			ss = styles.Success
-		} else {
-			statusStr = fmt.Sprintf("[%d]", log.StatusCode)
-			ss = styles.Error
+		latencyStr := fmt.Sprintf("%dms", log.Duration.Milliseconds())
+		if len(latencyStr) > logColLatency {
+			latencyStr = latencyStr[:logColLatency]
 		}
-		lines = append(lines, fmt.Sprintf("%s %s %s %s %s",
+
+		line := fmt.Sprintf("%s %s %s %s %s",
 			styles.Body.Render(log.Timestamp.Format("15:04:05")),
-			styles.Body.Render(log.Method),
-			styles.Body.Render(log.Url),
-			ss.Render(statusStr),
-			styles.Body.Render(fmt.Sprintf("%dms", log.Duration.Milliseconds())),
-		))
+			padToWidth(renderMethodBadge(log.Method), logColMethod),
+			styles.Body.Render(truncatePath(log.Url, urlWidth)),
+			padToWidth(renderStatusBadge(log.StatusCode, log.Error), logColStatus),
+			styles.Body.Render(fmt.Sprintf("%*s", logColLatency, latencyStr)),
+		)
+		lines = append(lines, line)
 	}
 	if len(lines) == 0 {
 		return styles.Body.Render("Waiting for traffic (or no errors found)...")
