@@ -174,34 +174,12 @@ func slotToCol(slot, totalSlots, chartWidth int) int {
 
 func (m model) renderHeader() string {
 	elapsed := m.engine.GetElapsedTime()
-	th := theme()
-
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(th.OnAccent).
-		Background(th.Accent).
-		Padding(0, 1).
-		MarginTop(1).
-		MarginBottom(1)
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(th.Surface).
-		Padding(0, 2).
-		MarginRight(4).
-		Width(28)
-
-	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Accent)
-	labelStyle := lipgloss.NewStyle().Foreground(th.TextMuted)
-	valueStyle := lipgloss.NewStyle().Foreground(th.Text).Bold(true)
-	successStyle := lipgloss.NewStyle().Foreground(th.Success).Bold(true)
-	errorStyle := lipgloss.NewStyle().Foreground(th.Error).Bold(true)
 
 	statusStr := "STOPPED"
-	statusColor := th.Error
+	statusStyle := styles.ErrorBold
 	if m.running {
 		statusStr = "RUNNING"
-		statusColor = th.Success
+		statusStyle = styles.SuccessBold
 	}
 
 	stages := m.config.Stages
@@ -219,19 +197,19 @@ func (m model) renderHeader() string {
 	}
 
 	configuration := lipgloss.JoinVertical(lipgloss.Left,
-		sectionStyle.Render("CONFIGURATION"),
-		labelStyle.Render("Status:"),
-		lipgloss.NewStyle().Foreground(statusColor).Bold(true).Render(statusStr),
-		labelStyle.Render("Uptime:"),
-		valueStyle.Render(fmt.Sprintf("%.2fs", elapsed)),
-		labelStyle.Render("Http File:"),
-		valueStyle.Render(m.config.ConfigSection.HTTPFile),
-		labelStyle.Render("Active Actors:"),
-		valueStyle.Render(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
-		labelStyle.Render("Target RPS:"),
-		valueStyle.Render(fmt.Sprintf("%d", m.metrics.TargetRPS)),
-		labelStyle.Render("Stage:"),
-		valueStyle.Render(stageLabel),
+		styles.SectionTitle.Render("CONFIGURATION"),
+		styles.MetricLabel.Render("Status:"),
+		statusStyle.Render(statusStr),
+		styles.MetricLabel.Render("Uptime:"),
+		styles.MetricValue.Render(fmt.Sprintf("%.2fs", elapsed)),
+		styles.MetricLabel.Render("Http File:"),
+		styles.MetricValue.Render(m.config.ConfigSection.HTTPFile),
+		styles.MetricLabel.Render("Active Actors:"),
+		styles.MetricValue.Render(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
+		styles.MetricLabel.Render("Target RPS:"),
+		styles.MetricValue.Render(fmt.Sprintf("%d", m.metrics.TargetRPS)),
+		styles.MetricLabel.Render("Stage:"),
+		styles.MetricValue.Render(stageLabel),
 		"",
 	)
 
@@ -247,69 +225,69 @@ func (m model) renderHeader() string {
 	var throughputPanels []string
 	if m.metrics.IsJourneyMode {
 		loadProfile := lipgloss.JoinVertical(lipgloss.Left,
-			sectionStyle.Render("LOAD PROFILE"),
-			labelStyle.Render("Target Iter/s:"),
-			valueStyle.Render(fmt.Sprintf("%d", m.metrics.TargetRPS)),
-			labelStyle.Render("Active Actors:"),
-			valueStyle.Render(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
-			labelStyle.Render("Jitter:"),
-			valueStyle.Render(jitterStr),
+			styles.SectionTitle.Render("LOAD PROFILE"),
+			styles.MetricLabel.Render("Target Iter/s:"),
+			styles.MetricValue.Render(fmt.Sprintf("%d", m.metrics.TargetRPS)),
+			styles.MetricLabel.Render("Active Actors:"),
+			styles.MetricValue.Render(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
+			styles.MetricLabel.Render("Jitter:"),
+			styles.MetricValue.Render(jitterStr),
 			"", "", "",
 		)
 		network := lipgloss.JoinVertical(lipgloss.Left,
-			sectionStyle.Render("NETWORK"),
-			labelStyle.Render("HTTP RPS:"),
-			valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.Throughput)),
-			labelStyle.Render("Total Requests:"),
-			valueStyle.Render(fmt.Sprintf("%d", m.metrics.TotalRequests)),
-			labelStyle.Render("Success:"),
-			successStyle.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
-			labelStyle.Render("Failed:"),
-			errorStyle.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
-			labelStyle.Render("ErrorRate:"),
-			valueStyle.Render(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
+			styles.SectionTitle.Render("NETWORK"),
+			styles.MetricLabel.Render("HTTP RPS:"),
+			styles.MetricValue.Render(fmt.Sprintf("%.2f", m.metrics.Throughput)),
+			styles.MetricLabel.Render("Total Requests:"),
+			styles.MetricValue.Render(fmt.Sprintf("%d", m.metrics.TotalRequests)),
+			styles.MetricLabel.Render("Success:"),
+			styles.SuccessBold.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
+			styles.MetricLabel.Render("Failed:"),
+			styles.ErrorBold.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
+			styles.MetricLabel.Render("ErrorRate:"),
+			styles.MetricValue.Render(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
 		)
-		throughputPanels = []string{boxStyle.Render(loadProfile), boxStyle.Render(network)}
+		throughputPanels = []string{styles.PanelBorder.Render(loadProfile), styles.PanelBorder.Render(network)}
 	} else {
 		throughput := lipgloss.JoinVertical(lipgloss.Left,
-			sectionStyle.Render("THROUGHPUT"),
-			labelStyle.Render("RPS:"),
-			valueStyle.Render(fmt.Sprintf("%.2f", m.metrics.Throughput)),
-			labelStyle.Render("Total Requests:"),
-			valueStyle.Render(fmt.Sprintf("%d", m.metrics.TotalRequests)),
-			labelStyle.Render("Success:"),
-			successStyle.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
-			labelStyle.Render("Failed:"),
-			errorStyle.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
-			labelStyle.Render("ErrorRate:"),
-			valueStyle.Render(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
-			labelStyle.Render("Jitter:"),
-			valueStyle.Render(jitterStr),
+			styles.SectionTitle.Render("THROUGHPUT"),
+			styles.MetricLabel.Render("RPS:"),
+			styles.MetricValue.Render(fmt.Sprintf("%.2f", m.metrics.Throughput)),
+			styles.MetricLabel.Render("Total Requests:"),
+			styles.MetricValue.Render(fmt.Sprintf("%d", m.metrics.TotalRequests)),
+			styles.MetricLabel.Render("Success:"),
+			styles.SuccessBold.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
+			styles.MetricLabel.Render("Failed:"),
+			styles.ErrorBold.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
+			styles.MetricLabel.Render("ErrorRate:"),
+			styles.MetricValue.Render(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
+			styles.MetricLabel.Render("Jitter:"),
+			styles.MetricValue.Render(jitterStr),
 			"",
 		)
-		throughputPanels = []string{boxStyle.Render(throughput)}
+		throughputPanels = []string{styles.PanelBorder.Render(throughput)}
 	}
 
 	latency := lipgloss.JoinVertical(lipgloss.Left,
-		sectionStyle.Render("LATENCY"),
-		labelStyle.Render("Min:"),
-		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.MinLatency)),
-		labelStyle.Render("Max:"),
-		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.MaxLatency)),
-		labelStyle.Render("P50:"),
-		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P50Latency)),
-		labelStyle.Render("P95:"),
-		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P95Latency)),
-		labelStyle.Render("P99:"),
-		valueStyle.Render(fmt.Sprintf("%.2fms", m.metrics.P99Latency)),
+		styles.SectionTitle.Render("LATENCY"),
+		styles.MetricLabel.Render("Min:"),
+		styles.MetricValue.Render(fmt.Sprintf("%.2fms", m.metrics.MinLatency)),
+		styles.MetricLabel.Render("Max:"),
+		styles.MetricValue.Render(fmt.Sprintf("%.2fms", m.metrics.MaxLatency)),
+		styles.MetricLabel.Render("P50:"),
+		styles.MetricValue.Render(fmt.Sprintf("%.2fms", m.metrics.P50Latency)),
+		styles.MetricLabel.Render("P95:"),
+		styles.MetricValue.Render(fmt.Sprintf("%.2fms", m.metrics.P95Latency)),
+		styles.MetricLabel.Render("P99:"),
+		styles.MetricValue.Render(fmt.Sprintf("%.2fms", m.metrics.P99Latency)),
 		"", "", "",
 	)
 
-	row := append([]string{boxStyle.Render(configuration)}, throughputPanels...)
-	row = append(row, boxStyle.Render(latency))
+	row := append([]string{styles.PanelBorder.Render(configuration)}, throughputPanels...)
+	row = append(row, styles.PanelBorder.Render(latency))
 
 	return lipgloss.JoinVertical(lipgloss.Left,
-		titleStyle.Render("Gopher Glide (GG)"),
+		styles.TitleBar.Render("Gopher Glide (GG)"),
 		lipgloss.JoinHorizontal(lipgloss.Top, row...),
 	)
 }
@@ -324,20 +302,6 @@ func (m model) renderTimeline() string {
 
 	l := m.computeLayout()
 	chartWidth := l.chartWidth
-	th := theme()
-
-	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Accent)
-	labelStyle := lipgloss.NewStyle().Foreground(th.TextMuted)
-	pastBarStyle := lipgloss.NewStyle().Foreground(th.Accent)
-	pastEmptyStyle := lipgloss.NewStyle().Foreground(th.AccentMuted) // dimmed fill above past bar
-	futureBarStyle := lipgloss.NewStyle().Foreground(th.SurfaceMuted)
-	futureEmptyStyle := lipgloss.NewStyle().Foreground(th.SurfaceMuted).Faint(true)
-	boundaryStyle := lipgloss.NewStyle().Foreground(th.Surface)
-	cursorStyle := lipgloss.NewStyle().Foreground(th.Warning).Bold(true)
-	actualStyle := lipgloss.NewStyle().Foreground(th.Success)
-	targetLiveStyle := lipgloss.NewStyle().Foreground(th.Accent).Bold(true)
-	markerOkStyle := lipgloss.NewStyle().Foreground(th.Success).Bold(true)
-	markerMissStyle := lipgloss.NewStyle().Foreground(th.Error).Bold(true)
 
 	// Total plan duration
 	totalDur := time.Duration(0)
@@ -504,48 +468,48 @@ func (m model) renderTimeline() string {
 				if r == 0 {
 					// Playhead indicator at top of cursor column
 					ch = '▼'
-					st = cursorStyle
+					st = styles.Highlight
 				} else if inBar {
 					ch = blockChar(targetH, rowBase)
-					st = cursorStyle
+					st = styles.Highlight
 				} else {
 					ch = '│'
-					st = cursorStyle
+					st = styles.Highlight
 				}
 			} else if isBoundary {
 				// Boundary line spans full column height
 				ch = '▏'
-				st = boundaryStyle
+				st = styles.Boundary
 			} else if isPast {
 				if inBar {
 					ch = blockChar(targetH, rowBase)
-					st = pastBarStyle
+					st = styles.PastBar
 				} else {
 					// Dimmed fill above the past bar — gives a "filled area" look
 					ch = '░'
-					st = pastEmptyStyle
+					st = styles.PastEmpty
 				}
 				// Overlay ▸ marker at the actual-RPS row
 				if r == markerRow {
 					ch = '▸'
 					if markerOk {
-						st = markerOkStyle
+						st = styles.SuccessBold
 					} else {
-						st = markerMissStyle
+						st = styles.ErrorBold
 					}
 				}
 			} else {
 				// Future
 				if inBar {
 					ch = blockChar(targetH, rowBase)
-					st = futureBarStyle
+					st = styles.FutureBar
 				} else if r == chartHeight-1 {
 					// Floor line showing the plan exists
 					ch = '▁'
-					st = futureEmptyStyle
+					st = styles.FutureEmpty
 				} else {
 					ch = ' '
-					st = futureEmptyStyle
+					st = styles.FutureEmpty
 				}
 			}
 
@@ -563,16 +527,15 @@ func (m model) renderTimeline() string {
 		targetUnit = "iter/s"
 	}
 
-	activeActorsStyle := lipgloss.NewStyle().Foreground(th.Warning).Bold(true)
-	sb.WriteString(sectionStyle.Render("STAGE PLAN"))
+	sb.WriteString(styles.SectionTitle.Render("STAGE PLAN"))
 	sb.WriteString(fmt.Sprintf("  %s %s · %s %s · %s · %s on-target · %s off-target\n",
-		targetLiveStyle.Render("target"),
-		targetLiveStyle.Render(fmt.Sprintf("%d %s", m.metrics.TargetRPS, targetUnit)),
-		actualStyle.Render("actual"),
-		actualStyle.Render(fmt.Sprintf("%.0f %s", m.metrics.Throughput, actualUnit)),
-		activeActorsStyle.Render(fmt.Sprintf("active actors: %d", m.metrics.ActiveVPUs)),
-		markerOkStyle.Render("▸"),
-		markerMissStyle.Render("▸"),
+		styles.SectionTitle.Render("target"),
+		styles.SectionTitle.Render(fmt.Sprintf("%d %s", m.metrics.TargetRPS, targetUnit)),
+		styles.Success.Render("actual"),
+		styles.Success.Render(fmt.Sprintf("%.0f %s", m.metrics.Throughput, actualUnit)),
+		styles.Highlight.Render(fmt.Sprintf("active actors: %d", m.metrics.ActiveVPUs)),
+		styles.SuccessBold.Render("▸"),
+		styles.ErrorBold.Render("▸"),
 	))
 
 	// y-axis tick positions
@@ -594,7 +557,7 @@ func (m model) renderTimeline() string {
 			yLabel = "    "
 			axisChar = "│"
 		}
-		sb.WriteString(labelStyle.Render(yLabel+" ") + axisChar)
+		sb.WriteString(styles.MetricLabel.Render(yLabel+" ") + axisChar)
 		for x := 0; x < chartWidth; x++ {
 			c := grid[r][x]
 			sb.WriteString(c.st.Render(string(c.ch)))
@@ -611,7 +574,7 @@ func (m model) renderTimeline() string {
 			xAxis[i] = '─'
 		}
 	}
-	sb.WriteString(labelStyle.Render(strings.Repeat(" ", yAxisWidth)) + "└" + string(xAxis) + "\n")
+	sb.WriteString(styles.MetricLabel.Render(strings.Repeat(" ", yAxisWidth)) + "└" + string(xAxis) + "\n")
 
 	// Stage number labels
 	labelRow := make([]rune, chartWidth)
@@ -644,7 +607,7 @@ func (m model) renderTimeline() string {
 		}
 	}
 	sb.WriteString(strings.Repeat(" ", yAxisWidth+1))
-	sb.WriteString(labelStyle.Render(string(labelRow)) + "\n")
+	sb.WriteString(styles.MetricLabel.Render(string(labelRow)) + "\n")
 
 	// Info bar
 	stageIdx := m.currentStage
@@ -663,15 +626,9 @@ func (m model) renderTimeline() string {
 		formatDuration(totalElapsed), formatDuration(scaledTotalDur),
 	)
 	sb.WriteString("\n")
-	sb.WriteString(labelStyle.Render(infoBar))
+	sb.WriteString(styles.MetricLabel.Render(infoBar))
 
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(th.Surface).
-		Padding(0, 1).
-		MarginTop(1).
-		Width(m.width - 4).
-		Render(sb.String())
+	return styles.PanelBase.Width(m.width - 4).Render(sb.String())
 }
 
 // ── formatDuration ────────────────────────────────────────────────────────────
@@ -699,35 +656,30 @@ func (m model) renderLogContent() string {
 		logs = m.engine.GetRecentLogs(100)
 	}
 
-	th := theme()
-	successStyle := lipgloss.NewStyle().Foreground(th.Success)
-	errorStyle := lipgloss.NewStyle().Foreground(th.Error)
-	normalStyle := lipgloss.NewStyle().Foreground(th.Text)
-
 	var lines []string
 	for _, log := range logs {
 		var statusStr string
 		var ss lipgloss.Style
 		if log.Error != "" {
 			statusStr = fmt.Sprintf("[ERROR] %s", log.Error)
-			ss = errorStyle
+			ss = styles.Error
 		} else if log.StatusCode >= 200 && log.StatusCode < 300 {
 			statusStr = fmt.Sprintf("[%d]", log.StatusCode)
-			ss = successStyle
+			ss = styles.Success
 		} else {
 			statusStr = fmt.Sprintf("[%d]", log.StatusCode)
-			ss = errorStyle
+			ss = styles.Error
 		}
 		lines = append(lines, fmt.Sprintf("%s %s %s %s %s",
-			normalStyle.Render(log.Timestamp.Format("15:04:05")),
-			normalStyle.Render(log.Method),
-			normalStyle.Render(log.Url),
+			styles.Body.Render(log.Timestamp.Format("15:04:05")),
+			styles.Body.Render(log.Method),
+			styles.Body.Render(log.Url),
 			ss.Render(statusStr),
-			normalStyle.Render(fmt.Sprintf("%dms", log.Duration.Milliseconds())),
+			styles.Body.Render(fmt.Sprintf("%dms", log.Duration.Milliseconds())),
 		))
 	}
 	if len(lines) == 0 {
-		return normalStyle.Render("Waiting for traffic (or no errors found)...")
+		return styles.Body.Render("Waiting for traffic (or no errors found)...")
 	}
 	return strings.Join(lines, "\n")
 }
@@ -852,51 +804,36 @@ func (m model) View() string {
 	}
 
 	l := m.computeLayout()
-	th := theme()
 
 	// ── director / hint bar ───────────────────────────────────────────────
-	hintStyle := lipgloss.NewStyle().Foreground(th.TextMuted)
-	biasUpStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Success)
-	biasDownStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Error)
-	msgStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Warning)
-
 	biasStr := ""
 	if bias := m.metrics.Bias; bias != 0 {
-		bs := biasUpStyle
+		bs := styles.SuccessBold
 		if bias < 0 {
-			bs = biasDownStyle
+			bs = styles.ErrorBold
 		}
 		biasStr = "  " + bs.Render(fmt.Sprintf("BIAS %+d RPS", bias))
 	}
 	feedbackStr := ""
 	if m.directorMsg != "" {
-		feedbackStr = "  " + msgStyle.Render(m.directorMsg)
+		feedbackStr = "  " + styles.Highlight.Render(m.directorMsg)
 	}
 	logMode := "FAILURES ONLY"
 	if !m.showFailures {
 		logMode = "ALL LOGS"
 	}
-	directorBar := biasUpStyle.Render("[↑]") + hintStyle.Render(" +5 rps  ") +
-		biasDownStyle.Render("[↓]") + hintStyle.Render(" -5 rps  ") +
-		hintStyle.Render(fmt.Sprintf("[f] logs (%s)  [q] quit", logMode)) +
+	directorBar := styles.SuccessBold.Render("[↑]") + styles.MetricLabel.Render(" +5 rps  ") +
+		styles.ErrorBold.Render("[↓]") + styles.MetricLabel.Render(" -5 rps  ") +
+		styles.MetricLabel.Render(fmt.Sprintf("[f] logs (%s)  [q] quit", logMode)) +
 		biasStr + feedbackStr
 
 	if m.snapStatus != "" {
-		snapStyle := lipgloss.NewStyle().Foreground(th.Success).Bold(true)
-		directorBar += snapStyle.Render("  " + m.snapStatus)
+		directorBar += styles.SuccessBold.Render("  " + m.snapStatus)
 	} else if m.snapping {
-		snapStyle := lipgloss.NewStyle().Foreground(th.Success).Bold(true)
-		directorBar += snapStyle.Render(fmt.Sprintf("  📸 Snapping → %s", m.snapDir))
+		directorBar += styles.SuccessBold.Render(fmt.Sprintf("  📸 Snapping → %s", m.snapDir))
 	}
 
-	logBox := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(th.Surface).
-		Padding(0, 1).
-		MarginTop(1).
-		Width(l.logWidth).
-		Height(l.logHeight).
-		Render(m.logView.View())
+	logBox := styles.PanelBase.Width(l.logWidth).Height(l.logHeight).Render(m.logView.View())
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		m.renderHeader(),

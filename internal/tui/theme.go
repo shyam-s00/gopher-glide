@@ -50,3 +50,84 @@ var macchiato = Theme{
 func theme() Theme {
 	return macchiato
 }
+
+// ── Pre-compiled styles ───────────────────────────────────────────────────────
+
+// uiStyles holds the complete set of pre-compiled lipgloss.Style values used
+// across the dashboard. All View()-path rendering draws from here instead of
+// allocating new style chains on every tick.
+type uiStyles struct {
+	// Spec-mandated panel standards
+	PanelBorder  lipgloss.Style // fully-compiled KPI card (Width 28, margins baked in)
+	PanelBase    lipgloss.Style // base rounded panel — callers apply .Width/.Height before Render
+	SectionTitle lipgloss.Style // section headers and bold accent labels
+	MetricLabel  lipgloss.Style // dimension labels: muted text
+	MetricValue  lipgloss.Style // data values: primary text + bold
+
+	// App chrome
+	TitleBar lipgloss.Style // top banner: OnAccent text over Accent background
+
+	// Status — bold (header counts, chart markers, bias, director bar)
+	SuccessBold lipgloss.Style
+	ErrorBold   lipgloss.Style
+	Highlight   lipgloss.Style // Warning + bold: cursor, active-actors, director messages
+
+	// Status — regular (chart trend lines, log entry badges)
+	Success lipgloss.Style
+	Error   lipgloss.Style
+	Body    lipgloss.Style // neutral body text: log entry fields
+
+	// Timeline chart fills
+	PastBar     lipgloss.Style
+	PastEmpty   lipgloss.Style
+	FutureBar   lipgloss.Style
+	FutureEmpty lipgloss.Style
+	Boundary    lipgloss.Style
+}
+
+func newStyles(th Theme) uiStyles {
+	panelBase := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(th.Surface).
+		Padding(0, 1).
+		MarginTop(1)
+
+	return uiStyles{
+		PanelBorder: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(th.Surface).
+			Padding(0, 2).
+			MarginRight(4).
+			Width(28),
+		PanelBase:    panelBase,
+		SectionTitle: lipgloss.NewStyle().Bold(true).Foreground(th.Accent),
+		MetricLabel:  lipgloss.NewStyle().Foreground(th.TextMuted),
+		MetricValue:  lipgloss.NewStyle().Foreground(th.Text).Bold(true),
+
+		TitleBar: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(th.OnAccent).
+			Background(th.Accent).
+			Padding(0, 1).
+			MarginTop(1).
+			MarginBottom(1),
+
+		SuccessBold: lipgloss.NewStyle().Foreground(th.Success).Bold(true),
+		ErrorBold:   lipgloss.NewStyle().Foreground(th.Error).Bold(true),
+		Highlight:   lipgloss.NewStyle().Foreground(th.Warning).Bold(true),
+
+		Success: lipgloss.NewStyle().Foreground(th.Success),
+		Error:   lipgloss.NewStyle().Foreground(th.Error),
+		Body:    lipgloss.NewStyle().Foreground(th.Text),
+
+		PastBar:     lipgloss.NewStyle().Foreground(th.Accent),
+		PastEmpty:   lipgloss.NewStyle().Foreground(th.AccentMuted),
+		FutureBar:   lipgloss.NewStyle().Foreground(th.SurfaceMuted),
+		FutureEmpty: lipgloss.NewStyle().Foreground(th.SurfaceMuted).Faint(true),
+		Boundary:    lipgloss.NewStyle().Foreground(th.Surface),
+	}
+}
+
+// styles is the active pre-compiled palette, initialised once at startup from
+// the default theme. Re-assign styles = newStyles(myTheme) to hot-swap palettes.
+var styles = newStyles(macchiato)
