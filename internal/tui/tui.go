@@ -137,22 +137,36 @@ func (m model) computeChartWidth() int {
 }
 
 func (m model) computeLayout() layout {
+	// Bare/test models (ready=false, nil engine) skip rendering the fixed
+	// sections entirely; computeLayoutForHeights falls back to the static
+	// estimate in that case.
+	var headerH, timelineH int
+	if m.ready {
+		headerH = lipgloss.Height(m.renderHeader())
+		timelineH = lipgloss.Height(m.renderTimeline())
+	}
+	return m.computeLayoutForHeights(headerH, timelineH)
+}
+
+// computeLayoutForHeights derives the layout from the already-rendered
+// heights of the header and timeline sections, avoiding a redundant render
+// of those (expensive) sections purely for measurement purposes.
+//
+// When the model is fully initialised (engine + config present), the actual
+// rendered heights of the fixed sections are used so that logH fills the
+// remaining terminal rows exactly — regardless of journey-mode panel counts,
+// label wrapping, or any other rendering quirk.
+//
+// Bare/test models (ready=false, nil engine) fall back to the static
+// estimate so that geometry unit tests remain valid without a live engine.
+func (m model) computeLayoutForHeights(headerH, timelineH int) layout {
 	w := m.width
 	if w < minWidth {
 		w = minWidth
 	}
-	// When the model is fully initialised (engine + config present), measure
-	// the actual rendered heights of the fixed sections so that logH fills the
-	// remaining terminal rows exactly — regardless of journey-mode panel counts,
-	// label wrapping, or any other rendering quirk.
-	//
-	// Bare/test models (ready=false, nil engine) fall back to the static
-	// estimate so that geometry unit tests remain valid without a live engine.
 	const fallbackUsed = 41 // header(22) + timeline(16) + hintBar(1) + logBorder(2)
 	var logH int
 	if m.ready {
-		headerH := lipgloss.Height(m.renderHeader())
-		timelineH := lipgloss.Height(m.renderTimeline())
 		logH = m.height - headerH - timelineH - 1 - 2
 	} else {
 		logH = m.height - fallbackUsed
@@ -926,7 +940,9 @@ func (m model) View() string {
 		return fmt.Sprintf("\n  Terminal too narrow (%d cols). Please resize to at least %d cols.", m.width, minWidth)
 	}
 
-	l := m.computeLayout()
+	header := m.renderHeader()
+	timeline := m.renderTimeline()
+	l := m.computeLayoutForHeights(lipgloss.Height(header), lipgloss.Height(timeline))
 
 	// ── director / hint bar ───────────────────────────────────────────────
 	biasStr := ""
@@ -960,8 +976,8 @@ func (m model) View() string {
 	logBox := styles.PanelBase.Width(l.logWidth).Height(l.logHeight).Render(m.logView.View())
 
 	return lipgloss.JoinVertical(lipgloss.Left,
-		m.renderHeader(),
-		m.renderTimeline(),
+		header,
+		timeline,
 		directorBar,
 		logBox,
 	)

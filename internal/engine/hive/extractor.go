@@ -33,10 +33,10 @@ func Extract(body []byte, d httpreader.ExportDirective) (string, error) {
 // ── JSONPath ──────────────────────────────────────────────────────────────────
 
 // extractJSONPath unmarshals body as JSON and traverses path.
-// path must begin with "$" optionally followed by a "." separator
-// (e.g. "$.data.token", "$token", "$.items[0].id").
+// path may optionally begin with "$" followed by a "." separator
+// (e.g. "$.data.token", "$token", "$.items[0].id", "data.token").
 func extractJSONPath(body []byte, path string) (string, error) {
-	// Strip the mandatory root sigil.
+	// Strip the optional root sigil, if present.
 	path = strings.TrimPrefix(path, "$")
 	path = strings.TrimPrefix(path, ".")
 

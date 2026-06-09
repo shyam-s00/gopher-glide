@@ -278,9 +278,10 @@ func main() {
 	// ── parse .http file ──────────────────────────────────────────────────────
 	// Smart Detection (httpreader.ParseFile) groups @gg-export → {{var}}
 	// chains into stateful Journeys; every other request stays its own
-	// single-step Journey. Flatten back to a flat, ordered spec list for the
-	// engines, which are not yet Journey-aware (Milestone 3 threads
-	// []Journey through the Hive engine's dispatch directly).
+	// single-step Journey. Flatten back to a flat, ordered spec list since the
+	// Runner interface (and the headless renderer/TUI) operate on
+	// []RequestSpec; the Hive engine re-derives Journeys from this slice via
+	// httpreader.GroupJourneys before dispatch, so step grouping is preserved.
 	journeys, err := httpreader.ParseFile(cfg.ConfigSection.HTTPFilePath)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error parsing http file: %v\n", err)

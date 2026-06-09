@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
-	mathrand "math/rand"
+	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
@@ -52,7 +52,7 @@ func resolveDynamic(s string) string {
 		case "{{$uuid}}":
 			b.WriteString(newUUID())
 		case "{{$randomInt}}":
-			b.WriteString(strconv.Itoa(mathrand.Intn(1_000_001)))
+			b.WriteString(strconv.FormatInt(randomInt(1_000_001), 10))
 		case "{{$timestamp}}":
 			b.WriteString(strconv.FormatInt(time.Now().UnixMilli(), 10))
 		default:
@@ -64,10 +64,21 @@ func resolveDynamic(s string) string {
 	return b.String()
 }
 
+// randomInt returns a cryptographically random integer in [0, max).
+func randomInt(max int64) int64 {
+	n, err := rand.Int(rand.Reader, big.NewInt(max))
+	if err != nil {
+		panic(err)
+	}
+	return n.Int64()
+}
+
 // newUUID generates a random RFC-4122 UUID v4 using crypto/rand.
 func newUUID() string {
 	var uuid [16]byte
-	_, _ = rand.Read(uuid[:])
+	if _, err := rand.Read(uuid[:]); err != nil {
+		panic(err)
+	}
 	uuid[6] = (uuid[6] & 0x0f) | 0x40 // version 4
 	uuid[8] = (uuid[8] & 0x3f) | 0x80 // variant 10xx
 	return fmt.Sprintf(
