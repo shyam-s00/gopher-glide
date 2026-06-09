@@ -10,6 +10,7 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -37,6 +38,7 @@ type model struct {
 	cancel     context.CancelFunc
 	engineDone chan struct{} // closed by Init's goroutine once RunStages returns
 	logView    viewport.Model
+	spinner    spinner.Model
 
 	width  int
 	height int
@@ -82,6 +84,9 @@ type snapFinalizedMsg struct{ status string }
 func initialModel(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec) model {
 	ctx, cancel := context.WithCancel(context.Background())
 	vp := viewport.New(0, 0)
+	sp := spinner.New()
+	sp.Spinner = spinner.MiniDot
+	sp.Style = lipgloss.NewStyle().Foreground(macchiato.Success)
 	return model{
 		engine:       eng,
 		config:       cfg,
@@ -90,6 +95,7 @@ func initialModel(eng engine.Runner, cfg *config.Config, specs []httpreader.Requ
 		cancel:       cancel,
 		engineDone:   make(chan struct{}),
 		logView:      vp,
+		spinner:      sp,
 		metrics:      &engine.MetricsSnapshot{},
 		showFailures: true,
 		rpsHistory:   make([]float64, 0, 256),
@@ -101,7 +107,7 @@ func (m model) Init() tea.Cmd {
 		_ = m.engine.RunStages(m.ctx, m.config, m.specs)
 		close(m.engineDone) // unblocks Start() so it can return only after the engine is fully stopped
 	}()
-	return tea.Batch(tickCmd(), tea.EnterAltScreen)
+	return tea.Batch(tickCmd(), m.spinner.Tick, tea.EnterAltScreen)
 }
 
 func tickCmd() tea.Cmd {
@@ -181,6 +187,10 @@ func (m model) renderHeader() string {
 		statusStr = "RUNNING"
 		statusStyle = styles.SuccessBold
 	}
+	statusLine := statusStyle.Render(statusStr)
+	if m.running {
+		statusLine = statusStyle.Render(statusStr) + " " + m.spinner.View()
+	}
 
 	stages := m.config.Stages
 	stageIdx := m.currentStage
@@ -196,22 +206,10 @@ func (m model) renderHeader() string {
 		stageLabel = fmt.Sprintf("[%d/%d] %s", stageIdx+1, len(stages), stages[stageIdx].Label(prevRPS))
 	}
 
-	configuration := lipgloss.JoinVertical(lipgloss.Left,
-		styles.SectionTitle.Render("CONFIGURATION"),
-		styles.MetricLabel.Render("Status:"),
-		statusStyle.Render(statusStr),
-		styles.MetricLabel.Render("Uptime:"),
-		styles.MetricValue.Render(fmt.Sprintf("%.2fs", elapsed)),
-		styles.MetricLabel.Render("Http File:"),
-		styles.MetricValue.Render(m.config.ConfigSection.HTTPFile),
-		styles.MetricLabel.Render("Active Actors:"),
-		styles.MetricValue.Render(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
-		styles.MetricLabel.Render("Target RPS:"),
-		styles.MetricValue.Render(fmt.Sprintf("%d", m.metrics.TargetRPS)),
-		styles.MetricLabel.Render("Stage:"),
-		styles.MetricValue.Render(stageLabel),
-		"",
-	)
+	profileStr := "custom"
+	if p := m.config.ConfigSection.ProfileName; p != "" {
+		profileStr = p
+	}
 
 	jitterVal := m.config.ConfigSection.Jitter
 	jitterStr := "off"
@@ -219,72 +217,111 @@ func (m model) renderHeader() string {
 		jitterStr = fmt.Sprintf("±%.0f%%", jitterVal*100)
 	}
 
+	// Flex layout: distribute full terminal width evenly across all KPI panels.
+	// Each panel occupies: border(1 each side=2) + padding(1 each side=2) + gap = 4+gap chars overhead.
+	const panelGap = 2    // horizontal space between panels (applied as MarginRight on every panel)
+	const panelChrome = 4 // border(2) + padding(2) from Padding(0,1)
+
+	numPanels := 3 // Configuration + Throughput + Latency
+	if m.metrics.IsJourneyMode {
+		numPanels = 4 // Configuration + Load Profile + Network + Latency
+	}
+
+	w := m.width
+	if w < minWidth {
+		w = minWidth
+	}
+	contentWidth := (w - numPanels*(panelChrome+panelGap)) / numPanels
+	if contentWidth < 18 {
+		contentWidth = 18
+	}
+	kpiPanel := styles.PanelBorder.Width(contentWidth).MarginRight(panelGap)
+
+	// Shorthand renderers to keep row slices readable.
+	lbl := func(s string) string { return styles.MetricLabel.Render(s) }
+	val := func(s string) string { return styles.MetricValue.Render(s) }
+
+	// Each panel is built as a []string of rows so we can measure heights and
+	// pad all panels to the same count before rendering — giving equal-height boxes.
+	configRows := []string{
+		styles.SectionTitle.Render("CONFIGURATION"),
+		lbl("Status:"), statusLine,
+		lbl("Uptime:"), val(fmt.Sprintf("%.2fs", elapsed)),
+		lbl("Http File:"), val(m.config.ConfigSection.HTTPFile),
+		lbl("Profile:"), val(profileStr),
+		lbl("Stage:"), val(stageLabel),
+	}
+
 	// Journey mode: Target RPS is now an iteration arrival rate, distinct
 	// from the measured HTTP request rate — split THROUGHPUT into
 	// LOAD PROFILE (iterations) and NETWORK (HTTP) so neither is misread.
-	var throughputPanels []string
+	// Active Actors and Target RPS live in the load panel to avoid duplication
+	// with the Configuration panel.
+	var middleRowSets [][]string
 	if m.metrics.IsJourneyMode {
-		loadProfile := lipgloss.JoinVertical(lipgloss.Left,
-			styles.SectionTitle.Render("LOAD PROFILE"),
-			styles.MetricLabel.Render("Target Iter/s:"),
-			styles.MetricValue.Render(fmt.Sprintf("%d", m.metrics.TargetRPS)),
-			styles.MetricLabel.Render("Active Actors:"),
-			styles.MetricValue.Render(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
-			styles.MetricLabel.Render("Jitter:"),
-			styles.MetricValue.Render(jitterStr),
-			"", "", "",
-		)
-		network := lipgloss.JoinVertical(lipgloss.Left,
-			styles.SectionTitle.Render("NETWORK"),
-			styles.MetricLabel.Render("HTTP RPS:"),
-			styles.MetricValue.Render(fmt.Sprintf("%.2f", m.metrics.Throughput)),
-			styles.MetricLabel.Render("Total Requests:"),
-			styles.MetricValue.Render(fmt.Sprintf("%d", m.metrics.TotalRequests)),
-			styles.MetricLabel.Render("Success:"),
-			styles.SuccessBold.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
-			styles.MetricLabel.Render("Failed:"),
-			styles.ErrorBold.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
-			styles.MetricLabel.Render("ErrorRate:"),
-			styles.MetricValue.Render(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
-		)
-		throughputPanels = []string{styles.PanelBorder.Render(loadProfile), styles.PanelBorder.Render(network)}
+		middleRowSets = [][]string{
+			{
+				styles.SectionTitle.Render("LOAD PROFILE"),
+				lbl("Target Iter/s:"), val(fmt.Sprintf("%d", m.metrics.TargetRPS)),
+				lbl("Active Actors:"), val(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
+				lbl("Jitter:"), val(jitterStr),
+			},
+			{
+				styles.SectionTitle.Render("NETWORK"),
+				lbl("HTTP RPS:"), val(fmt.Sprintf("%.2f", m.metrics.Throughput)),
+				lbl("Total Requests:"), val(fmt.Sprintf("%d", m.metrics.TotalRequests)),
+				lbl("Success:"), styles.SuccessBold.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
+				lbl("Failed:"), styles.ErrorBold.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
+				lbl("ErrorRate:"), val(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
+			},
+		}
 	} else {
-		throughput := lipgloss.JoinVertical(lipgloss.Left,
-			styles.SectionTitle.Render("THROUGHPUT"),
-			styles.MetricLabel.Render("RPS:"),
-			styles.MetricValue.Render(fmt.Sprintf("%.2f", m.metrics.Throughput)),
-			styles.MetricLabel.Render("Total Requests:"),
-			styles.MetricValue.Render(fmt.Sprintf("%d", m.metrics.TotalRequests)),
-			styles.MetricLabel.Render("Success:"),
-			styles.SuccessBold.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
-			styles.MetricLabel.Render("Failed:"),
-			styles.ErrorBold.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
-			styles.MetricLabel.Render("ErrorRate:"),
-			styles.MetricValue.Render(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
-			styles.MetricLabel.Render("Jitter:"),
-			styles.MetricValue.Render(jitterStr),
-			"",
-		)
-		throughputPanels = []string{styles.PanelBorder.Render(throughput)}
+		middleRowSets = [][]string{
+			{
+				styles.SectionTitle.Render("THROUGHPUT"),
+				lbl("Active Actors:"), val(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
+				lbl("Target RPS:"), val(fmt.Sprintf("%d", m.metrics.TargetRPS)),
+				lbl("RPS:"), val(fmt.Sprintf("%.2f", m.metrics.Throughput)),
+				lbl("Total Requests:"), val(fmt.Sprintf("%d", m.metrics.TotalRequests)),
+				lbl("Success:"), styles.SuccessBold.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
+				lbl("Failed:"), styles.ErrorBold.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
+				lbl("ErrorRate:"), val(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
+				lbl("Jitter:"), val(jitterStr),
+			},
+		}
 	}
 
-	latency := lipgloss.JoinVertical(lipgloss.Left,
+	latencyRows := []string{
 		styles.SectionTitle.Render("LATENCY"),
-		styles.MetricLabel.Render("Min:"),
-		styles.MetricValue.Render(fmt.Sprintf("%.2fms", m.metrics.MinLatency)),
-		styles.MetricLabel.Render("Max:"),
-		styles.MetricValue.Render(fmt.Sprintf("%.2fms", m.metrics.MaxLatency)),
-		styles.MetricLabel.Render("P50:"),
-		styles.MetricValue.Render(fmt.Sprintf("%.2fms", m.metrics.P50Latency)),
-		styles.MetricLabel.Render("P95:"),
-		styles.MetricValue.Render(fmt.Sprintf("%.2fms", m.metrics.P95Latency)),
-		styles.MetricLabel.Render("P99:"),
-		styles.MetricValue.Render(fmt.Sprintf("%.2fms", m.metrics.P99Latency)),
-		"", "", "",
-	)
+		lbl("Min:"), val(fmt.Sprintf("%.2fms", m.metrics.MinLatency)),
+		lbl("Max:"), val(fmt.Sprintf("%.2fms", m.metrics.MaxLatency)),
+		lbl("P50:"), val(fmt.Sprintf("%.2fms", m.metrics.P50Latency)),
+		lbl("P95:"), val(fmt.Sprintf("%.2fms", m.metrics.P95Latency)),
+		lbl("P99:"), val(fmt.Sprintf("%.2fms", m.metrics.P99Latency)),
+	}
 
-	row := append([]string{styles.PanelBorder.Render(configuration)}, throughputPanels...)
-	row = append(row, styles.PanelBorder.Render(latency))
+	// Find the tallest panel and pad all others to match so borders are equal height.
+	maxRows := len(configRows)
+	for _, rs := range middleRowSets {
+		if len(rs) > maxRows {
+			maxRows = len(rs)
+		}
+	}
+	if len(latencyRows) > maxRows {
+		maxRows = len(latencyRows)
+	}
+
+	renderPanel := func(rows []string) string {
+		padded := make([]string, maxRows)
+		copy(padded, rows)
+		return kpiPanel.Render(lipgloss.JoinVertical(lipgloss.Left, padded...))
+	}
+
+	row := []string{renderPanel(configRows)}
+	for _, rs := range middleRowSets {
+		row = append(row, renderPanel(rs))
+	}
+	row = append(row, renderPanel(latencyRows))
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		styles.TitleBar.Render("Gopher Glide (GG)"),
@@ -789,6 +826,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	m.logView, cmd = m.logView.Update(msg)
+	cmds = append(cmds, cmd)
+	m.spinner, cmd = m.spinner.Update(msg)
 	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }

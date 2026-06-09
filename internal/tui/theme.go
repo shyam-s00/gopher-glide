@@ -96,9 +96,7 @@ func newStyles(th Theme) uiStyles {
 		PanelBorder: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(th.Surface).
-			Padding(0, 2).
-			MarginRight(4).
-			Width(28),
+			Padding(0, 1),
 		PanelBase:    panelBase,
 		SectionTitle: lipgloss.NewStyle().Bold(true).Foreground(th.Accent),
 		MetricLabel:  lipgloss.NewStyle().Foreground(th.TextMuted),
