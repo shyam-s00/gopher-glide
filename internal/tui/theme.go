@@ -71,6 +71,7 @@ type uiStyles struct {
 
 	// App chrome
 	TitleBar lipgloss.Style // top banner: OnAccent text over Accent background
+	Keycap   lipgloss.Style // footer hotkey indicator: keyboard-key pill
 
 	// Status — bold (header counts, chart markers, bias, director bar)
 	SuccessBold lipgloss.Style
@@ -83,7 +84,8 @@ type uiStyles struct {
 	Body    lipgloss.Style // neutral body text: log entry fields
 
 	// Timeline chart fills
-	PastBar     lipgloss.Style
+	Playhead    lipgloss.Style // cursor column: bright accent
+	PastBar     lipgloss.Style // historical bar fill: softer accent
 	PastEmpty   lipgloss.Style
 	FutureBar   lipgloss.Style
 	FutureEmpty lipgloss.Style
@@ -106,8 +108,7 @@ func newStyles(th Theme) uiStyles {
 	panelBase := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(th.Surface).
-		Padding(0, 1).
-		MarginTop(1)
+		Padding(0, 1)
 
 	return uiStyles{
 		PanelBorder: lipgloss.NewStyle().
@@ -127,6 +128,12 @@ func newStyles(th Theme) uiStyles {
 			MarginTop(1).
 			MarginBottom(1),
 
+		Keycap: lipgloss.NewStyle().
+			Background(th.SurfaceMuted).
+			Foreground(th.Text).
+			Bold(true).
+			Padding(0, 1),
+
 		SuccessBold: lipgloss.NewStyle().Foreground(th.Success).Bold(true),
 		ErrorBold:   lipgloss.NewStyle().Foreground(th.Error).Bold(true),
 		Highlight:   lipgloss.NewStyle().Foreground(th.Warning).Bold(true),
@@ -135,7 +142,8 @@ func newStyles(th Theme) uiStyles {
 		Error:   lipgloss.NewStyle().Foreground(th.Error),
 		Body:    lipgloss.NewStyle().Foreground(th.Text),
 
-		PastBar:     lipgloss.NewStyle().Foreground(th.Accent),
+		Playhead:    lipgloss.NewStyle().Foreground(th.Accent).Bold(true),
+		PastBar:     lipgloss.NewStyle().Foreground(th.Accent).Faint(true),
 		PastEmpty:   lipgloss.NewStyle().Foreground(th.AccentMuted),
 		FutureBar:   lipgloss.NewStyle().Foreground(th.SurfaceMuted),
 		FutureEmpty: lipgloss.NewStyle().Foreground(th.SurfaceMuted).Faint(true),

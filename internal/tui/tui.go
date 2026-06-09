@@ -124,7 +124,7 @@ type layout struct {
 	logWidth   int
 }
 
-func (m model) computeLayout() layout {
+func (m model) computeChartWidth() int {
 	w := m.width
 	if w < minWidth {
 		w = minWidth
@@ -133,17 +133,35 @@ func (m model) computeLayout() layout {
 	if cw < 20 {
 		cw = 20
 	}
-	// header: title(3) + stat boxes(18) + margin(1) = 22
-	// timeline: title(1) + chart(10) + x-axis(1) + labels(1) + info(2) + border(2) + margin(1) = 18
-	// debug header: 1
-	// log border: 2
-	used := 22 + 18 + 1 + 2
-	logH := m.height - used
+	return cw
+}
+
+func (m model) computeLayout() layout {
+	w := m.width
+	if w < minWidth {
+		w = minWidth
+	}
+	// When the model is fully initialised (engine + config present), measure
+	// the actual rendered heights of the fixed sections so that logH fills the
+	// remaining terminal rows exactly — regardless of journey-mode panel counts,
+	// label wrapping, or any other rendering quirk.
+	//
+	// Bare/test models (ready=false, nil engine) fall back to the static
+	// estimate so that geometry unit tests remain valid without a live engine.
+	const fallbackUsed = 41 // header(22) + timeline(16) + hintBar(1) + logBorder(2)
+	var logH int
+	if m.ready {
+		headerH := lipgloss.Height(m.renderHeader())
+		timelineH := lipgloss.Height(m.renderTimeline())
+		logH = m.height - headerH - timelineH - 1 - 2
+	} else {
+		logH = m.height - fallbackUsed
+	}
 	if logH < 3 {
 		logH = 3
 	}
 	return layout{
-		chartWidth: cw,
+		chartWidth: m.computeChartWidth(),
 		logHeight:  logH,
 		logWidth:   w - 4,
 	}
@@ -337,8 +355,7 @@ func (m model) renderTimeline() string {
 		return ""
 	}
 
-	l := m.computeLayout()
-	chartWidth := l.chartWidth
+	chartWidth := m.computeChartWidth()
 
 	// Total plan duration
 	totalDur := time.Duration(0)
@@ -505,13 +522,13 @@ func (m model) renderTimeline() string {
 				if r == 0 {
 					// Playhead indicator at top of cursor column
 					ch = '▼'
-					st = styles.Highlight
+					st = styles.Playhead
 				} else if inBar {
 					ch = blockChar(targetH, rowBase)
-					st = styles.Highlight
+					st = styles.Playhead
 				} else {
 					ch = '│'
-					st = styles.Highlight
+					st = styles.Playhead
 				}
 			} else if isBoundary {
 				// Boundary line spans full column height
@@ -567,10 +584,10 @@ func (m model) renderTimeline() string {
 	sb.WriteString(styles.SectionTitle.Render("STAGE PLAN"))
 	sb.WriteString(fmt.Sprintf("  %s %s · %s %s · %s · %s on-target · %s off-target\n",
 		styles.SectionTitle.Render("target"),
-		styles.SectionTitle.Render(fmt.Sprintf("%d %s", m.metrics.TargetRPS, targetUnit)),
+		styles.SectionTitle.Render(fmt.Sprintf("%4d %s", m.metrics.TargetRPS, targetUnit)),
 		styles.Success.Render("actual"),
-		styles.Success.Render(fmt.Sprintf("%.0f %s", m.metrics.Throughput, actualUnit)),
-		styles.Highlight.Render(fmt.Sprintf("active actors: %d", m.metrics.ActiveVPUs)),
+		styles.Success.Render(fmt.Sprintf("%4.0f %s", m.metrics.Throughput, actualUnit)),
+		styles.Highlight.Render(fmt.Sprintf("active actors: %3d", m.metrics.ActiveVPUs)),
 		styles.SuccessBold.Render("▸"),
 		styles.ErrorBold.Render("▸"),
 	))
@@ -594,7 +611,7 @@ func (m model) renderTimeline() string {
 			yLabel = "    "
 			axisChar = "│"
 		}
-		sb.WriteString(styles.MetricLabel.Render(yLabel+" ") + axisChar)
+		sb.WriteString(styles.MetricLabel.Render(yLabel+" ") + styles.Boundary.Render(axisChar))
 		for x := 0; x < chartWidth; x++ {
 			c := grid[r][x]
 			sb.WriteString(c.st.Render(string(c.ch)))
@@ -611,7 +628,7 @@ func (m model) renderTimeline() string {
 			xAxis[i] = '─'
 		}
 	}
-	sb.WriteString(styles.MetricLabel.Render(strings.Repeat(" ", yAxisWidth)) + "└" + string(xAxis) + "\n")
+	sb.WriteString(styles.MetricLabel.Render(strings.Repeat(" ", yAxisWidth)) + styles.Boundary.Render("└"+string(xAxis)) + "\n")
 
 	// Stage number labels
 	labelRow := make([]rune, chartWidth)
@@ -662,7 +679,6 @@ func (m model) renderTimeline() string {
 		formatDuration(m.stageElapsed), formatDuration(scaledStageDur),
 		formatDuration(totalElapsed), formatDuration(scaledTotalDur),
 	)
-	sb.WriteString("\n")
 	sb.WriteString(styles.MetricLabel.Render(infoBar))
 
 	return styles.PanelBase.Width(m.width - 4).Render(sb.String())
@@ -681,6 +697,12 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dm%ds", mins, secs)
 	}
 	return fmt.Sprintf("%ds", secs)
+}
+
+// ── renderKeycap ─────────────────────────────────────────────────────────────
+
+func renderKeycap(key string) string {
+	return styles.Keycap.Render(key)
 }
 
 // ── renderMethodBadge / renderStatusBadge ────────────────────────────────────
@@ -927,9 +949,10 @@ func (m model) View() string {
 	if !m.showFailures {
 		logMode = "ALL LOGS"
 	}
-	directorBar := styles.SuccessBold.Render("[↑]") + styles.MetricLabel.Render(" +5 rps  ") +
-		styles.ErrorBold.Render("[↓]") + styles.MetricLabel.Render(" -5 rps  ") +
-		styles.MetricLabel.Render(fmt.Sprintf("[f] logs (%s)  [q] quit", logMode)) +
+	directorBar := renderKeycap("↑") + styles.SuccessBold.Render(" +5 rps") + "  " +
+		renderKeycap("↓") + styles.ErrorBold.Render(" -5 rps") + "  " +
+		renderKeycap("f") + styles.MetricLabel.Render(fmt.Sprintf(" logs (%s)", logMode)) + "  " +
+		renderKeycap("q") + styles.MetricLabel.Render(" quit") +
 		biasStr + feedbackStr
 
 	if m.snapStatus != "" {
