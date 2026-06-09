@@ -235,15 +235,11 @@ func (m model) renderHeader() string {
 		jitterStr = fmt.Sprintf("±%.0f%%", jitterVal*100)
 	}
 
-	// Flex layout: distribute full terminal width evenly across all KPI panels.
-	// Each panel occupies: border(1 each side=2) + padding(1 each side=2) + gap = 4+gap chars overhead.
-	const panelGap = 2    // horizontal space between panels (applied as MarginRight on every panel)
-	const panelChrome = 4 // border(2) + padding(2) from Padding(0,1)
-
-	numPanels := 3 // Configuration + Throughput + Latency
-	if m.metrics.IsJourneyMode {
-		numPanels = 4 // Configuration + Load Profile + Network + Latency
-	}
+	// Always 4 panels: CONFIG | LOAD | RESULTS/NETWORK | LATENCY.
+	// Each panel occupies: border(2) + padding(2) + gap = panelChrome+panelGap chars.
+	const panelGap = 2
+	const panelChrome = 4
+	const numPanels = 4
 
 	w := m.width
 	if w < minWidth {
@@ -255,70 +251,70 @@ func (m model) renderHeader() string {
 	}
 	kpiPanel := styles.PanelBorder.Width(contentWidth).MarginRight(panelGap)
 
-	// Shorthand renderers to keep row slices readable.
 	lbl := func(s string) string { return styles.MetricLabel.Render(s) }
 	val := func(s string) string { return styles.MetricValue.Render(s) }
+	// kv renders label and value inline on a single row.
+	kv := func(label, value string) string { return lbl(label+" ") + val(value) }
+	// kvr renders label inline with a pre-styled value string.
+	kvr := func(label, rendered string) string { return lbl(label+" ") + rendered }
 
-	// Each panel is built as a []string of rows so we can measure heights and
-	// pad all panels to the same count before rendering — giving equal-height boxes.
 	configRows := []string{
 		styles.SectionTitle.Render("CONFIGURATION"),
-		lbl("Status:"), statusLine,
-		lbl("Uptime:"), val(fmt.Sprintf("%.2fs", elapsed)),
-		lbl("Http File:"), val(m.config.ConfigSection.HTTPFile),
-		lbl("Profile:"), val(profileStr),
-		lbl("Stage:"), val(stageLabel),
+		kvr("Status:", statusLine),
+		kv("Uptime:", fmt.Sprintf("%.2fs", elapsed)),
+		kv("Http File:", m.config.ConfigSection.HTTPFile),
+		kv("Profile:", profileStr),
+		kv("Stage:", stageLabel),
 	}
 
-	// Journey mode: Target RPS is now an iteration arrival rate, distinct
-	// from the measured HTTP request rate — split THROUGHPUT into
-	// LOAD PROFILE (iterations) and NETWORK (HTTP) so neither is misread.
-	// Active Actors and Target RPS live in the load panel to avoid duplication
-	// with the Configuration panel.
+	// Journey mode splits into LOAD PROFILE (iterations) + NETWORK (HTTP).
+	// Standard mode splits into LOAD (rps targets) + RESULTS (counts/errors).
 	var middleRowSets [][]string
 	if m.metrics.IsJourneyMode {
 		middleRowSets = [][]string{
 			{
-				styles.SectionTitle.Render("LOAD PROFILE"),
-				lbl("Target Iter/s:"), val(fmt.Sprintf("%d", m.metrics.TargetRPS)),
-				lbl("Active Actors:"), val(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
-				lbl("Jitter:"), val(jitterStr),
+				styles.SectionTitle.Render("LOAD"),
+				kv("Target Iter/s:", fmt.Sprintf("%d", m.metrics.TargetRPS)),
+				kv("Active Actors:", fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
+				kv("Jitter:", jitterStr),
 			},
 			{
-				styles.SectionTitle.Render("NETWORK"),
-				lbl("HTTP RPS:"), val(fmt.Sprintf("%.2f", m.metrics.Throughput)),
-				lbl("Total Requests:"), val(fmt.Sprintf("%d", m.metrics.TotalRequests)),
-				lbl("Success:"), styles.SuccessBold.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
-				lbl("Failed:"), styles.ErrorBold.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
-				lbl("ErrorRate:"), val(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
+				styles.SectionTitle.Render("RESULTS"),
+				kv("HTTP RPS:", fmt.Sprintf("%.2f", m.metrics.Throughput)),
+				kv("Total Requests:", fmt.Sprintf("%d", m.metrics.TotalRequests)),
+				kvr("Success:", styles.SuccessBold.Render(fmt.Sprintf("%d", m.metrics.SuccessCount))),
+				kvr("Failed:", styles.ErrorBold.Render(fmt.Sprintf("%d", m.metrics.FailureCount))),
+				kv("Error Rate:", fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
 			},
 		}
 	} else {
 		middleRowSets = [][]string{
 			{
-				styles.SectionTitle.Render("THROUGHPUT"),
-				lbl("Active Actors:"), val(fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
-				lbl("Target RPS:"), val(fmt.Sprintf("%d", m.metrics.TargetRPS)),
-				lbl("RPS:"), val(fmt.Sprintf("%.2f", m.metrics.Throughput)),
-				lbl("Total Requests:"), val(fmt.Sprintf("%d", m.metrics.TotalRequests)),
-				lbl("Success:"), styles.SuccessBold.Render(fmt.Sprintf("%d", m.metrics.SuccessCount)),
-				lbl("Failed:"), styles.ErrorBold.Render(fmt.Sprintf("%d", m.metrics.FailureCount)),
-				lbl("ErrorRate:"), val(fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
-				lbl("Jitter:"), val(jitterStr),
+				styles.SectionTitle.Render("LOAD"),
+				kv("Active Actors:", fmt.Sprintf("%d", m.metrics.ActiveVPUs)),
+				kv("Target RPS:", fmt.Sprintf("%d", m.metrics.TargetRPS)),
+				kv("Actual RPS:", fmt.Sprintf("%.2f", m.metrics.Throughput)),
+				kv("Jitter:", jitterStr),
+			},
+			{
+				styles.SectionTitle.Render("RESULTS"),
+				kv("Total Requests:", fmt.Sprintf("%d", m.metrics.TotalRequests)),
+				kvr("Success:", styles.SuccessBold.Render(fmt.Sprintf("%d", m.metrics.SuccessCount))),
+				kvr("Failed:", styles.ErrorBold.Render(fmt.Sprintf("%d", m.metrics.FailureCount))),
+				kv("Error Rate:", fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
 			},
 		}
 	}
 
 	latencyRows := []string{
 		styles.SectionTitle.Render("LATENCY"),
-		lbl("Min:"), val(fmt.Sprintf("%.2fms", m.metrics.MinLatency)),
-		lbl("Max:"), val(fmt.Sprintf("%.2fms", m.metrics.MaxLatency)),
-		lbl("P50:"), val(fmt.Sprintf("%.2fms", m.metrics.P50Latency)),
-		lbl("P95:"), val(fmt.Sprintf("%.2fms", m.metrics.P95Latency)),
-		lbl("P99:"), val(fmt.Sprintf("%.2fms", m.metrics.P99Latency)),
+		kv("Min:", fmt.Sprintf("%.2fms", m.metrics.MinLatency)),
+		kv("Max:", fmt.Sprintf("%.2fms", m.metrics.MaxLatency)),
+		kv("P50:", fmt.Sprintf("%.2fms", m.metrics.P50Latency)),
+		kv("P95:", fmt.Sprintf("%.2fms", m.metrics.P95Latency)),
+		kv("P99:", fmt.Sprintf("%.2fms", m.metrics.P99Latency)),
 	}
 
-	// Find the tallest panel and pad all others to match so borders are equal height.
 	maxRows := len(configRows)
 	for _, rs := range middleRowSets {
 		if len(rs) > maxRows {
@@ -335,15 +331,15 @@ func (m model) renderHeader() string {
 		return kpiPanel.Render(lipgloss.JoinVertical(lipgloss.Left, padded...))
 	}
 
-	row := []string{renderPanel(configRows)}
+	panels := []string{renderPanel(configRows)}
 	for _, rs := range middleRowSets {
-		row = append(row, renderPanel(rs))
+		panels = append(panels, renderPanel(rs))
 	}
-	row = append(row, renderPanel(latencyRows))
+	panels = append(panels, renderPanel(latencyRows))
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		styles.TitleBar.Render("Gopher Glide (GG)"),
-		lipgloss.JoinHorizontal(lipgloss.Top, row...),
+		lipgloss.JoinHorizontal(lipgloss.Top, panels...),
 	)
 }
 
