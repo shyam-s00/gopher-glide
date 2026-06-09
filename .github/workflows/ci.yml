@@ -41,7 +41,7 @@ jobs:
           gpg --no-default-keyring --keyring trustedkeys.gpg --import .github/codecov.asc || true
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v6.0.1
         with:
           files: coverage.out
           fail_ci_if_error: true
