@@ -33,6 +33,21 @@ When building a high-traffic system, two things matter most: **maximum throughpu
 
 ---
 
+## ⚔️ Gopher Glide vs. Grafana k6 (Memory Efficiency)
+
+Because `k6` scales concurrency by spinning up embedded JavaScript Virtual Machines (Goja) for every virtual user, its memory overhead scales aggressively. Gopher Glide operates entirely via native Go actors and lock-free atomics, completely decoupling high throughput from memory bloat.
+
+Here is the peak memory usage during a 30-second local benchmark against a local nginx server. 
+
+| Target RPS | Gopher Glide (`gg`) | Grafana `k6` | Memory Difference |
+| :--- | :--- | :--- | :--- |
+| **5,000 RPS** | ~106 MB | ~464 MB | `k6` uses **4.3x** more RAM |
+| **10,000 RPS** | **~186 MB** | **~796 MB** | `k6` uses **4.2x** more RAM |
+
+* **The Takeaway:** Gopher Glide requires roughly **80 MB** of additional RAM to double its throughput from 5k to 10k RPS (primarily raw OS socket buffers). `k6` requires an additional **332 MB** for the same scaling. For massive CI/CD testing where runners are memory-constrained (e.g., GitHub Actions 2GB limit), `gg` ensures you hit your API's bottleneck before hitting the runner's OOM killer.
+
+---
+
 ## ⚡ 1. The Metrics Subsystem: "Zero Garbage"
 When recording thousands of requests per second, the metrics system can often become a bottleneck by creating memory "garbage" that causes system-wide Garbage Collection (GC) pauses. 
 

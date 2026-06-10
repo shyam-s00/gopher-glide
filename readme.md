@@ -32,7 +32,7 @@ If you want to run a quick concurrency test on an endpoint, you usually have to 
 | Feature | Gopher-Glide (`gg`) | k6 / Locust | wrk / hey / vegeta |
 | :--- | :--- | :--- | :--- |
 | **Scripting** | **None** (Reads `.http` natively) | JavaScript / Python | None (CLI flags only) |
-| **Traffic Control** | **Live Interactive TUI** (Arrow keys) | Requires configs | Fixed concurrency only |
+| **Traffic Control** | **30-FPS Interactive TUI** (Arrow keys) | Requires configs | Fixed concurrency only |
 | **CI/CD Assertions** | **Semantic JSON Diffing** (`gg snap`) | Pass/Fail Thresholds | Raw latencies only |
 | **Built-in Profiles** | **Yes** (`--profile flash-sale`) | Requires scripting | No |
 | **IDE Integration** | **Native JetBrains Plugin** | External scripts | External tools |
@@ -62,7 +62,7 @@ Use a built-in profile to automatically shape the traffic (e.g., ramping up, sus
 gg --hive-engine --profile flash-sale --http-file api.http
 ```
 
-You will instantly drop into the Interactive Chaos TUI where you can monitor latencies and adjust the load in real-time.
+You will instantly drop into the newly polished, butter-smooth 30-FPS Interactive Chaos TUI where you can monitor latencies and adjust the load in real-time without stutter or lag.
 
 ---
 
@@ -70,6 +70,8 @@ You will instantly drop into the Interactive Chaos TUI where you can monitor lat
 
 ### 🐝 The Hive Engine (Zero-Allocation Architecture)
 The core of `gg` is built on a pure-Go lock-free Actor Model. By isolating connections into ultra-lightweight Goroutines and tracking metrics via sharded lock-free atomics, `gg` operates at **`0 allocs/op`** on the hot path. This means you can comfortably push over **30,000+ RPS** on a standard developer machine without garbage-collection pauses destroying your latency percentiles.
+
+> **⚔️ Memory Benchmark:** At 10,000 RPS, `gg` consumes only **~186 MB** of RAM, whereas Grafana `k6` consumes **~796 MB** (4.2x more). [Read the full benchmark breakdown](docs/BENCHMARKS.md) to see how `gg` safely simulates massive traffic inside memory-constrained CI/CD pipelines.
 
 ### 🔬 Semantic Regression Gates (`gg snap`)
 Don't just test if your API is slow—test if it's broken. By passing the `--snap` flag, Gopher-Glide infers your API's JSON schema in real-time. You can then use `gg snap assert` in your CI/CD pipeline to automatically break the build if a pull request spikes latency or alters a JSON payload contract.

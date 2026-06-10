@@ -25,6 +25,8 @@ hide:
 
 By isolating each concurrent connection into an ultra-lightweight Goroutine and utilizing lock-free message passing, Gopher-Glide bypasses traditional memory and scheduling bottlenecks. A single instance can easily generate **over 50,000 RPS on a standard multi-core machine** with a proven zero-garbage (`0 allocs/op`) metrics subsystem. 
 
+> **⚔️ Memory Benchmark:** At 10,000 RPS, `gg` consumes only **~186 MB** of RAM, whereas Grafana `k6` consumes **~796 MB** (4.2x more). [Read the full benchmark breakdown](BENCHMARKS.md) to see how `gg` safely simulates massive traffic inside memory-constrained CI/CD pipelines.
+
 Whether you are running on a high-end developer workstation, a standard laptop, or a virtualized cloud runner, the engine scales linearly to extract maximum value from your hardware. Check out the full [Performance Benchmarks](BENCHMARKS.md) to see the cross-platform scaling data.
 
 </div>
@@ -103,7 +105,7 @@ $ gg --hive-engine \
 <div class="tx-feature-text" markdown="1">
 
 ## Interactive Chaos TUI
-Adjust traffic in real-time using the interactive TUI. Bias RPS up or down using your arrow keys, and watch the beautiful terminal UI react instantly. 
+Adjust traffic in real-time using the newly polished, butter-smooth 30-FPS interactive TUI. Bias RPS up or down using your arrow keys, and watch the beautiful terminal UI react instantly without stutter or lag. 
 
 Combined with the `--snap` flag, you can record behavioral snapshots of your API's latency, status distributions, and inferred JSON schemas.
 
@@ -188,7 +190,7 @@ jobs:
 | Feature | Gopher-Glide (`gg`) | k6 / Locust | wrk / hey / vegeta |
 | :--- | :--- | :--- | :--- |
 | **Scripting** | **None** (Reads `.http` natively) | JavaScript / Python | None (CLI flags only) |
-| **Traffic Control** | **Live Interactive TUI** (Arrow keys) | Requires configs | Fixed concurrency only |
+| **Traffic Control** | **30-FPS Interactive TUI** (Arrow keys) | Requires configs | Fixed concurrency only |
 | **CI/CD Assertions** | **Semantic JSON Diffing** (`gg snap`) | Pass/Fail Thresholds | Raw latencies only |
 | **Built-in Profiles** | **Yes** (`--profile flash-sale`) | Requires scripting | No |
 | **IDE Integration** | **Native JetBrains Plugin** | External scripts | External tools |
