@@ -33,18 +33,27 @@ When building a high-traffic system, two things matter most: **maximum throughpu
 
 ---
 
-## ⚔️ Gopher Glide vs. Grafana k6 (Memory Efficiency)
+## ⚔️ Gopher Glide vs. Grafana k6 (Resource Efficiency)
 
-Because `k6` scales concurrency by spinning up embedded JavaScript Virtual Machines (Goja) for every virtual user, its memory overhead scales aggressively. Gopher Glide operates entirely via native Go actors and lock-free atomics, completely decoupling high throughput from memory bloat.
+Because `k6` scales concurrency by spinning up embedded JavaScript Virtual Machines (Goja) for every virtual user, its resource footprint scales aggressively. Gopher Glide operates entirely via native Go actors and lock-free atomics, completely decoupling high throughput from memory and CPU bloat.
 
-Here is the peak memory usage during a 30-second local benchmark against a local nginx server. 
+### 🧠 Memory Footprint (30-second local benchmark)
 
 | Target RPS | Gopher Glide (`gg`) | Grafana `k6` | Memory Difference |
 | :--- | :--- | :--- | :--- |
 | **5,000 RPS** | ~106 MB | ~464 MB | `k6` uses **4.3x** more RAM |
 | **10,000 RPS** | **~186 MB** | **~796 MB** | `k6` uses **4.2x** more RAM |
 
-* **The Takeaway:** Gopher Glide requires roughly **80 MB** of additional RAM to double its throughput from 5k to 10k RPS (primarily raw OS socket buffers). `k6` requires an additional **332 MB** for the same scaling. For massive CI/CD testing where runners are memory-constrained (e.g., GitHub Actions 2GB limit), `gg` ensures you hit your API's bottleneck before hitting the runner's OOM killer.
+### ⚡ CPU & Kernel Overhead (At 10,000 RPS)
+
+| Metric | Gopher Glide (`gg`) | Grafana `k6` | The Difference |
+| :--- | :--- | :--- | :--- |
+| **Total CPU Time** (`user` + `sys`) | **38.5s** | 52.2s | `gg` requires **26% less CPU time** |
+| **Kernel Time** (`sys`) | **14.0s** | 26.9s | `gg` spends **48% less time** trapped in OS system calls |
+| **Context Switches** (Involuntary) | **1.16 Million** | 3.16 Million | `gg` suffers **almost 3x fewer** OS context switches |
+| **Page Faults** (Memory) | **0** | 363 | `gg` achieves perfect memory localization |
+
+* **The Takeaway:** Gopher Glide requires roughly **80 MB** of additional RAM to double its throughput from 5k to 10k RPS, while `k6` requires an additional **332 MB**. Furthermore, because `gg` uses Go's user-space M:N scheduling (Goroutines) and zero-allocation hot paths, it drastically reduces kernel syscalls and OS context switching. This ensures your CI/CD runner is dedicated to pushing network traffic—not fighting a JavaScript VM's garbage collector.
 
 ---
 
