@@ -112,7 +112,7 @@
   margin: 0 !important;
 }
 
-/* Three Steps */
+/* Get Started steps */
 .tx-steps-section {
   text-align: center;
   margin: 4rem 0;
@@ -124,53 +124,90 @@
 .tx-steps-section h2 {
   font-size: 2.5rem;
   font-weight: 700;
-  margin-bottom: 3rem;
+  margin-bottom: 0.75rem;
   border-bottom: none;
 }
 
-.tx-steps-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
+.tx-section-subtitle {
+  max-width: 640px;
+  margin: 0 auto 3rem;
+  color: var(--md-default-fg-color--light);
+  font-size: 1.1rem;
+}
+
+.tx-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
   text-align: left;
   max-width: 1000px;
   margin: 0 auto;
-  justify-content: center;
 }
 
-.tx-step-card {
+.tx-step-row {
+  display: flex;
+  align-items: center;
+  gap: 2.5rem;
   background: var(--md-code-bg-color);
-  padding: 2rem;
-  border-radius: 8px;
+  padding: 1.5rem 2rem;
+  border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   border: 1px solid var(--md-default-fg-color--lightest);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tx-step-row:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+}
+
+.tx-step-row-text {
+  flex: 0.4;
+  min-width: 0;
+}
+
+.tx-step-row-code {
+  flex: 0.6;
+  min-width: 0;
 }
 
 .tx-step-number {
-  font-size: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  font-size: 1rem;
   font-weight: 800;
-  color: var(--md-primary-fg-color);
-  margin-bottom: 0.5rem;
+  color: var(--md-primary-bg-color);
+  background: var(--md-primary-fg-color);
+  margin-bottom: 0.75rem;
 }
 
-.tx-step-card h3 {
+.tx-step-row-text h3 {
   font-size: 1.2rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
+  border-bottom: none;
 }
 
-.tx-step-code {
-  display: block;
-  background: var(--md-default-bg-color);
-  color: var(--md-code-fg-color);
-  padding: 1rem;
-  margin-top: 1rem;
+.tx-step-row-text p {
+  color: var(--md-default-fg-color--light);
+  margin-bottom: 0;
+}
+
+.tx-step-row-code .highlight {
   border-radius: 6px;
-  border: 1px solid var(--md-default-fg-color--lightest);
-  font-family: var(--md-code-font-family, monospace);
-  font-size: 0.85rem;
-  overflow-x: auto;
-  white-space: nowrap;
+}
+
+.tx-step-row-code pre,
+.tx-step-row-code code {
+  font-size: 0.75rem !important;
+}
+
+.tx-step-row-code pre {
+  margin: 0 !important;
 }
 
 /* CTA Banner */
@@ -219,6 +256,13 @@
     margin: 2rem 0;
   }
 
+  .tx-step-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    padding: 1.25rem;
+  }
+
   .tx-hero h1 {
     font-size: 2.2rem;
   }
@@ -244,26 +288,4 @@
 .tx-container {
   max-width: 1200px;
   margin: 0 auto;
-}
-
-/* Upcoming Banner */
-.tx-upcoming-banner {
-  text-align: center;
-  padding: 1.5rem;
-  background: var(--md-code-bg-color);
-  border: 1px dashed var(--md-primary-fg-color);
-  border-radius: 8px;
-  margin: 3rem auto;
-  max-width: 800px;
-}
-
-.tx-upcoming-banner h3 {
-  color: var(--md-primary-fg-color);
-  margin-top: 0;
-  margin-bottom: 0.5rem;
-}
-
-.tx-upcoming-banner p {
-  margin: 0;
-  font-size: 1.1rem;
 }

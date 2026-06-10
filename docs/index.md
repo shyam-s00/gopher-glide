@@ -181,11 +181,6 @@ jobs:
 </div>
 </div>
 
-<div class="tx-upcoming-banner" markdown="1">
-<h3>🚀 The Hive Engine + Stateful Journeys Live</h3>
-<p>Experience massive concurrency with the pure-Go lock-free Actor Model. Seamlessly simulate complex, multi-step API workflows by extracting and passing variables between requests.</p>
-</div>
-
 <div class="tx-steps-section" style="background: transparent; padding-top: 2rem; padding-bottom: 0;" markdown="1">
 <h2>Why Gopher-Glide?</h2>
 <p style="margin-bottom: 2rem; color: var(--md-default-fg-color--light);">If you want to run a quick concurrency test, you usually have to write a custom script or learn a heavy configuration language. <code>gg</code> lets you skip the boilerplate.</p>
@@ -201,29 +196,87 @@ jobs:
 
 </div>
 <div class="tx-steps-section" markdown="1" id="quick-start">
-<h2>Three steps. Zero config.</h2>
+<h2>Get started in minutes</h2>
+<p class="tx-section-subtitle">No scripting language to learn, no config files to maintain — reuse what's already in your IDE.</p>
 
-<div class="tx-steps-grid" markdown="1">
-<div class="tx-step-card" markdown="1">
+<div class="tx-steps-list" markdown="1">
+
+<div class="tx-step-row" markdown="1">
+<div class="tx-step-row-text" markdown="1">
 <div class="tx-step-number">01</div>
 <h3>Install</h3>
-<p>Get the binary via Homebrew in seconds.</p>
-<code class="tx-step-code">brew install shyam-s00/tap/gg</code>
+<p>Get the binary via Homebrew, or grab a prebuilt release for Linux/Windows.</p>
+</div>
+<div class="tx-step-row-code" markdown="1">
+
+```bash
+brew install shyam-s00/tap/gg
+```
+
+</div>
 </div>
 
-<div class="tx-step-card" markdown="1">
+<div class="tx-step-row" markdown="1">
+<div class="tx-step-row-text" markdown="1">
 <div class="tx-step-number">02</div>
-<h3>Write</h3>
-<p>Use your existing IDE `.http` files.</p>
-<code class="tx-step-code">GET http://localhost:8080/health</code>
+<h3>Write a Journey</h3>
+<p>Reuse your existing <code>.http</code> files. Chain requests into a stateful Journey by exporting a value with <code>@gg-export</code> and referencing it as <code>{{token}}</code> in the next request.</p>
+</div>
+<div class="tx-step-row-code" markdown="1">
+
+```http
+### Login
+# @gg-export token = jsonpath: $.data.token
+POST http://api.example.com/login
+Content-Type: application/json
+
+{ "user": "tester", "pass": "secure" }
+
+### Fetch profile
+GET http://api.example.com/profile
+Authorization: Bearer {{token}}
+```
+
+</div>
 </div>
 
-<div class="tx-step-card" markdown="1">
+<div class="tx-step-row" markdown="1">
+<div class="tx-step-row-text" markdown="1">
 <div class="tx-step-number">03</div>
-<h3>Simulate</h3>
-<p>Run the traffic simulator with a built-in profile.</p>
-<code class="tx-step-code">gg --hive-engine \<br>&nbsp;&nbsp;--http-file api.http \<br>&nbsp;&nbsp;--profile sustain</code>
+<h3>Pick a Profile</h3>
+<p>Skip the YAML — choose a built-in traffic shape that matches your scenario.</p>
 </div>
+<div class="tx-step-row-code" markdown="1">
+
+```bash
+gg --hive-engine \
+  --http-file checkout.http \
+  --profile flash-sale
+```
+
+</div>
+</div>
+
+<div class="tx-step-row" markdown="1">
+<div class="tx-step-row-text" markdown="1">
+<div class="tx-step-number">04</div>
+<h3>Simulate &amp; Watch</h3>
+<p>Drop into the interactive TUI, bias load up or down with the arrow keys, and capture <code>--snap</code> snapshots as you go.</p>
+</div>
+<div class="tx-step-row-code" markdown="1">
+
+```text
+[Stages]
+1. Ramp Up: 0 -> 1000 RPS (30s)
+2. Sustain: 1000 RPS (2m)
+3. Cool Down: 1000 -> 0 RPS (30s)
+
+[Status] Running Stage 2 (Sustain)...
+```
+
+</div>
+</div>
+
 </div>
 </div>
 
