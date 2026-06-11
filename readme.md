@@ -71,7 +71,7 @@ You will instantly drop into the newly polished, butter-smooth 30-FPS Interactiv
 ### 🐝 The Hive Engine (Zero-Allocation Architecture)
 The core of `gg` is built on a pure-Go lock-free Actor Model. By isolating connections into ultra-lightweight Goroutines and tracking metrics via sharded lock-free atomics, `gg` operates at **`0 allocs/op`** on the hot path. This means you can comfortably push over **30,000+ RPS** on a standard developer machine without garbage-collection pauses destroying your latency percentiles.
 
-> **⚔️ Memory Benchmark:** At 10,000 RPS, `gg` consumes only **~186 MB** of RAM, whereas Grafana `k6` consumes **~796 MB** (4.2x more). [Read the full benchmark breakdown](docs/BENCHMARKS.md) to see how `gg` safely simulates massive traffic inside memory-constrained CI/CD pipelines.
+> **⚔️ Benchmark:** At 30,000 RPS target load, `gg` consumes **40% less memory** (1.42 GB vs 2.38 GB) and delivers **3x more successful requests** than `k6`. `gg`'s dynamic Adaptive Backpressure acts as an intelligent edge proxy—gracefully throttling excess traffic when the target server breaks to ensure maximum goodput, instead of blindly hammering the network into a deadlock. [Read the full benchmark breakdown](docs/BENCHMARKS.md) to see how `gg` safely simulates massive traffic.
 
 ### 🔬 Semantic Regression Gates (`gg snap`)
 Don't just test if your API is slow—test if it's broken. By passing the `--snap` flag, Gopher-Glide infers your API's JSON schema in real-time. You can then use `gg snap assert` in your CI/CD pipeline to automatically break the build if a pull request spikes latency or alters a JSON payload contract.

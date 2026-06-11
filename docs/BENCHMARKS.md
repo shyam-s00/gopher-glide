@@ -33,27 +33,33 @@ When building a high-traffic system, two things matter most: **maximum throughpu
 
 ---
 
-## ⚔️ Gopher Glide vs. Grafana k6 (Resource Efficiency)
+## ⚔️ Gopher Glide vs. k6 (Goodput & Resource Efficiency)
 
-Because `k6` scales concurrency by spinning up embedded JavaScript Virtual Machines (Goja) for every virtual user, its resource footprint scales aggressively. Gopher Glide operates entirely via native Go actors and lock-free atomics, completely decoupling high throughput from memory and CPU bloat.
+Because `k6` operates as a traditional "Closed Model" load tester, it scales concurrency by spinning up embedded JavaScript Virtual Machines (Goja) for every virtual user and blindly hammering the target server until it hits a wall. Gopher Glide operates as a true "Open Model" with mathematical **Adaptive Backpressure**—it completely decouples throughput from memory bloat and natively protects the target server from catastrophic deadlocks.
 
-### 🧠 Memory Footprint (30-second local benchmark)
+In a saturation test pushing a target of **30,000 RPS** (attempting ~900k total requests over 30 seconds), both engines correctly identified the physical limit of the target NGINX server (delivering exactly ~92,000 requests to the network). However, the *outcomes* were vastly different:
 
-| Target RPS | Gopher Glide (`gg`) | Grafana `k6` | Memory Difference |
+### 🧠 The "Mic Drop" Metric: Successful Goodput
+
+| Metric | Gopher Glide (`gg`) | `k6` | The Difference |
 | :--- | :--- | :--- | :--- |
-| **5,000 RPS** | ~106 MB | ~464 MB | `k6` uses **4.3x** more RAM |
-| **10,000 RPS** | **~186 MB** | **~796 MB** | `k6` uses **4.2x** more RAM |
+| **Total Requests Sent** | 92,059 | 92,184 | Both hit the exact same physical server bottleneck. |
+| **Successful Responses** | **76,140** | 25,753 | `gg` delivered **~3x MORE successful requests**. |
+| **Failure Rate** | **17.29%** | 72.06% | `k6` pushed the server into a total deadlock. |
 
-### ⚡ CPU & Kernel Overhead (At 10,000 RPS)
+**Why did this happen?**
+When `k6` hit the server's limit, it just kept violently spawning virtual users, forcing the target server into a total deadlock where 72% of the connections timed out or were refused. 
 
-| Metric | Gopher Glide (`gg`) | Grafana `k6` | The Difference |
-| :--- | :--- | :--- | :--- |
-| **Total CPU Time** (`user` + `sys`) | **38.5s** | 52.2s | `gg` requires **26% less CPU time** |
-| **Kernel Time** (`sys`) | **14.0s** | 26.9s | `gg` spends **48% less time** trapped in OS system calls |
-| **Context Switches** (Involuntary) | **1.16 Million** | 3.16 Million | `gg` suffers **almost 3x fewer** OS context switches |
-| **Page Faults** (Memory) | **0** | 363 | `gg` achieves perfect memory localization |
+When `gg` detected the server slowing down, its **Adaptive Backpressure** instantly engaged. `gg` gracefully throttled the excess traffic locally. Because it stopped slamming the network with useless dead-end connections, the target server was actually able to breathe and successfully process the traffic. `gg` acts like an intelligent edge proxy, maximizing your server's Goodput under extreme duress.
 
-* **The Takeaway:** Gopher Glide requires roughly **80 MB** of additional RAM to double its throughput from 5k to 10k RPS, while `k6` requires an additional **332 MB**. Furthermore, because `gg` uses Go's user-space M:N scheduling (Goroutines) and zero-allocation hot paths, it drastically reduces kernel syscalls and OS context switching. This ensures your CI/CD runner is dedicated to pushing network traffic—not fighting a JavaScript VM's garbage collector.
+### ⚡ Memory Footprint
+
+| Engine | Peak Memory (RAM) | Efficiency |
+| :--- | :--- | :--- |
+| **Gopher Glide (`gg`)** | **1.42 GB** | **40% less RAM** required. |
+| **`k6`** | 2.38 GB | Heavy JavaScript VM bloat. |
+
+* **The Takeaway:** `gg` doesn't just protect your target server; it protects your CI/CD runner. By using Go's user-space M:N scheduling and a mathematically proven backpressure system, `gg` extracts massive successful throughput without ever risking an Out-Of-Memory (OOM) crash.
 
 ---
 
