@@ -2,6 +2,7 @@ package hive
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
@@ -55,8 +56,9 @@ const backpressureCheckInterval = 100 * time.Millisecond
 //     cleanly without spawning further goroutines.
 type hatchery struct {
 	e         *Engine // back-pointer to shared Engine state
-	tripCount int     // consecutive ticks where activeActors > 3*expected
-	tripped   bool    // latched state to prevent violent oscillation
+	tripMu    sync.Mutex
+	tripCount int  // consecutive ticks where activeActors > 3*expected
+	tripped   bool // latched state to prevent violent oscillation
 
 	// p50 latency cache for the backpressure check — recomputed at most
 	// once per backpressureCheckInterval (see constant doc).
@@ -149,6 +151,11 @@ func (h *hatchery) dispatch(
 		//
 		// p50 is recomputed at most once per backpressureCheckInterval —
 		// see its doc comment for why per-tick recomputation is wasteful.
+		//
+		// tripMu serializes the cache update and trip-state machine: dispatch
+		// is normally single-goroutine, but tripMu also makes concurrent
+		// dispatch (e.g. from tests) race-free.
+		h.tripMu.Lock()
 		now := time.Now()
 		if now.Sub(h.lastLatencyCheck) >= backpressureCheckInterval {
 			_, _, p50Ms, _, _ := h.e.computeLatency()
@@ -195,6 +202,7 @@ func (h *hatchery) dispatch(
 				effectiveCeiling = int(threshold)
 			}
 		}
+		h.tripMu.Unlock()
 
 		for i := 0; i < batch && spawned < count; i++ {
 			// MaxActors safeguard: if the host is already saturated with
