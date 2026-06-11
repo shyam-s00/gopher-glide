@@ -63,7 +63,7 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		duration := time.Since(start)
 		e.counters.incFailure(shard)
 		e.recordLatency(shard, duration)
-		e.logCall(spec.Method, spec.URL, 0, duration, err)
+		e.logCall(shard, spec.Method, spec.URL, 0, duration, err)
 		if e.recorder != nil {
 			e.recorder.Record(snap.RecordEntry{
 				Timestamp: start,
@@ -89,7 +89,7 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 	if err != nil {
 		e.counters.incFailure(shard)
 		e.recordLatency(shard, duration)
-		e.logCall(spec.Method, resolvedURL, 0, duration, err)
+		e.logCall(shard, spec.Method, resolvedURL, 0, duration, err)
 		if e.recorder != nil {
 			e.recorder.Record(snap.RecordEntry{
 				Timestamp: start,
@@ -134,7 +134,7 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 	// Log, count, snap, and abort — extraction is never attempted on a
 	// failed HTTP response.
 	if resp.StatusCode >= 400 {
-		e.logCall(spec.Method, resolvedURL, resp.StatusCode, duration, ErrHttpError)
+		e.logCall(shard, spec.Method, resolvedURL, resp.StatusCode, duration, ErrHttpError)
 		e.counters.incFailure(shard)
 		if e.recorder != nil {
 			snapBody := respBody
@@ -165,7 +165,7 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 			val, exErr := Extract(respBody, d)
 			if exErr != nil {
 				extractErr := fmt.Errorf("%w: %s: %v", ErrExtractionFailed, d.VarName, exErr)
-				e.logCall(spec.Method, resolvedURL, resp.StatusCode, duration, extractErr)
+				e.logCall(shard, spec.Method, resolvedURL, resp.StatusCode, duration, extractErr)
 				e.counters.incFailure(shard)
 				if e.recorder != nil {
 					// Include the full body so the operator can debug the
@@ -189,7 +189,7 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 	}
 
 	// ── 9. Log + count success ────────────────────────────────────────────
-	e.logCall(spec.Method, resolvedURL, resp.StatusCode, duration, nil)
+	e.logCall(shard, spec.Method, resolvedURL, resp.StatusCode, duration, nil)
 	e.counters.incSuccess(shard)
 
 	// ── 10. Snap record ───────────────────────────────────────────────────

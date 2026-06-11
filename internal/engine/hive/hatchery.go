@@ -28,6 +28,17 @@ const hatcheryTick = 10 * time.Millisecond
 // + http.Request + Headers map), so 10,000 actors = ~200MB max overhead.
 const maxActiveActors = 10_000
 
+// backpressureCheckInterval throttles how often the Hatchery recomputes
+// p50 latency for the Little's Law trip check.
+//
+// computeLatency() sorts a 4 096-sample window on every call (~32 KB alloc +
+// ~49K comparisons). At the 10 ms hatcheryTick this would run at 100 Hz —
+// 10x more often than the TUI's own ~24 Hz refresh actually needs, adding
+// GC pressure that competes with the TUI's render goroutine for scheduling.
+// p50 latency does not meaningfully change within 100 ms, so the cached
+// value is reused between recomputations.
+const backpressureCheckInterval = 100 * time.Millisecond
+
 // ── hatchery ─────────────────────────────────────────────────────────────────
 
 // hatchery is the Smooth Dispatcher. It reads SpawnManifests from the Queen
@@ -46,6 +57,11 @@ type hatchery struct {
 	e         *Engine // back-pointer to shared Engine state
 	tripCount int     // consecutive ticks where activeActors > 3*expected
 	tripped   bool    // latched state to prevent violent oscillation
+
+	// p50 latency cache for the backpressure check — recomputed at most
+	// once per backpressureCheckInterval (see constant doc).
+	lastLatencyCheck time.Time
+	cachedP50Ms      float64
 }
 
 // run reads SpawnManifests from manifestCh and dispatches Actors for each.
@@ -128,11 +144,19 @@ func (h *hatchery) dispatch(
 			batch++
 		}
 
-		// Evaluate Little's Law Backpressure (Layer 1) once per tick.
+		// Evaluate Little's Law Backpressure (Layer 1).
 		// Expected concurrency = TargetRPS * p50_latency_seconds
-		_, _, p50Ms, _, _ := h.e.computeLatency()
+		//
+		// p50 is recomputed at most once per backpressureCheckInterval —
+		// see its doc comment for why per-tick recomputation is wasteful.
+		now := time.Now()
+		if now.Sub(h.lastLatencyCheck) >= backpressureCheckInterval {
+			_, _, p50Ms, _, _ := h.e.computeLatency()
+			h.cachedP50Ms = p50Ms
+			h.lastLatencyCheck = now
+		}
 		targetRPS := float64(h.e.targetRPS.Load())
-		expectedConcurrency := targetRPS * (p50Ms / 1000.0)
+		expectedConcurrency := targetRPS * (h.cachedP50Ms / 1000.0)
 		active := float64(h.e.activeActors.Load())
 
 		// We need an absolute minimum threshold to prevent violent tripping on extremely fast servers

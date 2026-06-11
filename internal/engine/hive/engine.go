@@ -50,10 +50,9 @@ type Engine struct {
 	latBuf atomic.Pointer[latencyBuf]
 
 	// ── Call-log ring buffers ─────────────────────────────────────────────
-	callLogs   []*engine.CallLog
-	errorLogs  []*engine.CallLog
-	callLogsMu sync.RWMutex
-	maxLogs    int
+	// Sharded across numShards independent mutexes — see calllog.go.
+	logShards [numShards]logShard
+	maxLogs   int
 
 	// ── Lifecycle ────────────────────────────────────────────────────────
 	isRunning atomic.Bool
@@ -101,11 +100,13 @@ func New(opts ...EngineOption) *Engine {
 			Timeout:   30 * time.Second,
 			Transport: buildTransport(1000), // baseline; tuned in RunStages
 		},
-		callLogs:    make([]*engine.CallLog, 0, 100),
-		errorLogs:   make([]*engine.CallLog, 0, 100),
 		maxLogs:     100,
 		biasCh:      make(chan int, 16),
 		sampleEvery: 20, // 5 % default — 1-in-20 responses body-sampled
+	}
+	for i := range e.logShards {
+		e.logShards[i].callLogs = make([]*engine.CallLog, 0, e.maxLogs)
+		e.logShards[i].errorLogs = make([]*engine.CallLog, 0, e.maxLogs)
 	}
 	initialBuf := newLatencyBuf(1024)
 	e.latBuf.Store(&initialBuf)
@@ -216,10 +217,13 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	newBuf := newLatencyBuf(bufCap)
 	e.latBuf.Store(&newBuf)
 
-	e.callLogsMu.Lock()
-	e.callLogs = make([]*engine.CallLog, 0, e.maxLogs)
-	e.errorLogs = make([]*engine.CallLog, 0, e.maxLogs)
-	e.callLogsMu.Unlock()
+	for i := range e.logShards {
+		s := &e.logShards[i]
+		s.mu.Lock()
+		s.callLogs = make([]*engine.CallLog, 0, e.maxLogs)
+		s.errorLogs = make([]*engine.CallLog, 0, e.maxLogs)
+		s.mu.Unlock()
+	}
 
 	// ── Lifecycle: mark start ─────────────────────────────────────────────
 	e.timeMu.Lock()
