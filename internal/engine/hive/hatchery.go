@@ -23,9 +23,10 @@ const hatcheryTick = 10 * time.Millisecond
 // Under the Arrival Rate model, Target RPS now drives how many Actors are
 // spawned per second regardless of how long their journeys take to complete.
 // A slow target (e.g. 10 s response latency) at 50 000 iter/s would otherwise
-// accumulate 500 000 parked goroutines in just 10 seconds. This limit caps
-// that growth so the host OS is never driven into OOM territory.
-const maxActiveActors = 500_000
+// accumulate 500 000 parked goroutines in just 10 seconds. We cap this to
+// 10,000 to prevent OOM. Each blocked Actor consumes ~20KB (goroutine stack
+// + http.Request + Headers map), so 10,000 actors = ~200MB max overhead.
+const maxActiveActors = 10_000
 
 // ── hatchery ─────────────────────────────────────────────────────────────────
 
@@ -42,7 +43,9 @@ const maxActiveActors = 500_000
 //   - Context cancellation is checked on every tick; the dispatch loop exits
 //     cleanly without spawning further goroutines.
 type hatchery struct {
-	e *Engine // back-pointer to shared Engine state
+	e         *Engine // back-pointer to shared Engine state
+	tripCount int     // consecutive ticks where activeActors > 3*expected
+	tripped   bool    // latched state to prevent violent oscillation
 }
 
 // run reads SpawnManifests from manifestCh and dispatches Actors for each.
@@ -125,12 +128,58 @@ func (h *hatchery) dispatch(
 			batch++
 		}
 
+		// Evaluate Little's Law Backpressure (Layer 1) once per tick.
+		// Expected concurrency = TargetRPS * p50_latency_seconds
+		_, _, p50Ms, _, _ := h.e.computeLatency()
+		targetRPS := float64(h.e.targetRPS.Load())
+		expectedConcurrency := targetRPS * (p50Ms / 1000.0)
+		active := float64(h.e.activeActors.Load())
+
+		// We need an absolute minimum threshold to prevent violent tripping on extremely fast servers
+		// or low volume tests where normal jitter would instantly cross a tiny relative threshold.
+		// Never trip if active actors < 2000.
+		threshold := expectedConcurrency * 3.0
+		if threshold < 2000.0 {
+			threshold = 2000.0
+		}
+
+		uptime := h.e.GetElapsedTime()
+		if h.tripped {
+			// Disengage only when the server catches up and drains the queue to healthy levels (80% of threshold)
+			if active < threshold*0.8 {
+				h.tripped = false
+				h.tripCount = 0
+			}
+		} else {
+			// Warm-up protection: Don't trip in the first 2 seconds.
+			if uptime > 2.0 && expectedConcurrency > 0 && active > threshold {
+				h.tripCount++
+				if h.tripCount >= 5 {
+					h.tripped = true
+				}
+			} else {
+				h.tripCount = 0
+			}
+		}
+
+		// Calculate effective ceiling for this tick
+		effectiveCeiling := maxActiveActors
+		if h.tripped {
+			// Mathematical trip: cap at the threshold to smoothly trim the queue
+			// instead of brutally dropping to 0.
+			if int(threshold) < effectiveCeiling {
+				effectiveCeiling = int(threshold)
+			}
+		}
+
 		for i := 0; i < batch && spawned < count; i++ {
 			// MaxActors safeguard: if the host is already saturated with
 			// parked/in-flight Actors, skip this spawn rather than pile on
 			// more goroutines. Loop counters still advance so the Hatchery
 			// keeps pace with the manifest instead of stalling on a full tick.
-			if h.e.activeActors.Load() >= maxActiveActors {
+			if int(h.e.activeActors.Load()) >= effectiveCeiling {
+				shard := *spawnIdx % numShards
+				h.e.counters.incDropped(shard)
 				*spawnIdx++
 				spawned++
 				continue

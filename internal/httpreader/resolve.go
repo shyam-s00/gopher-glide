@@ -1,9 +1,9 @@
 package httpreader
 
 import (
-	"bytes"
 	"crypto/rand"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -101,11 +101,11 @@ func (r *RequestSpec) ToHTTPRequest(vars map[string]string) (*http.Request, erro
 		body = strings.ReplaceAll(body, placeholder, v)
 	}
 
-	var bodyReader *bytes.Buffer
+	var bodyReader io.Reader
 	if body != "" {
-		bodyReader = bytes.NewBufferString(body)
+		bodyReader = strings.NewReader(body)
 	} else {
-		bodyReader = bytes.NewBuffer([]byte{})
+		bodyReader = http.NoBody
 	}
 
 	req, err := http.NewRequest(r.Method, url, bodyReader)
