@@ -25,7 +25,7 @@ hide:
 
 By isolating each concurrent connection into an ultra-lightweight Goroutine and utilizing lock-free message passing, Gopher-Glide bypasses traditional memory and scheduling bottlenecks. A single instance can easily generate **over 50,000 RPS on a standard multi-core machine** with a proven zero-garbage (`0 allocs/op`) metrics subsystem. 
 
-> **⚔️ Resource Benchmark:** At 10,000 RPS, `gg` consumes **4.2x less RAM** and **26% less CPU time** than Grafana `k6`, while suffering 3x fewer OS context switches. [Read the full benchmark breakdown](BENCHMARKS.md) to see how `gg` safely simulates massive traffic inside resource-constrained CI/CD pipelines.
+> **⚔️ Resource Benchmark:** At 30,000 RPS target load, `gg` consumes **40% less RAM** (1.42 GB vs 2.38 GB) and delivers **3x more successful requests** than `k6`. `gg`'s dynamic Adaptive Backpressure natively protects the target server by gracefully throttling excess traffic when the server locks up, ensuring maximum goodput instead of blindly pushing the network into a catastrophic deadlock. [Read the full benchmark breakdown](BENCHMARKS.md) to see how `gg` safely simulates massive traffic inside resource-constrained CI/CD pipelines.
 
 Whether you are running on a high-end developer workstation, a standard laptop, or a virtualized cloud runner, the engine scales linearly to extract maximum value from your hardware. Check out the full [Performance Benchmarks](BENCHMARKS.md) to see the cross-platform scaling data.
 

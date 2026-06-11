@@ -44,6 +44,7 @@ func (e *Engine) GetMetrics() *engine.MetricsSnapshot {
 		TotalRequests: total,
 		SuccessCount:  success,
 		FailureCount:  failed,
+		DroppedCount:  e.counters.loadDroppedCount(),
 		AvgLatency:    avgLatency,
 		ErrorRate:     errorRate,
 		Throughput:    throughput,

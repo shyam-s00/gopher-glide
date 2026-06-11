@@ -536,6 +536,7 @@ func (e *Engine) GetMetrics() *MetricsSnapshot {
 		TotalRequests: total,
 		SuccessCount:  success,
 		FailureCount:  failed,
+		DroppedCount:  0, // Legacy engine does not support DroppedCount
 		AvgLatency:    avgLatency,
 		ErrorRate:     errorRate,
 		Throughput:    throughput,
