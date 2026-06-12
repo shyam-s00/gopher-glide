@@ -24,7 +24,7 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
 
-const userAgent = "gg/1.0"
+const userAgent = httpreader.UserAgent
 
 // ── Engine ────────────────────────────────────────────────────────────────────
 

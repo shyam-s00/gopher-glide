@@ -24,7 +24,7 @@ func Extract(body []byte, d httpreader.ExportDirective) (string, error) {
 	case httpreader.ExportEngineJSONPath:
 		return extractJSONPath(body, d.Pattern)
 	case httpreader.ExportEngineRegex:
-		return extractRegex(body, d.Pattern)
+		return extractRegex(body, d.CompiledRegex, d.Pattern)
 	default:
 		return "", fmt.Errorf("extractor: unknown engine %q", d.Engine)
 	}
@@ -165,13 +165,16 @@ func valueToString(v interface{}) (string, error) {
 
 // ── Regex ─────────────────────────────────────────────────────────────────────
 
-// extractRegex compiles pattern and returns the first capture group of the
+// extractRegex executes the pre-compiled regex and returns the first capture group of the
 // first match found in body. If the pattern contains no capture groups the
 // full match is returned instead.
-func extractRegex(body []byte, pattern string) (string, error) {
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return "", fmt.Errorf("extractor: invalid regex %q: %w", pattern, err)
+func extractRegex(body []byte, re *regexp.Regexp, pattern string) (string, error) {
+	if re == nil {
+		var err error
+		re, err = regexp.Compile(pattern)
+		if err != nil {
+			return "", fmt.Errorf("extractor: invalid regex %q: %w", pattern, err)
+		}
 	}
 
 	matches := re.FindSubmatch(body)

@@ -152,6 +152,10 @@ func Parse(content string) ([]RequestSpec, error) {
 		return nil, fmt.Errorf("scanner error: %w", err)
 	}
 
+	for i := range requests {
+		requests[i].Compile()
+	}
+
 	return requests, nil
 }
 
