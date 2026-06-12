@@ -1,35 +1,22 @@
 # The Terminal UI (TUI)
 
+Gopher Glide features a highly polished, interactive Terminal UI designed for real-time observability. Our latest revamp introduces a premium aesthetic powered by a semantic color palette, delivering a clean, modern experience directly in your terminal.
+
+![Gopher Glide TUI Demo](assets/demo.gif)
+
 ## TUI Dashboard
 
-```text
-  gg ─ Gopher Glide  v1.0.0      ● RUNNING      ⏱  00:42 
+The dashboard provides an at-a-glance view of your load test's vital signs, including configuration parameters, real-time throughput metrics, latency percentiles, and a visual stage timeline representing your current progress within the load profile.
 
- ╭─ Configuration ───────╮ ╭─ Throughput ──────────╮ ╭─ Latency ─────────────╮
- │ Target RPS       50   │ │ RPS           48.2    │ │ Avg       142.3 ms    │
- │ Active Actors    18   │ │ Completed    1,446    │ │ Min        88.1 ms    │
- │ Duration        70s   │ │ Errors          12    │ │ Max       310.5 ms    │
- │ Jitter         ±10%   │ │ Error Rate    0.8%    │ │ p95       278.4 ms    │
- │ Profile  flash-sale   │ │                       │ │ p99       305.2 ms    │
- ╰───────────────────────╯ ╰───────────────────────╯ ╰───────────────────────╯
+### Premium Aesthetics & Themes
 
- ╭─ Stage Timeline ──────────────────────────────────────────────────────────╮
- │ 500 ┤                       █████████                                     │
- │     │               ▒▒▒▒▒▒▒▒█████████▒▒▒▒▒▒                               │
- │     │        ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒                   ▒▒▒▒▒▒▒▒                   │
- │   0 ┤▒▒▒▒▒▒▒                                           ▒▒▒▒▒▒▒▒▒          │
- │                                                                           │
- │      [1/5] Ramp Up  •  stage 0:10 / 0:10  •  total 0:42 / 1:10            │
- ╰───────────────────────────────────────────────────────────────────────────╯
+The TUI is built on a custom styling engine. It supports full semantic theming so the entire dashboard can be cleanly restyled without touching component code. 
 
-  ↑ +5 rps    ↓ -5 rps    f toggle logs (ALL)    q quit        BIAS +10 RPS 
+Currently, Gopher Glide defaults to a beautifully balanced **Catppuccin Macchiato** inspired palette, ensuring your load tests look as good as they run.
 
- ╭─ Call Log ────────────────────────────────────────────────────────────────╮
- │ [200] GET  /api/v1/users/me           142ms                               │
- │ [201] POST /api/v1/checkout           210ms                               │
- │ [500] POST /api/v1/auth               305ms  (connection reset by peer)   │
- ╰───────────────────────────────────────────────────────────────────────────╯
-```
+### Performance & Framerate
+
+The TUI is highly optimized to ensure it doesn't interfere with the load test itself. It targets a smooth **~24 FPS** (refreshing every 42ms) to provide a highly responsive, real-time observability experience without consuming excessive CPU cycles.
 
 ### Keybindings
 

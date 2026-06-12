@@ -21,13 +21,9 @@ hide:
 <div class="tx-feature-text" markdown="1">
 
 ## The Hive Engine 🐝
-**A modern architecture for massive scale.** While older tools rely on heavy OS threads or memory-intensive Virtual Machines, the newly released Hive Engine (v0.9.0) flips the paradigm with a pure-Go Actor Model.
+**A modern architecture for massive scale.** Unlike older tools relying on heavy OS threads, the new Hive Engine uses a pure-Go lock-free Actor Model. 
 
-By isolating each concurrent connection into an ultra-lightweight Goroutine and utilizing lock-free message passing, Gopher-Glide bypasses traditional memory and scheduling bottlenecks. A single instance can easily generate **over 50,000 RPS on a standard multi-core machine** with a proven zero-garbage (`0 allocs/op`) metrics subsystem. 
-
-> **⚔️ Resource Benchmark:** At 10,000 RPS, `gg` consumes **4.2x less RAM** and **26% less CPU time** than Grafana `k6`, while suffering 3x fewer OS context switches. [Read the full benchmark breakdown](BENCHMARKS.md) to see how `gg` safely simulates massive traffic inside resource-constrained CI/CD pipelines.
-
-Whether you are running on a high-end developer workstation, a standard laptop, or a virtualized cloud runner, the engine scales linearly to extract maximum value from your hardware. Check out the full [Performance Benchmarks](BENCHMARKS.md) to see the cross-platform scaling data.
+By isolating connections into ultra-lightweight Goroutines, a single instance can easily generate **over 50,000 RPS** with zero-garbage (`0 allocs/op`) overhead.
 
 </div>
 <div class="tx-feature-visual" markdown="1">
@@ -43,6 +39,12 @@ graph TD
 
 </div>
 </div>
+
+> **⚔️ Resource Benchmark:** At 10,000 RPS, `gg` consumes **4.2x less RAM** and **26% less CPU time** than Grafana `k6`, while suffering 3x fewer OS context switches. [Read the full benchmark breakdown](BENCHMARKS.md) to see how `gg` safely simulates massive traffic inside resource-constrained CI/CD pipelines.
+
+Whether you are running on a high-end developer workstation, a standard laptop, or a virtualized cloud runner, the engine scales linearly to extract maximum value from your hardware. Check out the full [Performance Benchmarks](BENCHMARKS.md) to see the cross-platform scaling data.
+
+
 
 <div class="tx-feature-row reverse" markdown="1">
 <div class="tx-feature-text" markdown="1">
@@ -105,7 +107,7 @@ $ gg --hive-engine \
 <div class="tx-feature-text" markdown="1">
 
 ## Interactive Chaos TUI
-Adjust traffic in real-time using the newly polished, butter-smooth 30-FPS interactive TUI. Bias RPS up or down using your arrow keys, and watch the beautiful terminal UI react instantly without stutter or lag. 
+Adjust traffic in real-time using the newly polished, premium interactive TUI. Targeting a smooth **~24 FPS**, you can bias RPS up or down using your arrow keys, and watch the terminal UI react instantly without stutter or lag—styled beautifully by default with a Catppuccin Macchiato palette.
 
 Combined with the `--snap` flag, you can record behavioral snapshots of your API's latency, status distributions, and inferred JSON schemas.
 

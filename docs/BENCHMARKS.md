@@ -33,7 +33,7 @@ When building a high-traffic system, two things matter most: **maximum throughpu
 
 ---
 
-## ⚔️ Gopher Glide vs. Grafana k6 (Resource Efficiency)
+## ⚔️ Gopher Glide vs. k6 (Resource Efficiency)
 
 Because `k6` scales concurrency by spinning up embedded JavaScript Virtual Machines (Goja) for every virtual user, its resource footprint scales aggressively. Gopher Glide operates entirely via native Go actors and lock-free atomics, completely decoupling high throughput from memory and CPU bloat.
 
@@ -54,6 +54,36 @@ Because `k6` scales concurrency by spinning up embedded JavaScript Virtual Machi
 | **Page Faults** (Memory) | **0** | 363 | `gg` achieves perfect memory localization |
 
 * **The Takeaway:** Gopher Glide requires roughly **80 MB** of additional RAM to double its throughput from 5k to 10k RPS, while `k6` requires an additional **332 MB**. Furthermore, because `gg` uses Go's user-space M:N scheduling (Goroutines) and zero-allocation hot paths, it drastically reduces kernel syscalls and OS context switching. This ensures your CI/CD runner is dedicated to pushing network traffic—not fighting a JavaScript VM's garbage collector.
+
+---
+
+## 🛡️ Gopher Glide vs. k6 (Goodput & Adaptive Backpressure)
+
+While the previous section showed how efficient `gg` is under normal load, this benchmark tests what happens when the target server **fails**.
+
+Because `k6` operates as a traditional "Closed Model" load tester, it scales concurrency by blindly hammering the target server until it hits a wall. Gopher Glide operates as a true "Open Model" with mathematical **Adaptive Backpressure**—it natively protects the target server from catastrophic deadlocks.
+
+In a saturation test pushing an impossible target of **30,000 RPS** (attempting ~900k total requests over 30 seconds), both engines correctly identified the physical limit of the target NGINX server (delivering exactly ~92,000 requests to the network before the server choked). However, the *outcomes* were vastly different:
+
+### 🧠 The "Mic Drop" Metric: Successful Goodput
+
+| Metric | Gopher Glide (`gg`) | `k6` | The Difference |
+| :--- | :--- | :--- | :--- |
+| **Total Requests Sent** | 92,059 | 92,184 | Both hit the exact same physical server bottleneck. |
+| **Successful Responses** | **76,140** | 25,753 | `gg` delivered **~3x MORE successful requests**. |
+| **Failure Rate** | **17.29%** | 72.06% | `k6` pushed the server into a total deadlock. |
+
+**Why did this happen?**
+When `k6` hit the server's limit, it just kept violently spawning virtual users, forcing the target server into a total deadlock where 72% of the connections timed out or were refused. 
+
+When `gg` detected the server slowing down, its **Adaptive Backpressure** instantly engaged. `gg` gracefully throttled the excess traffic locally. Because it stopped slamming the network with useless dead-end connections, the target server was actually able to breathe and successfully process the traffic. `gg` acts like an intelligent edge proxy, maximizing your server's Goodput under extreme duress.
+
+### ⚡ Memory Protection at Saturation
+
+| Engine | Peak Memory (RAM) | Efficiency |
+| :--- | :--- | :--- |
+| **Gopher Glide (`gg`)** | **1.42 GB** | **40% less RAM** required to handle 10k blocked sockets. |
+| **`k6`** | 2.38 GB | Heavy JavaScript VM bloat under deadlock conditions. |
 
 ---
 
