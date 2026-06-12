@@ -15,6 +15,7 @@ type MetricsSnapshot struct {
 	TotalRequests int64
 	SuccessCount  int64
 	FailureCount  int64
+	DroppedCount  int64
 	AvgLatency    float64
 	MinLatency    float64
 	MaxLatency    float64

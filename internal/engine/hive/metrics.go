@@ -40,6 +40,7 @@ type metrics struct {
 	totalRequests [numShards]paddedCounter
 	successCount  [numShards]paddedCounter
 	failureCount  [numShards]paddedCounter
+	droppedCount  [numShards]paddedCounter
 	totalLatency  [numShards]paddedCounter // cumulative milliseconds
 }
 
@@ -55,6 +56,10 @@ func (m *metrics) incSuccess(shard int) {
 
 func (m *metrics) incFailure(shard int) {
 	atomic.AddInt64(&m.failureCount[shard%numShards].value, 1)
+}
+
+func (m *metrics) incDropped(shard int) {
+	atomic.AddInt64(&m.droppedCount[shard%numShards].value, 1)
 }
 
 func (m *metrics) addLatency(shard int, ms int64) {
@@ -83,6 +88,14 @@ func (m *metrics) loadFailureCount() int64 {
 	var n int64
 	for i := range m.failureCount {
 		n += atomic.LoadInt64(&m.failureCount[i].value)
+	}
+	return n
+}
+
+func (m *metrics) loadDroppedCount() int64 {
+	var n int64
+	for i := range m.droppedCount {
+		n += atomic.LoadInt64(&m.droppedCount[i].value)
 	}
 	return n
 }

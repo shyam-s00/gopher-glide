@@ -2,6 +2,7 @@ package hive
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
@@ -23,9 +24,21 @@ const hatcheryTick = 10 * time.Millisecond
 // Under the Arrival Rate model, Target RPS now drives how many Actors are
 // spawned per second regardless of how long their journeys take to complete.
 // A slow target (e.g. 10 s response latency) at 50 000 iter/s would otherwise
-// accumulate 500 000 parked goroutines in just 10 seconds. This limit caps
-// that growth so the host OS is never driven into OOM territory.
-const maxActiveActors = 500_000
+// accumulate 500 000 parked goroutines in just 10 seconds. We cap this to
+// 10,000 to prevent OOM. Each blocked Actor consumes ~20KB (goroutine stack
+// + http.Request + Headers map), so 10,000 actors = ~200MB max overhead.
+const maxActiveActors = 10_000
+
+// backpressureCheckInterval throttles how often the Hatchery recomputes
+// p50 latency for the Little's Law trip check.
+//
+// computeLatency() sorts a 4 096-sample window on every call (~32 KB alloc +
+// ~49K comparisons). At the 10 ms hatcheryTick this would run at 100 Hz —
+// 10x more often than the TUI's own ~24 Hz refresh actually needs, adding
+// GC pressure that competes with the TUI's render goroutine for scheduling.
+// p50 latency does not meaningfully change within 100 ms, so the cached
+// value is reused between recomputations.
+const backpressureCheckInterval = 100 * time.Millisecond
 
 // ── hatchery ─────────────────────────────────────────────────────────────────
 
@@ -42,7 +55,15 @@ const maxActiveActors = 500_000
 //   - Context cancellation is checked on every tick; the dispatch loop exits
 //     cleanly without spawning further goroutines.
 type hatchery struct {
-	e *Engine // back-pointer to shared Engine state
+	e         *Engine // back-pointer to shared Engine state
+	tripMu    sync.Mutex
+	tripCount int  // consecutive ticks where activeActors > 3*expected
+	tripped   bool // latched state to prevent violent oscillation
+
+	// p50 latency cache for the backpressure check — recomputed at most
+	// once per backpressureCheckInterval (see constant doc).
+	lastLatencyCheck time.Time
+	cachedP50Ms      float64
 }
 
 // run reads SpawnManifests from manifestCh and dispatches Actors for each.
@@ -125,12 +146,72 @@ func (h *hatchery) dispatch(
 			batch++
 		}
 
+		// Evaluate Little's Law Backpressure (Layer 1).
+		// Expected concurrency = TargetRPS * p50_latency_seconds
+		//
+		// p50 is recomputed at most once per backpressureCheckInterval —
+		// see its doc comment for why per-tick recomputation is wasteful.
+		//
+		// tripMu serializes the cache update and trip-state machine: dispatch
+		// is normally single-goroutine, but tripMu also makes concurrent
+		// dispatch (e.g. from tests) race-free.
+		h.tripMu.Lock()
+		now := time.Now()
+		if now.Sub(h.lastLatencyCheck) >= backpressureCheckInterval {
+			_, _, p50Ms, _, _ := h.e.computeLatency()
+			h.cachedP50Ms = p50Ms
+			h.lastLatencyCheck = now
+		}
+		targetRPS := float64(h.e.targetRPS.Load())
+		expectedConcurrency := targetRPS * (h.cachedP50Ms / 1000.0)
+		active := float64(h.e.activeActors.Load())
+
+		// We need an absolute minimum threshold to prevent violent tripping on extremely fast servers
+		// or low volume tests where normal jitter would instantly cross a tiny relative threshold.
+		// Never trip if active actors < 2000.
+		threshold := expectedConcurrency * 3.0
+		if threshold < 2000.0 {
+			threshold = 2000.0
+		}
+
+		uptime := h.e.GetElapsedTime()
+		if h.tripped {
+			// Disengage only when the server catches up and drains the queue to healthy levels (80% of threshold)
+			if active < threshold*0.8 {
+				h.tripped = false
+				h.tripCount = 0
+			}
+		} else {
+			// Warm-up protection: Don't trip in the first 2 seconds.
+			if uptime > 2.0 && expectedConcurrency > 0 && active > threshold {
+				h.tripCount++
+				if h.tripCount >= 5 {
+					h.tripped = true
+				}
+			} else {
+				h.tripCount = 0
+			}
+		}
+
+		// Calculate effective ceiling for this tick
+		effectiveCeiling := maxActiveActors
+		if h.tripped {
+			// Mathematical trip: cap at the threshold to smoothly trim the queue
+			// instead of brutally dropping to 0.
+			if int(threshold) < effectiveCeiling {
+				effectiveCeiling = int(threshold)
+			}
+		}
+		h.tripMu.Unlock()
+
 		for i := 0; i < batch && spawned < count; i++ {
 			// MaxActors safeguard: if the host is already saturated with
 			// parked/in-flight Actors, skip this spawn rather than pile on
 			// more goroutines. Loop counters still advance so the Hatchery
 			// keeps pace with the manifest instead of stalling on a full tick.
-			if h.e.activeActors.Load() >= maxActiveActors {
+			if int(h.e.activeActors.Load()) >= effectiveCeiling {
+				shard := *spawnIdx % numShards
+				h.e.counters.incDropped(shard)
 				*spawnIdx++
 				spawned++
 				continue

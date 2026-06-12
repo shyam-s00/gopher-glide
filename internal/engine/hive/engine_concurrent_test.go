@@ -112,7 +112,7 @@ func TestConcurrent_LogCall_ConcurrentWritesAndReads(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < callsEach; j++ {
-				e.logCall("GET", "http://example.com", 200, time.Millisecond, nil)
+				e.logCall(0, "GET", "http://example.com", 200, time.Millisecond, nil)
 			}
 		}()
 	}
@@ -148,7 +148,7 @@ func TestConcurrent_LogCall_ErrorBuffer_NeverExceedsMax(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < callsEach; j++ {
-				e.logCall("GET", "http://example.com", 500, time.Millisecond, ErrHttpError)
+				e.logCall(0, "GET", "http://example.com", 500, time.Millisecond, ErrHttpError)
 			}
 		}()
 	}
@@ -388,7 +388,7 @@ func TestConcurrent_LogBuffer_NoPanicOnEviction(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < ops; j++ {
 				if isWriter {
-					e.logCall("GET", "http://example.com", 200, time.Millisecond, nil)
+					e.logCall(0, "GET", "http://example.com", 200, time.Millisecond, nil)
 				} else {
 					_ = e.GetRecentLogs(5)
 				}

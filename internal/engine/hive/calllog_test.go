@@ -17,7 +17,7 @@ func newTestEngine() *Engine {
 
 func TestLogCall_SuccessPath(t *testing.T) {
 	e := newTestEngine()
-	e.logCall("GET", "http://example.com/ok", http.StatusOK, 10*time.Millisecond, nil)
+	e.logCall(0, "GET", "http://example.com/ok", http.StatusOK, 10*time.Millisecond, nil)
 
 	logs := e.GetRecentLogs(10)
 	if len(logs) != 1 {
@@ -46,7 +46,7 @@ func TestLogCall_SuccessPath(t *testing.T) {
 
 func TestLogCall_SuccessNotInErrorLog(t *testing.T) {
 	e := newTestEngine()
-	e.logCall("GET", "http://example.com/ok", http.StatusOK, 5*time.Millisecond, nil)
+	e.logCall(0, "GET", "http://example.com/ok", http.StatusOK, 5*time.Millisecond, nil)
 
 	errs := e.GetRecentErrorLogs(10)
 	if len(errs) != 0 {
@@ -58,7 +58,7 @@ func TestLogCall_SuccessNotInErrorLog(t *testing.T) {
 
 func TestLogCall_TransportError(t *testing.T) {
 	e := newTestEngine()
-	e.logCall("POST", "http://example.com/fail", 0, 1*time.Millisecond, errors.New("connection refused"))
+	e.logCall(0, "POST", "http://example.com/fail", 0, 1*time.Millisecond, errors.New("connection refused"))
 
 	logs := e.GetRecentLogs(10)
 	if len(logs) != 1 {
@@ -81,7 +81,7 @@ func TestLogCall_TransportError(t *testing.T) {
 
 func TestLogCall_4xxRoutedToErrorLog(t *testing.T) {
 	e := newTestEngine()
-	e.logCall("GET", "http://example.com/notfound", http.StatusNotFound, 8*time.Millisecond, nil)
+	e.logCall(0, "GET", "http://example.com/notfound", http.StatusNotFound, 8*time.Millisecond, nil)
 
 	errs := e.GetRecentErrorLogs(10)
 	if len(errs) != 1 {
@@ -96,7 +96,7 @@ func TestLogCall_4xxRoutedToErrorLog(t *testing.T) {
 
 func TestLogCall_5xxRoutedToErrorLog(t *testing.T) {
 	e := newTestEngine()
-	e.logCall("PUT", "http://example.com/err", http.StatusInternalServerError, 20*time.Millisecond, nil)
+	e.logCall(0, "PUT", "http://example.com/err", http.StatusInternalServerError, 20*time.Millisecond, nil)
 
 	errs := e.GetRecentErrorLogs(10)
 	if len(errs) != 1 {
@@ -114,7 +114,7 @@ func TestLogCall_BufferEvictionCap(t *testing.T) {
 
 	// Insert 120 entries — oldest 20 must be evicted.
 	for i := 0; i < 120; i++ {
-		e.logCall("GET", "http://example.com", http.StatusOK, time.Millisecond, nil)
+		e.logCall(0, "GET", "http://example.com", http.StatusOK, time.Millisecond, nil)
 	}
 
 	logs := e.GetRecentLogs(200) // ask for more than the cap
@@ -127,7 +127,7 @@ func TestLogCall_ErrorBufferEvictionCap(t *testing.T) {
 	e := newTestEngine()
 
 	for i := 0; i < 120; i++ {
-		e.logCall("GET", "http://example.com", http.StatusBadGateway, time.Millisecond, nil)
+		e.logCall(0, "GET", "http://example.com", http.StatusBadGateway, time.Millisecond, nil)
 	}
 
 	errs := e.GetRecentErrorLogs(200)
@@ -143,7 +143,7 @@ func TestGetRecentLogs_CountClamping(t *testing.T) {
 
 	// Insert only 3 entries, request 10.
 	for i := 0; i < 3; i++ {
-		e.logCall("GET", "http://example.com", http.StatusOK, time.Millisecond, nil)
+		e.logCall(0, "GET", "http://example.com", http.StatusOK, time.Millisecond, nil)
 	}
 
 	logs := e.GetRecentLogs(10)
@@ -154,7 +154,7 @@ func TestGetRecentLogs_CountClamping(t *testing.T) {
 
 func TestGetRecentLogs_ZeroCount(t *testing.T) {
 	e := newTestEngine()
-	e.logCall("GET", "http://example.com", http.StatusOK, time.Millisecond, nil)
+	e.logCall(0, "GET", "http://example.com", http.StatusOK, time.Millisecond, nil)
 
 	logs := e.GetRecentLogs(0)
 	if logs == nil {
@@ -172,7 +172,7 @@ func TestGetRecentLogs_Ordering(t *testing.T) {
 
 	urls := []string{"http://a.com", "http://b.com", "http://c.com"}
 	for _, u := range urls {
-		e.logCall("GET", u, http.StatusOK, time.Millisecond, nil)
+		e.logCall(0, "GET", u, http.StatusOK, time.Millisecond, nil)
 	}
 
 	logs := e.GetRecentLogs(2) // should return b and c
@@ -206,7 +206,7 @@ func TestLogCallForTest_Shim(t *testing.T) {
 
 func TestGetRecentLogs_ReturnsCopies(t *testing.T) {
 	e := newTestEngine()
-	e.logCall("GET", "http://example.com", http.StatusOK, time.Millisecond, nil)
+	e.logCall(0, "GET", "http://example.com", http.StatusOK, time.Millisecond, nil)
 
 	logs := e.GetRecentLogs(1)
 	logs[0].Url = "http://mutated.com" // mutate the returned copy
@@ -228,7 +228,7 @@ func TestLogCall_ConcurrentWritesAndReads(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func() {
 			for j := 0; j < 50; j++ {
-				e.logCall("GET", "http://example.com", http.StatusOK, time.Millisecond, nil)
+				e.logCall(0, "GET", "http://example.com", http.StatusOK, time.Millisecond, nil)
 			}
 			done <- struct{}{}
 		}()

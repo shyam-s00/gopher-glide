@@ -124,12 +124,29 @@ type layout struct {
 	logWidth   int
 }
 
+// yAxisWidth returns the width reserved for the y-axis label column,
+// including its trailing space. The default (5) fits up to 4-digit RPS
+// values (e.g. " 9999 "); plans with a peak RPS of 10000 or more need an
+// extra column per additional digit, otherwise the axis labels overflow
+// their reserved column and the chart grid shifts out of alignment.
+func (m model) yAxisWidth() int {
+	peak := 0
+	if m.config != nil {
+		peak = m.config.PeakRPS()
+	}
+	w := len(fmt.Sprintf("%d", peak)) + 1
+	if w < yAxisWidth {
+		w = yAxisWidth
+	}
+	return w
+}
+
 func (m model) computeChartWidth() int {
 	w := m.width
 	if w < minWidth {
 		w = minWidth
 	}
-	cw := w - yAxisWidth - 1 - 6
+	cw := w - m.yAxisWidth() - 1 - 6
 	if cw < 20 {
 		cw = 20
 	}
@@ -165,11 +182,19 @@ func (m model) computeLayoutForHeights(headerH, timelineH int) layout {
 		w = minWidth
 	}
 	const fallbackUsed = 41 // header(22) + timeline(16) + hintBar(1) + logBorder(2)
+	// The "Server Saturated" banner (rendered in View when DroppedCount > 0)
+	// adds 3 lines (MarginTop + content + MarginBottom). Without subtracting
+	// it here, total rendered height exceeds the terminal height and the
+	// alt-screen scrolls the title bar off the top.
+	bannerH := 0
+	if m.metrics != nil && m.metrics.DroppedCount > 0 {
+		bannerH = 3
+	}
 	var logH int
 	if m.ready {
-		logH = m.height - headerH - timelineH - 1 - 2
+		logH = m.height - headerH - timelineH - 1 - 2 - bannerH
 	} else {
-		logH = m.height - fallbackUsed
+		logH = m.height - fallbackUsed - bannerH
 	}
 	if logH < 3 {
 		logH = 3
@@ -298,6 +323,7 @@ func (m model) renderHeader() string {
 				kv("Total Requests:", fmt.Sprintf("%d", m.metrics.TotalRequests)),
 				kvr("Success:", styles.SuccessBold.Render(fmt.Sprintf("%d", m.metrics.SuccessCount))),
 				kvr("Failed:", styles.ErrorBold.Render(fmt.Sprintf("%d", m.metrics.FailureCount))),
+				kvr("Dropped:", styles.Highlight.Render(fmt.Sprintf("%d", m.metrics.DroppedCount))),
 				kv("Error Rate:", fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
 			},
 		}
@@ -315,6 +341,7 @@ func (m model) renderHeader() string {
 				kv("Total Requests:", fmt.Sprintf("%d", m.metrics.TotalRequests)),
 				kvr("Success:", styles.SuccessBold.Render(fmt.Sprintf("%d", m.metrics.SuccessCount))),
 				kvr("Failed:", styles.ErrorBold.Render(fmt.Sprintf("%d", m.metrics.FailureCount))),
+				kvr("Dropped:", styles.Highlight.Render(fmt.Sprintf("%d", m.metrics.DroppedCount))),
 				kv("Error Rate:", fmt.Sprintf("%.2f%%", m.metrics.ErrorRate*100)),
 			},
 		}
@@ -604,21 +631,22 @@ func (m model) renderTimeline() string {
 
 	// y-axis tick positions
 
+	yLabelWidth := m.yAxisWidth() - 1
 	for r := 0; r < chartHeight; r++ {
 		var yLabel string
 		var axisChar string
 		switch r {
 		case 0:
-			yLabel = fmt.Sprintf("%4d", peakRPS)
+			yLabel = fmt.Sprintf("%*d", yLabelWidth, peakRPS)
 			axisChar = "┤"
 		case chartHeight / 2:
-			yLabel = fmt.Sprintf("%4d", peakRPS/2)
+			yLabel = fmt.Sprintf("%*d", yLabelWidth, peakRPS/2)
 			axisChar = "┤"
 		case chartHeight - 1:
-			yLabel = "   0"
+			yLabel = fmt.Sprintf("%*d", yLabelWidth, 0)
 			axisChar = "┤"
 		default:
-			yLabel = "    "
+			yLabel = strings.Repeat(" ", yLabelWidth)
 			axisChar = "│"
 		}
 		sb.WriteString(styles.MetricLabel.Render(yLabel+" ") + styles.Boundary.Render(axisChar))
@@ -638,7 +666,7 @@ func (m model) renderTimeline() string {
 			xAxis[i] = '─'
 		}
 	}
-	sb.WriteString(styles.MetricLabel.Render(strings.Repeat(" ", yAxisWidth)) + styles.Boundary.Render("└"+string(xAxis)) + "\n")
+	sb.WriteString(styles.MetricLabel.Render(strings.Repeat(" ", m.yAxisWidth())) + styles.Boundary.Render("└"+string(xAxis)) + "\n")
 
 	// Stage number labels
 	labelRow := make([]rune, chartWidth)
@@ -670,7 +698,7 @@ func (m model) renderTimeline() string {
 			}
 		}
 	}
-	sb.WriteString(strings.Repeat(" ", yAxisWidth+1))
+	sb.WriteString(strings.Repeat(" ", m.yAxisWidth()+1))
 	sb.WriteString(styles.MetricLabel.Render(string(labelRow)) + "\n")
 
 	// Info bar
@@ -942,7 +970,26 @@ func (m model) View() string {
 
 	header := m.renderHeader()
 	timeline := m.renderTimeline()
-	l := m.computeLayoutForHeights(lipgloss.Height(header), lipgloss.Height(timeline))
+	headerH := lipgloss.Height(header)
+	timelineH := lipgloss.Height(timeline)
+
+	// The header, timeline, director bar, log box border, and a minimum
+	// 3-line log area are all fixed-height. If the terminal is shorter than
+	// their combined height, the alt-screen silently scrolls the overflow
+	// off the top — pushing the header (the first thing rendered) out of
+	// view. Bail out with a resize prompt instead, mirroring the width check
+	// above.
+	bannerH := 0
+	if m.metrics.DroppedCount > 0 {
+		bannerH = 3
+	}
+	const directorBarH, logBorderH, minLogH = 1, 2, 3
+	minHeight := headerH + timelineH + directorBarH + logBorderH + minLogH + bannerH
+	if m.height < minHeight {
+		return fmt.Sprintf("\n  Terminal too short (%d rows). Please resize to at least %d rows.", m.height, minHeight)
+	}
+
+	l := m.computeLayoutForHeights(headerH, timelineH)
 
 	// ── director / hint bar ───────────────────────────────────────────────
 	biasStr := ""
@@ -975,11 +1022,29 @@ func (m model) View() string {
 
 	logBox := styles.PanelBase.Width(l.logWidth).Height(l.logHeight).Render(m.logView.View())
 
+	var bottomBlocks []string
+
+	if m.metrics.DroppedCount > 0 {
+		warningBanner := lipgloss.NewStyle().
+			Background(theme().Warning).
+			Foreground(theme().OnAccent).
+			Bold(true).
+			Padding(0, 1).
+			MarginTop(1).
+			MarginBottom(1).
+			Render(" [WARNING] Engine Throttling: Target Unresponsive ")
+		bottomBlocks = append(bottomBlocks, warningBanner)
+	}
+
+	bottomBlocks = append(bottomBlocks, logBox)
+
+	footerStr := lipgloss.JoinVertical(lipgloss.Left, bottomBlocks...)
+
 	return lipgloss.JoinVertical(lipgloss.Left,
 		header,
 		timeline,
 		directorBar,
-		logBox,
+		footerStr,
 	)
 }
 

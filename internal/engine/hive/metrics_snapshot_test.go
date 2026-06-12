@@ -206,8 +206,8 @@ func TestGetMetrics_ZeroTotalNoDivisionByZero(t *testing.T) {
 
 func TestGetMetrics_CallLogIntegration(t *testing.T) {
 	e := New()
-	e.logCall("GET", "http://example.com", http.StatusOK, 5*time.Millisecond, nil)
-	e.logCall("GET", "http://example.com", http.StatusInternalServerError, 8*time.Millisecond, nil)
+	e.logCall(0, "GET", "http://example.com", http.StatusOK, 5*time.Millisecond, nil)
+	e.logCall(0, "GET", "http://example.com", http.StatusInternalServerError, 8*time.Millisecond, nil)
 
 	logs := e.GetRecentLogs(10)
 	errs := e.GetRecentErrorLogs(10)
