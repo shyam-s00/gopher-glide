@@ -105,8 +105,8 @@ func New(opts ...EngineOption) *Engine {
 		sampleEvery: 20, // 5 % default — 1-in-20 responses body-sampled
 	}
 	for i := range e.logShards {
-		e.logShards[i].callLogs = make([]*engine.CallLog, 0, e.maxLogs)
-		e.logShards[i].errorLogs = make([]*engine.CallLog, 0, e.maxLogs)
+		e.logShards[i].callLogs = make([]engine.CallLog, e.maxLogs)
+		e.logShards[i].errorLogs = make([]engine.CallLog, e.maxLogs)
 	}
 	initialBuf := newLatencyBuf(1024)
 	e.latBuf.Store(&initialBuf)
@@ -220,8 +220,10 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	for i := range e.logShards {
 		s := &e.logShards[i]
 		s.mu.Lock()
-		s.callLogs = make([]*engine.CallLog, 0, e.maxLogs)
-		s.errorLogs = make([]*engine.CallLog, 0, e.maxLogs)
+		s.callLogs = make([]engine.CallLog, e.maxLogs)
+		s.callCount = 0
+		s.errorLogs = make([]engine.CallLog, e.maxLogs)
+		s.errorCount = 0
 		s.mu.Unlock()
 	}
 
