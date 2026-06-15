@@ -59,7 +59,7 @@ Accept: application/json
 ### 3. Run the simulation
 Use a built-in profile to automatically shape the traffic (e.g., ramping up, sustaining, and cooling down):
 ```bash
-gg --hive-engine --profile flash-sale --http-file api.http
+gg --profile flash-sale --http-file api.http
 ```
 
 You will instantly drop into the newly polished, butter-smooth 30-FPS Interactive Chaos TUI where you can monitor latencies and adjust the load in real-time without stutter or lag.

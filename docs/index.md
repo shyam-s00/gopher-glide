@@ -88,8 +88,7 @@ Perfect for quick validation or CI/CD pipelines where you don't want to maintain
 <div class="tx-feature-visual" markdown="1">
 
 ```bash
-$ gg --hive-engine \
-    --http-file checkout.http \
+$ gg --http-file checkout.http \
     --profile flash-sale
 
 [Stages]
@@ -168,8 +167,7 @@ jobs:
     steps:
       - name: Run API Simulator
         run: |
-          gg --hive-engine \
-            --http-file api.http \
+          gg --http-file api.http \
             --snap --snap-tag ${{ github.sha }} \
             --headless
 
@@ -253,8 +251,7 @@ Authorization: Bearer {{token}}
 <div class="tx-step-row-code" markdown="1">
 
 ```bash
-gg --hive-engine \
-  --http-file checkout.http \
+gg --http-file checkout.http \
   --profile flash-sale
 ```
 
