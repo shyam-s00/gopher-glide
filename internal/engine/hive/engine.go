@@ -28,8 +28,8 @@ const userAgent = httpreader.UserAgent
 
 // ── Engine ────────────────────────────────────────────────────────────────────
 
-// Engine is the Hive Engine. It implements engine.Runner and will be
-// selectable via the --hive-engine flag once it reaches production parity.
+// Engine is the Hive Engine. It implements engine.Runner and is the default
+// (and only) execution engine for gg.
 //
 // Internal architecture:
 //

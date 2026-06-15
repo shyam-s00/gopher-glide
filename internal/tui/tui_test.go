@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/shyam-s00/gopher-glide/internal/config"
-	"github.com/shyam-s00/gopher-glide/internal/engine"
+	"github.com/shyam-s00/gopher-glide/internal/engine/hive"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -168,7 +168,7 @@ func TestComputeLayout_NormalTerminal(t *testing.T) {
 }
 
 func newTestModel() model {
-	eng := engine.New()
+	eng := hive.New()
 	cfg := &config.Config{
 		ConfigSection: config.Section{HTTPFile: "test.http"},
 		Stages: []config.Stage{
@@ -459,8 +459,8 @@ func TestRenderLogContent_WithSuccessLogs(t *testing.T) {
 	m.showFailures = false // all-logs mode
 
 	// Inject a success log directly via type assertion (LogCallForTest is a
-	// test-only export shim on *engine.Engine, not part of engine.Runner).
-	m.engine.(*engine.Engine).LogCallForTest("GET", "http://example.com/api", 200, 10*time.Millisecond, nil)
+	// test-only export shim on *hive.Engine, not part of engine.Runner).
+	m.engine.(*hive.Engine).LogCallForTest("GET", "http://example.com/api", 200, 10*time.Millisecond, nil)
 
 	content := m.renderLogContent()
 	if content == "" {
@@ -567,7 +567,7 @@ func TestRenderLogContent_WithErrorLogs(t *testing.T) {
 	m.showFailures = true // failures only mode
 
 	// Inject an error log (status 500).
-	m.engine.(*engine.Engine).LogCallForTest("POST", "http://example.com/api/fail", 500, 5*time.Millisecond, nil)
+	m.engine.(*hive.Engine).LogCallForTest("POST", "http://example.com/api/fail", 500, 5*time.Millisecond, nil)
 
 	content := m.renderLogContent()
 	if content == "" {
@@ -580,7 +580,7 @@ func TestRenderLogContent_NonSuccessStatus(t *testing.T) {
 	m.showFailures = false // all logs
 
 	// Inject a 404 log (non-2xx, non-error).
-	m.engine.(*engine.Engine).LogCallForTest("GET", "http://example.com/api/missing", 404, 3*time.Millisecond, nil)
+	m.engine.(*hive.Engine).LogCallForTest("GET", "http://example.com/api/missing", 404, 3*time.Millisecond, nil)
 
 	content := m.renderLogContent()
 	if content == "" {

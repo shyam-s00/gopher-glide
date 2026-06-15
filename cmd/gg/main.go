@@ -97,7 +97,6 @@ func main() {
 	snapMaxBodyKB := fs.Int("snap-max-body-kb", 0, "per-endpoint byte budget for stored body samples in KB (0 = no byte-based limit)")
 	headless := fs.Bool("headless", false, "run without interactive TUI — emits structured heartbeat logs (for CI)")
 	reporter := fs.String("reporter", "text", "output format in headless mode: text | json")
-	hiveEngine := fs.Bool("hive-engine", false, "use the new hive engine for execution")
 	_ = fs.Parse(flagArgs)
 
 	// Track which flags were explicitly provided so we can apply the correct
@@ -327,23 +326,11 @@ func main() {
 	}
 
 	// ── build engine ────────────────────────────────────────────────────────
-	var eng engine.Runner
-	if *hiveEngine {
-		var hiveOpts []hive.EngineOption
-		if rec != nil {
-			hiveOpts = append(hiveOpts, hive.WithRecorder(rec), hive.WithSampleRate(effectiveSampleRate))
-		}
-		eng = hive.New(hiveOpts...)
-	} else {
-		var engineOpts []engine.EngineOption
-		if rec != nil {
-			engineOpts = append(engineOpts,
-				engine.WithRecorder(rec),
-				engine.WithSampleRate(effectiveSampleRate),
-			)
-		}
-		eng = engine.New(engineOpts...)
+	var hiveOpts []hive.EngineOption
+	if rec != nil {
+		hiveOpts = append(hiveOpts, hive.WithRecorder(rec), hive.WithSampleRate(effectiveSampleRate))
 	}
+	var eng engine.Runner = hive.New(hiveOpts...)
 
 	// ── start TUI ─────────────────────────────────────────────────────────────
 	// onRunComplete is dispatched by the TUI as a background goroutine once
