@@ -38,7 +38,9 @@ func main() {
 		}
 	}
 
-	fmt.Printf("gg (Gopher Glide) %s (commit:%s) built %s\n",
+	// Printed to stderr (not stdout) so it doesn't pollute headless JSON output,
+	// which CI tools and log aggregators expect to be pure JSON-lines on stdout.
+	_, _ = fmt.Fprintf(os.Stderr, "gg (Gopher Glide) %s (commit:%s) built %s\n",
 		version.Version, version.GitCommit, version.GetBuildDate())
 
 	// ── snap subcommand router ────────────────────────────────────────────────
@@ -219,7 +221,7 @@ func main() {
 		// override). Stored so snapshot metadata accurately reflects the run conditions.
 		cfg.ConfigSection.ProfileScale = float64(effectivePeak) / float64(prof.DefaultPeakRPS)
 
-		fmt.Printf("✓ Profile %q loaded  (peak=%d RPS, duration=%s, stages=%d)\n",
+		_, _ = fmt.Fprintf(os.Stderr, "✓ Profile %q loaded  (peak=%d RPS, duration=%s, stages=%d)\n",
 			prof.Name, effectivePeak, effectiveDur, len(cfg.Stages))
 	}
 
@@ -238,7 +240,7 @@ func main() {
 		}
 	}
 
-	fmt.Printf("✓ Configuration ready  (httpFile=%s, stages=%d)\n",
+	_, _ = fmt.Fprintf(os.Stderr, "✓ Configuration ready  (httpFile=%s, stages=%d)\n",
 		cfg.ConfigSection.HTTPFile, len(cfg.Stages))
 
 	// ── resolve effective snap tuning values ──────────────────────────────────
@@ -293,9 +295,9 @@ func main() {
 	}
 	specs := httpreader.Flatten(journeys)
 
-	fmt.Printf("✓ Loaded %d request(s) across %d journey(s) from %s\n", len(specs), len(journeys), cfg.ConfigSection.HTTPFile)
+	_, _ = fmt.Fprintf(os.Stderr, "✓ Loaded %d request(s) across %d journey(s) from %s\n", len(specs), len(journeys), cfg.ConfigSection.HTTPFile)
 	for i, s := range specs {
-		fmt.Printf("  [%d] %s %s\n", i+1, s.Method, s.URL)
+		_, _ = fmt.Fprintf(os.Stderr, "  [%d] %s %s\n", i+1, s.Method, s.URL)
 	}
 
 	// ── set up recorder (optional) ────────────────────────────────────────────
@@ -316,7 +318,7 @@ func main() {
 			recOpts = append(recOpts, snap.WithMaxBodyBytes(int64(effectiveMaxBodyKB)*1024))
 		}
 		rec = snap.NewDefaultRecorder(0, recOpts...)
-		fmt.Printf("📸 Snapping → %s  (sample=%.0f%%, max-samples=%d, max-body-kb=%d)\n",
+		_, _ = fmt.Fprintf(os.Stderr, "📸 Snapping → %s  (sample=%.0f%%, max-samples=%d, max-body-kb=%d)\n",
 			resolvedSnapDir,
 			effectiveSampleRate*100,
 			resolveDisplayMaxSamples(effectiveMaxSamples),
@@ -365,7 +367,7 @@ func main() {
 		}
 	}
 
-	fmt.Println("Starting...")
+	_, _ = fmt.Fprintln(os.Stderr, "Starting...")
 	// ── ASCII chart preview (profile runs only) ───────────────────────────────
 	// Print the traffic shape so users know exactly what is about to happen
 	// before the TUI takes over the terminal. Skipped in headless mode because
@@ -386,7 +388,7 @@ func main() {
 		SnapDir:       resolvedSnapDir,
 		OnRunComplete: onRunComplete,
 	}); err != nil {
-		fmt.Printf("Error running: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error running: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -396,13 +398,13 @@ func main() {
 	// double-finalise when the run completed AND the user then pressed [q].
 	// Printing is safe here: tui.Start has returned and the terminal is restored.
 	if rec != nil && snapDone.CompareAndSwap(false, true) {
-		fmt.Println("Finalizing snapshot...")
+		_, _ = fmt.Fprintln(os.Stderr, "Finalizing snapshot...")
 		status, finalErr := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir,
 			effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB)
 		if finalErr != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", finalErr)
 		} else {
-			fmt.Println(status)
+			_, _ = fmt.Fprintln(os.Stderr, status)
 		}
 	}
 }
