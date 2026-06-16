@@ -6,9 +6,12 @@ let forks: number | null = null;
 let version: string | null = null;
 
 try {
+  const headers: HeadersInit = { Accept: 'application/vnd.github+json' };
+  if (import.meta.env.GITHUB_TOKEN) headers['Authorization'] = `Bearer ${import.meta.env.GITHUB_TOKEN}`;
+
   const [repoRes, releaseRes] = await Promise.all([
-    fetch('https://api.github.com/repos/shyam-s00/gopher-glide'),
-    fetch('https://api.github.com/repos/shyam-s00/gopher-glide/releases/latest'),
+    fetch('https://api.github.com/repos/shyam-s00/gopher-glide', { headers }),
+    fetch('https://api.github.com/repos/shyam-s00/gopher-glide/releases/latest', { headers }),
   ]);
   if (repoRes.ok && releaseRes.ok) {
     const repo = await repoRes.json();
