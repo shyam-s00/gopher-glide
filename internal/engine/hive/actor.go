@@ -32,6 +32,11 @@ func (e *Engine) executeJourney(ctx context.Context, specs []httpreader.RequestS
 	return nil
 }
 
+// maxPooledBufCap is the maximum buffer capacity that will be returned to
+// bufferPool. Buffers that grew beyond this threshold are dropped so that a
+// single large response body cannot bloat the pool's retained memory.
+const maxPooledBufCap = 1 << 20 // 1 MiB
+
 var bufferPool = sync.Pool{
 	New: func() any {
 		return new(bytes.Buffer)
@@ -140,9 +145,8 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		_, _ = io.Copy(io.Discard, resp.Body)
 	}
 
-	// Return buffer to pool when function exits, so memory can be reused
 	defer func() {
-		if buf != nil {
+		if buf != nil && buf.Cap() <= maxPooledBufCap {
 			bufferPool.Put(buf)
 		}
 	}()

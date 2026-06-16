@@ -149,7 +149,7 @@ func (r *RequestSpec) ToHTTPRequest(vars map[string]string) (*http.Request, erro
 
 	// Headers
 	if r.PrebuiltHeaders != nil {
-		// Fast-path: Zero allocation map cloning
+		// Fast-path: no per-header dynamic resolution needed
 		req.Header = r.PrebuiltHeaders.Clone()
 	} else {
 		req.Header = make(http.Header, len(r.Headers))
