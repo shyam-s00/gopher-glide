@@ -1,0 +1,295 @@
+---
+// Faithful-but-compact recreation of the real `gg` TUI (see internal/tui/tui.go
+// and internal/tui/theme.go) — same panel layout, labels, and Catppuccin
+// Macchiato palette as the actual dashboard, so the marketing visual matches
+// what users see on first run.
+const bars = [10, 18, 26, 34, 42, 50, 58, 60, 60, 60, 60, 60, 60, 60, 65, 70, 75, 80, 85, 90, 95, 98, 100, 100];
+const cursor = 13;
+
+type Row = { label: string; value: string; cls?: string; pulse?: boolean };
+const panels: { title: string; rows: Row[] }[] = [
+  {
+    title: 'CONFIGURATION',
+    rows: [
+      { label: 'Status:', value: 'RUNNING', cls: 'success', pulse: true },
+      { label: 'Uptime:', value: '38.42s' },
+      { label: 'Profile:', value: 'ramp' },
+      { label: 'Stage:', value: '[2/3] Sustain' },
+    ],
+  },
+  {
+    title: 'LOAD',
+    rows: [
+      { label: 'Actors:', value: '1,327', cls: 'highlight' },
+      { label: 'Target RPS:', value: '5000' },
+      { label: 'Actual RPS:', value: '4825.00' },
+      { label: 'Jitter:', value: 'off' },
+    ],
+  },
+  {
+    title: 'RESULTS',
+    rows: [
+      { label: 'Requests:', value: '182,604' },
+      { label: 'Success:', value: '182,604', cls: 'success' },
+      { label: 'Failed:', value: '0', cls: 'error' },
+      { label: 'Error Rate:', value: '0.00%' },
+    ],
+  },
+  {
+    title: 'LATENCY',
+    rows: [
+      { label: 'Min:', value: '50.28ms' },
+      { label: 'P50:', value: '12.40ms' },
+      { label: 'P95:', value: '38.10ms' },
+      { label: 'P99:', value: '64.70ms' },
+    ],
+  },
+];
+---
+<div class="hero-visual not-content">
+  <div class="terminal-window">
+    <div class="terminal-bar">
+      <span class="dot red"></span>
+      <span class="dot yellow"></span>
+      <span class="dot green"></span>
+      <span class="terminal-title">gg run checkout.http --profile ramp</span>
+    </div>
+    <div class="terminal-body">
+      <div class="title-pill">Gopher Glide (GG)</div>
+
+      <div class="panel-grid">{panels.map(p => (
+        <div class="panel"><div class="panel-title">{p.title}</div>{p.rows.map(r => (
+          <div class="row"><span class="label">{r.label}</span> <span class={`value${r.cls ? ' ' + r.cls : ''}`}>{r.value}</span>{r.pulse && <span class="pulse"> ●</span>}</div>
+        ))}</div>
+      ))}</div>
+
+      <div class="stage-plan">
+        <div class="stage-header">
+          <span class="panel-title">STAGE PLAN</span>
+          <span class="stage-meta">
+            target <strong>5000 rps</strong> · actual <span class="success">4825 rps</span> · <span class="highlight">1327 active actors</span>
+          </span>
+        </div>
+        <div class="chart">
+          {bars.map((h, i) => (
+            <div
+              class={`bar ${i === cursor ? 'cursor' : i < cursor ? 'past' : 'future'}`}
+              style={`height: ${h}%`}
+            >
+              {i === cursor && <span class="playhead">▼</span>}
+            </div>
+          ))}
+        </div>
+        <div class="stage-footer">[2/3] Sustain  •  stage 8s / 30s  •  total 38s / 1m30s</div>
+      </div>
+
+      <div class="director-bar">
+        <span class="keycap">↑</span><span class="kc-label success">+5 rps</span>
+        <span class="keycap">↓</span><span class="kc-label error">-5 rps</span>
+        <span class="keycap">f</span><span class="kc-label">logs (FAILURES ONLY)</span>
+        <span class="keycap">q</span><span class="kc-label">quit</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .hero-visual {
+    width: 100%;
+  }
+  .terminal-window {
+    background: #181926; /* Catppuccin Crust */
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    text-align: left;
+  }
+  .terminal-bar {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: #1e2030; /* Catppuccin Mantle */
+    border-bottom: 1px solid var(--sl-color-hairline);
+  }
+  .dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    margin-right: 8px;
+  }
+  .dot.red { background: #ed8796; }
+  .dot.yellow { background: #eed49f; }
+  .dot.green { background: #a6da95; }
+  .terminal-title {
+    margin-left: auto;
+    margin-right: auto;
+    font-size: 0.8rem;
+    color: #939ab7;
+    font-family: var(--__sl-font-mono, monospace);
+  }
+
+  .terminal-body {
+    padding: 1.25rem;
+    font-family: var(--__sl-font-mono, monospace);
+    font-size: 0.68rem;
+    line-height: 1.5;
+    color: #cad3f5;
+  }
+
+  .title-pill {
+    display: inline-block;
+    background: #c6a0f6;
+    color: #24273a;
+    font-weight: 700;
+    padding: 0.15rem 0.6rem;
+    border-radius: 4px;
+    margin-bottom: 0.85rem;
+  }
+
+  .panel-grid {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0.5rem;
+    margin-bottom: 0.85rem;
+    font-size: 0;
+  }
+  .panel {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    border: 1px solid #494d64;
+    border-radius: 6px;
+    padding: 0.45rem 0.55rem;
+    min-width: 0;
+    font-size: 0;
+  }
+  .panel-title {
+    display: block;
+    font-size: 0.68rem; /* restore from parent's 0 */
+    color: #c6a0f6;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.3rem;
+    white-space: nowrap;
+  }
+  .row {
+    display: block;
+    font-size: 0.68rem; /* restore from parent's 0 */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .label {
+    color: #a5adcb;
+  }
+  .value {
+    color: #cad3f5;
+    font-weight: 700;
+  }
+  .value.success, .success { color: #a6da95; }
+  .value.error, .error { color: #ed8796; }
+  .value.highlight, .highlight { color: #eed49f; font-weight: 700; }
+
+  .pulse {
+    display: inline;
+    vertical-align: middle;
+    color: #a6da95;
+    animation: blink 1.2s ease-in-out infinite;
+  }
+
+  .stage-plan {
+    border: 1px solid #494d64;
+    border-radius: 6px;
+    padding: 0.5rem 0.6rem;
+    margin-bottom: 0.85rem;
+  }
+  .stage-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .stage-meta {
+    color: #a5adcb;
+  }
+  .stage-meta strong {
+    color: #cad3f5;
+  }
+
+  .chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 56px;
+    margin-bottom: 0.4rem;
+  }
+  .bar {
+    flex: 1;
+    position: relative;
+    border-radius: 1px;
+    min-height: 2px;
+  }
+  .bar.past {
+    background: #c6a0f6;
+    opacity: 0.55;
+  }
+  .bar.future {
+    background: #494d64;
+  }
+  .bar.cursor {
+    background: #c6a0f6;
+    animation: surge 2.4s ease-in-out infinite;
+  }
+  .playhead {
+    position: absolute;
+    top: -1.1em;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #c6a0f6;
+    font-size: 0.7rem;
+  }
+
+  .stage-footer {
+    color: #a5adcb;
+  }
+
+  .director-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    color: #a5adcb;
+  }
+  .keycap {
+    background: #494d64;
+    color: #cad3f5;
+    font-weight: 700;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+  }
+  .kc-label {
+    margin-right: 0.5rem;
+  }
+
+  @keyframes surge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  @media (max-width: 540px) {
+    .terminal-body {
+      font-size: 0.62rem;
+      padding: 1rem;
+    }
+    .chart {
+      height: 44px;
+    }
+  }
+</style>

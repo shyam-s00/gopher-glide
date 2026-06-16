@@ -1,0 +1,58 @@
+---
+const faqs = [
+  {
+    q: 'Is Gopher-Glide a k6 or JMeter alternative?',
+    a: 'Yes. If you are looking for a modern, open-source alternative to k6, JMeter, or Locust, Gopher-Glide offers a zero-code approach. Instead of writing complex JavaScript or Python scripts, you reuse your existing .http REST Client files directly from your IDE.',
+  },
+  {
+    q: 'How much load can a single instance generate?',
+    a: 'Thanks to the pure-Go lock-free Hive Engine, a single Gopher-Glide instance can comfortably push over 30,000 RPS (Requests Per Second) on modern hardware without exhausting system memory or triggering garbage collection pauses.',
+  },
+  {
+    q: 'Can I run this in my CI/CD pipeline?',
+    a: 'Absolutely. You can use our official Docker image to drop it into any pipeline. By passing the --headless flag, Gopher-Glide outputs structured data instead of the UI. Use gg snap assert to create automated regression gates that break the build if API latency spikes.',
+  },
+];
+---
+<div class="faq-section">
+  <h2>Frequently Asked Questions</h2>
+  {faqs.map((faq) => (
+    <details>
+      <summary>{faq.q}</summary>
+      <p>{faq.a}</p>
+    </details>
+  ))}
+</div>
+
+<style>
+  .faq-section {
+    padding: 2rem 2rem 6rem 2rem;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  h2 {
+    font-size: 2.25rem;
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+  details {
+    background: var(--gg-glass-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--gg-glass-border);
+    border-radius: 12px;
+    margin-bottom: 1rem;
+    padding: 1rem 1.5rem;
+  }
+  summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 1.15rem;
+    color: var(--sl-color-text);
+  }
+  p {
+    margin-top: 0.75rem;
+    color: var(--sl-color-gray-2);
+    line-height: 1.6;
+    font-size: 1.05rem;
+  }
+</style>

@@ -1,0 +1,44 @@
+---
+import Default from '@astrojs/starlight/components/SiteTitle.astro';
+import type { Props } from '@astrojs/starlight/props';
+---
+<div class="custom-site-title">
+  <Default {...Astro.props} />
+  <nav class="top-nav">
+    <a href="/snap" class="nav-link">Snap</a>
+    <a href="/plugin" class="nav-link">Plugins</a>
+    <a href="/benchmarks" class="nav-link">Benchmarks</a>
+  </nav>
+</div>
+
+<style>
+  .custom-site-title {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+  .top-nav {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding-left: 1rem;
+    border-left: 1px solid var(--sl-color-hairline);
+    height: 100%; /* Prevent vertical jumping */
+  }
+  .nav-link {
+    text-decoration: none;
+    color: var(--sl-color-gray-2);
+    font-weight: 600;
+    font-size: 0.95rem;
+    white-space: nowrap; /* Prevent text wrapping jumping */
+    transition: color 0.2s;
+  }
+  .nav-link:hover {
+    color: var(--sl-color-text);
+  }
+  @media (max-width: 768px) {
+    .top-nav {
+      display: none; /* Hide on extremely small screens to prevent pushing search off screen */
+    }
+  }
+</style>

@@ -1,0 +1,102 @@
+---
+title: High-Fidelity API Traffic Simulation
+template: splash
+---
+import Hero from '../../components/Hero.astro';
+import GlassFeatureRow from '../../components/GlassFeatureRow.astro';
+import CodeCompare from '../../components/CodeCompare.astro';
+import BentoGrid from '../../components/BentoGrid.astro';
+import ContentWrapper from '../../components/ContentWrapper.astro';
+import ComparisonTable from '../../components/ComparisonTable.astro';
+import FaqSection from '../../components/FaqSection.astro';
+
+<Hero />
+
+<ContentWrapper>
+
+<GlassFeatureRow title="Unleash The Hive. Destroy your servers, not your RAM.">
+  <div slot="text">
+    <p><strong>A modern architecture built for massive scale.</strong> Legacy tools rely on heavy OS threads that choke your machine before they choke your API. The new Hive Engine uses a pure-Go lock-free Actor Model.</p>
+    <p>By isolating connections into ultra-lightweight Goroutines, a single instance effortlessly generates <strong>over 30,000 RPS</strong> with zero-garbage (<code>0 allocs/op</code>) overhead.</p>
+  </div>
+  <div slot="visual">
+    ```mermaid
+    graph TD
+        Queen[👑 The Queen] -->|Micro-batches| Hatchery[🥚 The Hatchery]
+        Hatchery --> Actor1[🐝 Actor Goroutine]
+        Hatchery --> Actor2[🐝 Actor Goroutine]
+        Actor1 -. API Request .-> API
+        Actor2 -. API Request .-> API
+    ```
+  </div>
+</GlassFeatureRow>
+
+<GlassFeatureRow title="Zero Scripting Required" reverse={true}>
+  <div slot="text">
+    <p>Stop rewriting your API calls in JavaScript or Python just to run a quick load test. <strong>Reuse your existing <code>.http</code> REST Client files directly.</strong></p>
+    <p>Point <code>gg</code> at your IDE scratch files and go. Chain requests into a stateful journey instantly by exporting values with <code>@gg-export</code> and referencing them natively as <code>\{\{token\}\}</code>.</p>
+  </div>
+  <div slot="visual">
+    <CodeCompare filename="checkout.http">
+      ```http
+      ### Simulated User Journey
+      POST http://api.example.com/login
+      Content-Type: application/json
+
+      { "user": "tester", "pass": "secure" }
+
+      > {%
+          client.global.set(
+              "token", response.body.token
+          );
+      %}
+
+      ### Fetch user profile using token
+      GET http://api.example.com/profile
+      Authorization: Bearer \{\{token\}\}
+      ```
+    </CodeCompare>
+  </div>
+</GlassFeatureRow>
+
+<GlassFeatureRow title="Interactive Chaos TUI">
+  <div slot="text">
+    <p>Watch your backend burn in high-definition. The premium interactive TUI runs at a buttery-smooth <strong>~24 FPS</strong>, giving you real-time observability.</p>
+    <p>Play chaos engineer: use your arrow keys to aggressively bias RPS up or down in real-time, and watch how your system reacts without ever touching a config file.</p>
+  </div>
+  <div slot="visual">
+    <CodeCompare filename="gg --profile ddos">
+      <img src="/assets/demo.gif" alt="Interactive Chaos TUI Demo" />
+    </CodeCompare>
+  </div>
+</GlassFeatureRow>
+
+<GlassFeatureRow title="X-Ray Vision for APIs 🔬" reverse={true}>
+  <div slot="text">
+    <p><strong>Know exactly why you broke production, not just when.</strong> Traditional tools tell you P99 latency spiked. <code>gg snap diff</code> tells you it spiked because a developer accidentally injected a 2MB blob into the JSON payload.</p>
+    <p>Compare two snapshots side-by-side to instantly spot missing fields, type changes, or massive payload bloat. Perfect for automated CI/CD regression gates.</p>
+  </div>
+  <div slot="visual">
+    <CodeCompare filename="gg snap diff main feature-branch">
+      ```text
+      GET:http://localhost:8080/fast-get  [❌ REGRESSION]
+
+      Latency Deltas      Payload Deltas      Error & Status
+       P50:    +100.0%     Avg:    +100.0%     Error: -100.00 pp
+       P99:   +5200.0%     Max:    +100.0%     200:   +100.0 pp
+
+      Schema Changes
+       + email           added  string   100% STABLE
+       + metadata        added  object    18% RARE
+      ```
+    </CodeCompare>
+  </div>
+</GlassFeatureRow>
+
+<ComparisonTable />
+
+<FaqSection />
+
+</ContentWrapper>
+
+<BentoGrid />

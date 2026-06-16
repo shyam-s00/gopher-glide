@@ -1,0 +1,152 @@
+---
+import Default from '@astrojs/starlight/components/Footer.astro';
+import type { Props } from '@astrojs/starlight/props';
+const isSplash = Astro.props.entry?.data?.template === 'splash';
+---
+
+<Default {...Astro.props} />
+
+<footer class:list={['site-footer', { 'full-width': isSplash }]}>
+  <div class="footer-content">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="footer-brand-row">
+          <img src="/assets/ggToolIcon_dark.svg" alt="gg logo" class="footer-logo footer-logo-dark" />
+          <img src="/assets/ggToolIcon.svg" alt="gg logo" class="footer-logo footer-logo-light" />
+          <span class="footer-title">Gopher-Glide (gg)</span>
+        </div>
+        <p class="footer-tagline">High-fidelity API traffic simulation from your IDE.</p>
+      </div>
+      <div class="footer-col">
+        <span class="footer-heading">Docs</span>
+        <a href="/getting-started">Getting Started</a>
+        <a href="/profiles">Load Profiles</a>
+        <a href="/tui">The TUI</a>
+        <a href="/snap">Snapshots (gg snap)</a>
+        <a href="/configuration">Configuration</a>
+      </div>
+      <div class="footer-col">
+        <span class="footer-heading">Project</span>
+        <a href="/benchmarks">Benchmarks</a>
+        <a href="/plugin">JetBrains Plugin</a>
+        <a href="https://github.com/shyam-s00/gopher-glide" target="_blank">GitHub</a>
+        <a href="https://github.com/shyam-s00/gopher-glide/releases/latest" target="_blank">Releases</a>
+        <a href="https://github.com/shyam-s00/gopher-glide/issues" target="_blank">Report an Issue</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-center">
+        Built with <span class="heart">❤️</span> by <a href="https://github.com/shyam-s00" target="_blank">Shiyam</a>
+      </div>
+      <div class="footer-right">
+        Released under the <a href="https://github.com/shyam-s00/gopher-glide/blob/main/LICENSE" target="_blank">MIT License</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    border-top: 1px solid var(--sl-color-hairline);
+    background: var(--sl-color-bg-nav);
+    padding: 3rem 0 1.5rem;
+    margin-top: 2rem;
+  }
+  /* Only break out of the content column on the splash (home) page where there are no sidebars */
+  .site-footer.full-width {
+    margin-bottom: -3rem;
+    width: 100vw;
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .footer-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    color: var(--sl-color-gray-3);
+    font-size: 0.9rem;
+  }
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 2rem;
+    padding-bottom: 2.5rem;
+  }
+  .footer-brand-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .footer-logo {
+    width: 20px;
+    height: 20px;
+  }
+  .footer-logo-light {
+    display: none;
+  }
+  :root[data-theme='light'] .footer-logo-dark {
+    display: none;
+  }
+  :root[data-theme='light'] .footer-logo-light {
+    display: block;
+  }
+  .footer-title {
+    font-weight: 600;
+    color: var(--sl-color-text);
+  }
+  .footer-tagline {
+    color: var(--sl-color-gray-3);
+    max-width: 320px;
+    line-height: 1.5;
+  }
+  .footer-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .footer-heading {
+    font-weight: 600;
+    color: var(--sl-color-text);
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+  }
+  .footer-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--sl-color-hairline);
+  }
+  .heart {
+    color: #ed8796; /* Catppuccin Red */
+  }
+  a {
+    color: var(--sl-color-accent);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .footer-col a {
+    color: var(--sl-color-gray-3);
+  }
+  a:hover {
+    color: var(--sl-color-accent-high);
+    text-decoration: underline;
+  }
+  @media (max-width: 768px) {
+    .footer-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .footer-brand {
+      grid-column: span 2;
+    }
+    .footer-bottom {
+      flex-direction: column;
+      gap: 0.75rem;
+      text-align: center;
+    }
+  }
+</style>

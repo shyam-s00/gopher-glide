@@ -1,3 +1,6 @@
+---
+title: "Snapshots (gg snap)"
+---
 # Gopher Glide Snapshots (`gg snap`)
 
 Typical load testing tools report basic metrics at the end of a run (e.g., P99 latency, RPS) and then discard the underlying data. **Gopher Glide (gg)** takes a radically different approach with its **Snap** feature.

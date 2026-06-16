@@ -1,3 +1,6 @@
+---
+title: "Configuration"
+---
 # Configuration Reference
 
 ## .http file format

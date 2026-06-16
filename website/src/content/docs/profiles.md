@@ -1,3 +1,6 @@
+---
+title: "Load Profiles"
+---
 # Load Profiles
 
 The **Profiles** feature allows developers to execute predefined, real-world load testing scenarios (e.g., flash-sales, DDoS attacks) without needing to manually author configuration files. It shifts `gg` towards a **Zero-Config Default** philosophy.

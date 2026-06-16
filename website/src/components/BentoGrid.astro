@@ -1,0 +1,102 @@
+---
+---
+<div class="bento-container">
+  <a href="https://github.com/shyam-s00/gopher-glide" class="bento-card bento-large">
+    <div class="bento-content">
+      <div class="bento-icon">⭐</div>
+      <h3>Open Source & Free</h3>
+      <p>Gopher-Glide is built for the community. Drop us a star on GitHub to support the project!</p>
+      <span class="bento-link">View Repository &rarr;</span>
+    </div>
+  </a>
+  <div class="bento-column">
+    <div class="bento-card bento-small">
+      <div class="bento-content">
+        <div class="bento-icon">🐹</div>
+        <h3>Built in pure Go</h3>
+        <p>No heavy JVMs or Node.js runtimes. Just a blazing fast binary.</p>
+      </div>
+    </div>
+    <a href="/getting-started" class="bento-card bento-small bento-accent">
+      <div class="bento-content">
+        <div class="bento-icon">📚</div>
+        <h3>Read the Docs</h3>
+        <p>Zero to load testing in under 2 minutes.</p>
+        <span class="bento-link">Get Started &rarr;</span>
+      </div>
+    </a>
+  </div>
+</div>
+
+<style>
+  .bento-container {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1rem;
+    max-width: 650px;
+    margin: 1.5rem auto 3rem auto;
+    padding: 0 1.5rem;
+  }
+  .bento-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .bento-card {
+    background: var(--gg-glass-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--gg-glass-border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    box-shadow: 0 4px 20px var(--gg-glass-shadow);
+  }
+  .bento-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 40px var(--gg-glass-shadow-hover);
+    border-color: var(--sl-color-accent);
+  }
+  .bento-large {
+    background: linear-gradient(135deg, var(--gg-glass-bg), var(--gg-glass-bg));
+  }
+  .bento-accent {
+    background: linear-gradient(135deg, rgba(198, 160, 246, 0.1), var(--gg-glass-bg));
+    border-color: rgba(198, 160, 246, 0.3);
+  }
+  .bento-icon {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+  }
+  .bento-content h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+    color: var(--sl-color-text);
+  }
+  .bento-small .bento-content h3 {
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+  }
+  .bento-content p {
+    color: var(--sl-color-gray-2);
+    line-height: 1.4;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+  }
+  .bento-link {
+    font-size: 0.9rem;
+    color: var(--sl-color-accent);
+    font-weight: 600;
+    margin-top: auto;
+    display: inline-block;
+  }
+  @media (max-width: 768px) {
+    .bento-container {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
