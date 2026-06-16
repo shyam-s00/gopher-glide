@@ -14,8 +14,8 @@ export default defineConfig({
 			title: 'Gopher Glide',
 			description: 'High-fidelity API traffic simulation from your IDE. Build, test, and break APIs with zero boilerplate.',
 			logo: {
-				light: '/assets/ggToolIcon.svg',
-				dark: '/assets/ggToolIcon_dark.svg',
+				light: './public/assets/ggToolIcon.svg',
+				dark: './public/assets/ggToolIcon_dark.svg',
 			},
 			components: {
 				Footer: './src/components/Footer.astro',
