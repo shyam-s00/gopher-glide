@@ -1,13 +1,13 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/ggToolIcon_dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/assets/ggToolIcon.svg">
-    <img alt="Gopher Glide Logo" src="docs/assets/ggToolIcon.svg" width="250" />
+    <source media="(prefers-color-scheme: dark)" srcset="website/public/assets/ggToolIcon_dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="website/public/assets/ggToolIcon.svg">
+    <img alt="Gopher Glide Logo" src="website/public/assets/ggToolIcon.svg" width="250" />
   </picture>
 </div>
 
 <h1 align="center">Gopher-Glide (gg) 🚀</h1>
-<p align="center"><b>Run your IDE `.http` files under heavy concurrent load. Zero scripting required.</b></p>
+<p align="center"><b>Unleash The Hive. Destroy your servers, not your RAM.</b></p>
 
 <p align="center">
   <a href="https://github.com/shyam-s00/gopher-glide/actions/workflows/ci.yml"><img src="https://github.com/shyam-s00/gopher-glide/actions/workflows/ci.yml/badge.svg" alt="Build"></a>
@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/demo.gif" alt="Gopher Glide TUI Demo" width="800" />
+  <img src="website/public/assets/demo.gif" alt="Gopher Glide TUI Demo" width="800" />
 </p>
 
 ---
@@ -27,18 +27,16 @@
 
 If you want to run a quick concurrency test on an endpoint, you usually have to write a custom JavaScript file for `k6`, a Python script for `Locust`, or learn a heavy configuration language. 
 
-**Gopher-Glide (gg)** is an API traffic simulator that lets you skip the boilerplate. It directly executes standard IDE `.http` REST Client files that you probably already have sitting in your workspace. 
+**Gopher-Glide (gg)** is a modern, open-source API traffic simulator that lets you skip the boilerplate. It directly executes standard IDE `.http` REST Client files that you probably already have sitting in your workspace. 
 
-| Feature | Gopher-Glide (`gg`) | k6 / Locust | wrk / hey / vegeta |
+| Feature | Gopher-Glide (`gg`) | k6 / Locust | wrk / hey |
 | :--- | :--- | :--- | :--- |
 | **Scripting** | **None** (Reads `.http` natively) | JavaScript / Python | None (CLI flags only) |
-| **Traffic Control** | **30-FPS Interactive TUI** (Arrow keys) | Requires configs | Fixed concurrency only |
-| **CI/CD Assertions** | **Semantic JSON Diffing** (`gg snap`) | Pass/Fail Thresholds | Raw latencies only |
-| **Built-in Profiles** | **Yes** (`--profile flash-sale`) | Requires scripting | No |
-| **IDE Integration** | **Native JetBrains Plugin** | External scripts | External tools |
-| **Performance** | **30k+ RPS per core (Actor Model)** | Medium-High | Extremely High |
+| **Traffic Control** | **Live Interactive TUI** | Requires configs | Fixed concurrency only |
+| **CI/CD Assertions** | **Semantic JSON Diffing** | Pass/Fail Thresholds | Raw latencies only |
+| **Performance** | **30k+ RPS** | Medium-High | Extremely High |
 
-👉 **[Read the Full Documentation](https://gopherglide.dev/)**
+👉 **[Read the Full Documentation at gopherglide.dev](https://gopherglide.dev/)**
 
 ---
 
@@ -62,7 +60,7 @@ Use a built-in profile to automatically shape the traffic (e.g., ramping up, sus
 gg --profile flash-sale --http-file api.http
 ```
 
-You will instantly drop into the newly polished, butter-smooth 30-FPS Interactive Chaos TUI where you can monitor latencies and adjust the load in real-time without stutter or lag.
+You will instantly drop into the newly polished, premium Interactive Chaos TUI where you can monitor latencies and adjust the load in real-time.
 
 ---
 
@@ -71,16 +69,16 @@ You will instantly drop into the newly polished, butter-smooth 30-FPS Interactiv
 ### 🐝 The Hive Engine (Zero-Allocation Architecture)
 The core of `gg` is built on a pure-Go lock-free Actor Model. By isolating connections into ultra-lightweight Goroutines and tracking metrics via sharded lock-free atomics, `gg` operates at **`0 allocs/op`** on the hot path. This means you can comfortably push over **30,000+ RPS** on a standard developer machine without garbage-collection pauses destroying your latency percentiles.
 
-> **⚔️ Benchmark:** At 30,000 RPS target load, `gg` consumes **40% less memory** (1.42 GB vs 2.38 GB) and delivers **3x more successful requests** than `k6`. `gg`'s dynamic Adaptive Backpressure acts as an intelligent edge proxy—gracefully throttling excess traffic when the target server breaks to ensure maximum goodput, instead of blindly hammering the network into a deadlock. [Read the full benchmark breakdown](docs/BENCHMARKS.md) to see how `gg` safely simulates massive traffic.
+> **⚔️ Benchmark:** At 30,000 RPS target load, `gg` consumes **40% less memory** (1.42 GB vs 2.38 GB) and delivers **3x more successful requests** than `k6`. `gg`'s dynamic Adaptive Backpressure acts as an intelligent edge proxy—gracefully throttling excess traffic when the target server breaks to ensure maximum goodput. [Read the full benchmark breakdown](https://gopherglide.dev/benchmarks) to see how `gg` safely simulates massive traffic.
 
-### 🔬 Semantic Regression Gates (`gg snap`)
-Don't just test if your API is slow—test if it's broken. By passing the `--snap` flag, Gopher-Glide infers your API's JSON schema in real-time. You can then use `gg snap assert` in your CI/CD pipeline to automatically break the build if a pull request spikes latency or alters a JSON payload contract.
+### 🔬 X-Ray Vision for APIs (`gg snap`)
+Know *exactly* why you broke production, not just when. By passing the `--snap` flag, Gopher-Glide infers your API's JSON schema in real-time. You can then use `gg snap diff` in your CI/CD pipeline to compare two snapshots side-by-side to instantly spot missing fields, type changes, or massive payload bloat.
 
 ### 🔌 JetBrains IDE Integration 
 Gopher Glide features an official [JetBrains plugin](https://plugins.jetbrains.com/plugin/30983-gopher-glide) that brings load testing directly into your IDE. Run profiles directly from your `.http` files via the gutter icon, and explore semantic diffs using the Snap UI Tool Window.
 
 ### 🔄 Stateful Journeys & Variable Extraction
-No more writing custom JavaScript to test multi-step workflows. `gg` natively understands JetBrains HTTP variable extraction syntax. You can authenticate, extract a token using `# @gg-export token = jsonpath: $.data.token`, and instantly inject it into the next request using `{{token}}`.
+No more writing custom JavaScript to test multi-step workflows. `gg` natively understands JetBrains HTTP variable extraction syntax. You can authenticate, extract a token using `@gg-export`, and instantly inject it into the next request using `\{\{token\}\}`.
 
 ---
 

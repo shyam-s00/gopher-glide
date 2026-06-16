@@ -2,14 +2,17 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import mermaid from 'astro-mermaid';
+import sitemap from '@astrojs/sitemap';
 
 // https://astro.build/config
 export default defineConfig({
 	site: 'https://gopherglide.dev',
 	integrations: [
 		mermaid(),
+		sitemap(),
 		starlight({
 			title: 'Gopher Glide',
+			description: 'High-fidelity API traffic simulation from your IDE. Build, test, and break APIs with zero boilerplate.',
 			logo: {
 				light: './public/assets/ggToolIcon.svg',
 				dark: './public/assets/ggToolIcon_dark.svg',
