@@ -1,3 +1,6 @@
+---
+title: "JetBrains Plugin"
+---
 # JetBrains IDE Integration
 
 Gopher Glide features an official [JetBrains plugin](https://plugins.jetbrains.com/plugin/30983-gopher-glide) that brings **load testing** directly into your IDE. The plugin bridges the gap between your workspace and the TUI-based CLI, providing a seamless execution and profiling experience.

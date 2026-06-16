@@ -41,16 +41,25 @@ const (
 //	The /10 divisor adds a ×10 safety margin to absorb latency spikes and
 //	bursty dispatch without forcing TCP connection churn.
 func buildTransport(peakRPS int) *http.Transport {
+	// fdBudget() is implemented per-platform (pool_unix.go / pool_windows.go);
+	// returns 0 only when the limit cannot be queried — caller treats as
+	// uncapped. A known limit (however small) always yields budget > 0, so a
+	// tight ulimit always results in the pool being clamped down below.
+	return buildTransportWithBudget(peakRPS, fdBudget())
+}
+
+// buildTransportWithBudget is the budget-parameterized core of
+// buildTransport, split out so tests can exercise the FD-clamping logic
+// without depending on the host's actual RLIMIT_NOFILE.
+func buildTransportWithBudget(peakRPS, budget int) *http.Transport {
 	perHost := peakRPS / 10
 	if perHost < minPoolPerHost {
 		perHost = minPoolPerHost
 	}
 	total := perHost * poolHostMultiplier
 
-	// Clamp to OS file-descriptor budget when it can be determined.
-	// fdBudget() is implemented per-platform (pool_unix.go / pool_windows.go);
-	// returns 0 when the limit cannot be queried — caller treats as uncapped.
-	if budget := fdBudget(); budget > 0 {
+	// Clamp to the OS file-descriptor budget when it can be determined.
+	if budget > 0 {
 		if total > budget {
 			total = budget
 		}

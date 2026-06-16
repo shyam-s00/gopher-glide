@@ -1,0 +1,67 @@
+---
+export interface Props {
+  filename?: string;
+}
+const { filename = "terminal" } = Astro.props;
+---
+<div class="code-compare">
+  <div class="mac-header">
+    <span class="dot red"></span>
+    <span class="dot yellow"></span>
+    <span class="dot green"></span>
+    <span class="title">{filename}</span>
+  </div>
+  <div class="code-body">
+    <slot />
+  </div>
+</div>
+
+<style>
+  .code-compare {
+    background: #181926; /* Crust */
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  }
+  .mac-header {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: #1e2030; /* Mantle */
+    border-bottom: 1px solid var(--sl-color-hairline);
+  }
+  .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+  }
+  .red { background: #ed8796; }
+  .yellow { background: #eed49f; }
+  .green { background: #a6da95; }
+  .title {
+    margin-left: auto;
+    margin-right: auto;
+    font-size: 0.85rem;
+    color: var(--sl-color-gray-3);
+    font-family: monospace;
+    padding-right: 48px; /* Offset to keep perfectly centered */
+  }
+  .code-body {
+    font-size: 0.9rem;
+    overflow-x: auto;
+  }
+  /* Override Starlight default code block styles inside our terminal */
+  .code-body :global(pre) {
+    margin: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 1.5rem !important;
+  }
+  .code-body :global(img) {
+    display: block;
+    width: 100%;
+    border-radius: 4px;
+  }
+</style>

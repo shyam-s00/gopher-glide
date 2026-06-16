@@ -89,39 +89,82 @@ func newUUID() string {
 
 // ToHTTPRequest converts the spec into an executable http.Request, substituting variables.
 func (r *RequestSpec) ToHTTPRequest(vars map[string]string) (*http.Request, error) {
-	// Resolve dynamic placeholders first so that user-defined vars can still
-	// reference/override anything that isn't a built-in dynamic placeholder.
-	url := resolveDynamic(r.URL)
-	body := resolveDynamic(r.Body)
+	urlStr := r.URL
+	bodyStr := r.Body
 
-	// User-defined variable substitution
-	for k, v := range vars {
-		placeholder := "{{" + k + "}}"
-		url = strings.ReplaceAll(url, placeholder, v)
-		body = strings.ReplaceAll(body, placeholder, v)
+	if strings.Contains(urlStr, "{{") {
+		urlStr = resolveDynamic(urlStr)
+		for k, v := range vars {
+			urlStr = strings.ReplaceAll(urlStr, "{{"+k+"}}", v)
+		}
+	}
+
+	if strings.Contains(bodyStr, "{{") {
+		bodyStr = resolveDynamic(bodyStr)
+		for k, v := range vars {
+			bodyStr = strings.ReplaceAll(bodyStr, "{{"+k+"}}", v)
+		}
 	}
 
 	var bodyReader io.Reader
-	if body != "" {
-		bodyReader = strings.NewReader(body)
+	var reqBody io.ReadCloser
+	if bodyStr != "" {
+		bodyReader = strings.NewReader(bodyStr)
+		reqBody = io.NopCloser(bodyReader)
 	} else {
 		bodyReader = http.NoBody
+		reqBody = http.NoBody
 	}
 
-	req, err := http.NewRequest(r.Method, url, bodyReader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+	var req *http.Request
+	if r.PreparsedURL != nil && urlStr == r.URL {
+		// Fast-path: Skip url.Parse and http.NewRequest allocation overhead
+		req = &http.Request{
+			Method:     r.Method,
+			URL:        r.PreparsedURL,
+			Proto:      "HTTP/1.1",
+			ProtoMajor: 1,
+			ProtoMinor: 1,
+			Body:       reqBody,
+			Host:       r.PreparsedURL.Host,
+		}
+
+		// Set GetBody for redirects/retries
+		if bodyStr != "" {
+			req.ContentLength = int64(len(bodyStr))
+			req.GetBody = func() (io.ReadCloser, error) {
+				return io.NopCloser(strings.NewReader(bodyStr)), nil
+			}
+		} else {
+			req.GetBody = func() (io.ReadCloser, error) { return http.NoBody, nil }
+		}
+	} else {
+		// Slow-path: Dynamic URL
+		var err error
+		req, err = http.NewRequest(r.Method, urlStr, bodyReader)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
 	}
 
 	// Headers
-	for k, vv := range r.Headers {
-		for _, v := range vv {
-			val := resolveDynamic(v)
-			for vk, vv := range vars {
-				placeholder := "{{" + vk + "}}"
-				val = strings.ReplaceAll(val, placeholder, vv)
+	if r.PrebuiltHeaders != nil {
+		// Fast-path: no per-header dynamic resolution needed
+		req.Header = r.PrebuiltHeaders.Clone()
+	} else {
+		req.Header = make(http.Header, len(r.Headers))
+		// Slow-path: Dynamic headers
+		for k, vv := range r.Headers {
+			for _, v := range vv {
+				val := v
+				if strings.Contains(val, "{{") {
+					val = resolveDynamic(val)
+					for vk, vv := range vars {
+						val = strings.ReplaceAll(val, "{{"+vk+"}}", vv)
+					}
+				}
+				req.Header.Add(k, val)
 			}
-			req.Header.Add(k, val)
 		}
 	}
 

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
+	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -152,6 +153,63 @@ func BenchmarkActor_Parallel(b *testing.B) {
 			shard++
 		}
 	})
+}
+
+// ── Actor with snap recorder ──────────────────────────────────────────────────
+
+// BenchmarkActor_WithRecorder measures the additional per-request overhead of
+// the --snap pipeline on the actor hot path: e.recorder.Record() plus, for
+// sampled requests, draining the response body into a pooled buffer (steps
+// 5 and 10 of executeActor) instead of io.Discard.
+//
+// "no_recorder" mirrors BenchmarkActor_ConnectionReuse and serves as the
+// baseline. The other variants attach a snap.DefaultRecorder at different
+// sample rates to isolate the Record()-enqueue cost (no_sample) from the
+// body-capture cost (sample_5pct / sample_100pct).
+func BenchmarkActor_WithRecorder(b *testing.B) {
+	srv := fastServer()
+	defer srv.Close()
+	spec := httpreader.RequestSpec{Method: http.MethodGet, URL: srv.URL}
+
+	cases := []struct {
+		name       string
+		withRec    bool
+		sampleRate float64
+	}{
+		{"no_recorder", false, 0},
+		{"recorder_no_sample", true, 0},
+		{"recorder_sample_5pct", true, 0.05},
+		{"recorder_sample_100pct", true, 1.0},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		b.Run(tc.name, func(b *testing.B) {
+			var opts []EngineOption
+			var rec *snap.DefaultRecorder
+			if tc.withRec {
+				rec = snap.NewDefaultRecorder(1 << 20)
+				opts = append(opts, WithRecorder(rec), WithSampleRate(tc.sampleRate))
+			}
+			e := New(opts...)
+
+			// Warm the connection pool before the timed loop.
+			for i := 0; i < 10; i++ {
+				_ = e.executeActor(context.Background(), spec, 0, nil)
+			}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = e.executeActor(context.Background(), spec, i%numShards, nil)
+			}
+			b.StopTimer()
+
+			if rec != nil {
+				_, _ = rec.Finalize(snap.RunMeta{})
+			}
+		})
+	}
 }
 
 // BenchmarkEngine_MaxRPS_SingleCore measures the absolute maximum throughput

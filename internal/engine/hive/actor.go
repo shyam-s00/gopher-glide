@@ -1,10 +1,12 @@
 package hive
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
@@ -28,6 +30,17 @@ func (e *Engine) executeJourney(ctx context.Context, specs []httpreader.RequestS
 		}
 	}
 	return nil
+}
+
+// maxPooledBufCap is the maximum buffer capacity that will be returned to
+// bufferPool. Buffers that grew beyond this threshold are dropped so that a
+// single large response body cannot bloat the pool's retained memory.
+const maxPooledBufCap = 1 << 20 // 1 MiB
+
+var bufferPool = sync.Pool{
+	New: func() any {
+		return new(bytes.Buffer)
+	},
 }
 
 // executeActor performs a single HTTP request step within a Journey.
@@ -78,9 +91,18 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 
 	// ── 3. Attach context + User-Agent ───────────────────────────────────
 	req = req.WithContext(ctx)
-	req.Header.Set("User-Agent", userAgent)
+	// Static specs get User-Agent baked into PrebuiltHeaders by Compile(),
+	// avoiding a per-request map write (and potential rehash).
+	if spec.PrebuiltHeaders == nil {
+		req.Header.Set("User-Agent", userAgent)
+	}
 
-	resolvedURL := req.URL.String()
+	// Static specs (no {{...}} in the URL) have ResolvedURL precomputed by
+	// Compile(), avoiding a URL.String() rebuild on every request.
+	resolvedURL := spec.ResolvedURL
+	if spec.PreparsedURL == nil {
+		resolvedURL = req.URL.String()
+	}
 
 	// ── 4. Execute ───────────────────────────────────────────────────────
 	resp, err := e.client.Do(req)
@@ -94,7 +116,7 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 			e.recorder.Record(snap.RecordEntry{
 				Timestamp: start,
 				Method:    spec.Method,
-				URL:       resolvedURL,
+				URL:       spec.URL,
 				Duration:  duration,
 				Error:     err,
 			})
@@ -112,11 +134,22 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 	needBody := doSample || (mem != nil && len(spec.Exports) > 0)
 
 	var respBody []byte
+	var buf *bytes.Buffer
+
 	if needBody {
-		respBody, _ = io.ReadAll(resp.Body)
+		buf = bufferPool.Get().(*bytes.Buffer)
+		buf.Reset()
+		_, _ = io.Copy(buf, resp.Body)
+		respBody = buf.Bytes()
 	} else {
 		_, _ = io.Copy(io.Discard, resp.Body)
 	}
+
+	defer func() {
+		if buf != nil && buf.Cap() <= maxPooledBufCap {
+			bufferPool.Put(buf)
+		}
+	}()
 
 	// Prefer Content-Length for body-size reporting (zero extra cost);
 	// fall back to actual byte count only for sampled responses.
@@ -137,14 +170,15 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		e.logCall(shard, spec.Method, resolvedURL, resp.StatusCode, duration, ErrHttpError)
 		e.counters.incFailure(shard)
 		if e.recorder != nil {
-			snapBody := respBody
-			if !doSample {
-				snapBody = nil
+			var snapBody []byte
+			if doSample {
+				snapBody = make([]byte, len(respBody))
+				copy(snapBody, respBody)
 			}
 			e.recorder.Record(snap.RecordEntry{
 				Timestamp:  start,
 				Method:     spec.Method,
-				URL:        resolvedURL,
+				URL:        spec.URL,
 				StatusCode: resp.StatusCode,
 				Duration:   duration,
 				Headers:    resp.Header,
@@ -170,14 +204,17 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 				if e.recorder != nil {
 					// Include the full body so the operator can debug the
 					// missing path / regex regardless of the sample gate.
+					// Must copy the buffer so the async recorder doesn't race with buffer reuse
+					snapBody := make([]byte, len(respBody))
+					copy(snapBody, respBody)
 					e.recorder.Record(snap.RecordEntry{
 						Timestamp:  start,
 						Method:     spec.Method,
-						URL:        resolvedURL,
+						URL:        spec.URL,
 						StatusCode: resp.StatusCode,
 						Duration:   duration,
 						Headers:    resp.Header,
-						RespBody:   respBody,
+						RespBody:   snapBody,
 						BodySize:   int64(len(respBody)),
 						Error:      extractErr,
 					})
@@ -194,14 +231,15 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 
 	// ── 10. Snap record ───────────────────────────────────────────────────
 	if e.recorder != nil {
-		snapBody := respBody
-		if !doSample {
-			snapBody = nil
+		var snapBody []byte
+		if doSample {
+			snapBody = make([]byte, len(respBody))
+			copy(snapBody, respBody)
 		}
 		e.recorder.Record(snap.RecordEntry{
 			Timestamp:  start,
 			Method:     spec.Method,
-			URL:        resolvedURL,
+			URL:        spec.URL,
 			StatusCode: resp.StatusCode,
 			Duration:   duration,
 			Headers:    resp.Header,

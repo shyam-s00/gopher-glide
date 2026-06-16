@@ -1,0 +1,71 @@
+---
+export interface Props {
+  title: string;
+  reverse?: boolean;
+}
+const { title, reverse = false } = Astro.props;
+---
+<div class={`glass-feature-row ${reverse ? 'reverse' : ''}`}>
+  <div class="feature-text">
+    <h2>{title}</h2>
+    <div class="text-content">
+      <slot name="text" />
+    </div>
+  </div>
+  <div class="feature-visual">
+    <div class="glass-panel">
+      <slot name="visual" />
+    </div>
+  </div>
+</div>
+
+<style>
+  .glass-feature-row {
+    display: flex;
+    gap: 4rem;
+    align-items: center;
+    padding: 4rem 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .glass-feature-row.reverse {
+    flex-direction: row-reverse;
+  }
+  .feature-text {
+    flex: 1;
+  }
+  .feature-text h2 {
+    font-size: 2.25rem;
+    margin-bottom: 1.5rem;
+    color: var(--sl-color-text);
+    font-weight: 700;
+  }
+  .text-content :global(p) {
+    font-size: 1.1rem;
+    color: var(--sl-color-gray-2);
+    line-height: 1.6;
+    margin-bottom: 1rem;
+  }
+  .text-content :global(strong) {
+    color: var(--sl-color-text);
+  }
+  .feature-visual {
+    flex: 1;
+    width: 100%;
+  }
+  .glass-panel {
+    background: var(--gg-glass-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--gg-glass-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 8px 32px var(--gg-glass-shadow);
+    overflow: hidden;
+  }
+  @media (max-width: 768px) {
+    .glass-feature-row, .glass-feature-row.reverse {
+      flex-direction: column;
+      gap: 2rem;
+    }
+  }
+</style>

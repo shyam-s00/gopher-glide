@@ -1,0 +1,111 @@
+---
+const rows = [
+  {
+    feature: 'Scripting',
+    gg: 'None (Reads .http natively)',
+    k6: 'JavaScript / Python',
+    wrk: 'None (CLI flags only)',
+  },
+  {
+    feature: 'Traffic Control',
+    gg: 'Live Interactive TUI',
+    k6: 'Requires configs',
+    wrk: 'Fixed concurrency only',
+  },
+  {
+    feature: 'CI/CD Assertions',
+    gg: 'Semantic JSON Diffing',
+    k6: 'Pass/Fail Thresholds',
+    wrk: 'Raw latencies only',
+  },
+  {
+    feature: 'Performance',
+    gg: '30k+ RPS',
+    k6: 'Medium-High',
+    wrk: 'Extremely High',
+  },
+];
+---
+<div class="compare-section">
+  <h2>How does gg compare?</h2>
+  <div class="compare-wrap">
+    <table>
+      <colgroup>
+        <col style="width: 18%" />
+        <col style="width: 32%" />
+        <col style="width: 25%" />
+        <col style="width: 25%" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th class="col-gg">Gopher-Glide (gg)</th>
+          <th class="col-other">k6 / Locust</th>
+          <th class="col-other">wrk / hey</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr>
+            <td><strong>{row.feature}</strong></td>
+            <td class="cell-gg"><strong>{row.gg}</strong></td>
+            <td class="cell-other">{row.k6}</td>
+            <td class="cell-other">{row.wrk}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+  .compare-section {
+    padding: 4rem 2rem;
+  }
+  h2 {
+    font-size: 2.25rem;
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+  .compare-wrap {
+    overflow-x: auto;
+    background: var(--gg-glass-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--gg-glass-border);
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 8px 32px var(--gg-glass-shadow);
+  }
+  table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    text-align: left;
+  }
+  thead tr {
+    border-bottom: 2px solid var(--sl-color-hairline);
+  }
+  th {
+    padding: 1rem;
+  }
+  th.col-gg {
+    color: var(--sl-color-accent);
+    font-size: 1.1rem;
+  }
+  th.col-other {
+    color: var(--sl-color-gray-3);
+  }
+  tbody tr {
+    border-bottom: 1px solid var(--sl-color-hairline);
+  }
+  tbody tr:last-child {
+    border-bottom: none;
+  }
+  td {
+    padding: 1.5rem 1rem;
+    color: var(--sl-color-gray-3);
+  }
+  td.cell-gg {
+    color: var(--sl-color-text);
+  }
+</style>

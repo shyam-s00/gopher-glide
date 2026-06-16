@@ -1,3 +1,6 @@
+---
+title: "Benchmarks"
+---
 # Hive Engine: Performance Benchmarks
 
 * **Primary Test Rig:** Apple M4 Pro (12-core) | OS: `darwin/arm64`

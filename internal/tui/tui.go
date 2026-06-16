@@ -66,6 +66,8 @@ type model struct {
 	snapDir    string
 	snapStatus string // set once the post-run callback completes
 
+	droppedBannerShown bool // tracks when the 'Server Saturated' banner appears to trigger a layout recompute
+
 	// onRunComplete is dispatched as a background tea.Cmd exactly once when
 	// the engine stops naturally. It must not write to stdout/stderr.
 	// Returns a short status string shown in the director bar.
@@ -624,7 +626,7 @@ func (m model) renderTimeline() string {
 		styles.SectionTitle.Render(fmt.Sprintf("%4d %s", m.metrics.TargetRPS, targetUnit)),
 		styles.Success.Render("actual"),
 		styles.Success.Render(fmt.Sprintf("%4.0f %s", m.metrics.Throughput, actualUnit)),
-		styles.Highlight.Render(fmt.Sprintf("active actors: %3d", m.metrics.ActiveVPUs)),
+		styles.Highlight.Render(fmt.Sprintf("%5d active actors", m.metrics.ActiveVPUs)),
 		styles.SuccessBold.Render("▸"),
 		styles.ErrorBold.Render("▸"),
 	))
@@ -937,6 +939,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.ready {
+			bannerShown := m.metrics != nil && m.metrics.DroppedCount > 0
+			if bannerShown != m.droppedBannerShown {
+				m.droppedBannerShown = bannerShown
+				l := m.computeLayout()
+				m.logView.Width = l.logWidth
+				m.logView.Height = l.logHeight
+			}
+
 			atBottom := m.logView.AtBottom()
 			m.logView.SetContent(m.renderLogContent())
 			if atBottom {

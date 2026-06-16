@@ -1,3 +1,6 @@
+---
+title: "Snapshots (gg snap)"
+---
 # Gopher Glide Snapshots (`gg snap`)
 
 Typical load testing tools report basic metrics at the end of a run (e.g., P99 latency, RPS) and then discard the underlying data. **Gopher Glide (gg)** takes a radically different approach with its **Snap** feature.
@@ -22,13 +25,13 @@ With `gg snap`, you can:
 To take a snapshot, simply add the `--snap` flag to any load test. 
 
 ```bash
-gg config.yaml --snap --hive-engine
+gg config.yaml --snap
 ```
 
 You can optionally **tag** your snapshot to easily identify it later (e.g., baseline vs. PR branch):
 
 ```bash
-gg config.yaml --snap --snap-tag "v1-baseline" --hive-engine
+gg config.yaml --snap --snap-tag "v1-baseline"
 ```
 
 A lightweight JSON `.snap` file is written to your system's configuration directory (e.g., `~/.config/gg/snapshots/` on Linux/macOS). An indicator (`📸 Snapping`) will appear in your TUI during the run.
@@ -121,7 +124,7 @@ Instead of a dashboard, `gg` will stream structured heartbeat logs to `stdout`.
 
 ```bash
 # Capture the snapshot in headless mode
-gg config.yaml --snap --snap-tag "pr-123" --headless --hive-engine
+gg config.yaml --snap --snap-tag "pr-123" --headless
 
 # Make your assertions, outputting the result in Markdown format for a PR Comment
 gg snap assert --baseline main --current pr-123 \

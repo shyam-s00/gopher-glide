@@ -37,3 +37,14 @@ dist/
 /gg.exe
 
 /ignore/
+
+# macOS
+.DS_Store
+
+# Website (Astro)
+website/node_modules/
+website/dist/
+website/.astro/
+website/npm-debug.log*
+website/.env
+website/.env.production

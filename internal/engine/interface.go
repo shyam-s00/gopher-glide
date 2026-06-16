@@ -114,10 +114,3 @@ type Runner interface {
 	// Useful for direct-control scenarios outside of staged profiles.
 	SetTargetRPS(rps int)
 }
-
-// Compile-time assertion: *Engine must satisfy Runner.
-//
-// If a method is ever added to Runner without a matching implementation on
-// *Engine, this line will produce a clear, immediate compile error rather than
-// a confusing runtime panic. No overhead — the assignment is optimised away.
-var _ Runner = (*Engine)(nil)

@@ -1,0 +1,63 @@
+/* Catppuccin Theme for Starlight */
+
+/* Catppuccin Latte (Light Theme) */
+:root[data-theme='light'] {
+	color-scheme: light;
+	--sl-color-bg: #eff1f5;
+	--sl-color-bg-nav: #e6e9ef;
+	--sl-color-bg-sidebar: #e6e9ef;
+	--sl-color-text: #4c4f69;
+	--sl-color-text-accent: #8839ef;
+	--sl-color-text-invert: #eff1f5;
+	--sl-color-accent-high: #7287fd;
+	--sl-color-accent: #8839ef;
+	--sl-color-accent-low: #ccd0da;
+	--sl-color-black: #eff1f5;
+	--sl-color-white: #4c4f69;
+	--sl-color-gray-1: #5c5f77;
+	--sl-color-gray-2: #6c6f85;
+	--sl-color-gray-3: #7c7f93;
+	--sl-color-gray-4: #8c8fa1;
+	--sl-color-gray-5: #9ca0b0;
+	--sl-color-gray-6: #acb0be;
+	--sl-color-hairline: #ccd0da;
+	--sl-color-hairline-shade: #bcc0cc;
+	--sl-color-backdrop-overlay: rgba(230, 233, 239, 0.5);
+
+	/* Glass panels (StatsRow, BentoGrid, GlassFeatureRow, tables, FAQ) */
+	--gg-glass-bg: rgba(255, 255, 255, 0.6);
+	--gg-glass-border: rgba(76, 79, 105, 0.15);
+	--gg-glass-shadow: rgba(76, 79, 105, 0.1);
+	--gg-glass-shadow-hover: rgba(136, 57, 239, 0.12);
+}
+
+/* Catppuccin Macchiato (Dark Theme) */
+:root[data-theme='dark'], :root {
+	color-scheme: dark;
+	--sl-color-bg: #24273a;
+	--sl-color-bg-nav: #1e2030;
+	--sl-color-bg-sidebar: #1e2030;
+	--sl-color-text: #cad3f5;
+	--sl-color-text-accent: #c6a0f6;
+	--sl-color-text-invert: #181926;
+	--sl-color-accent-high: #b7bdf8;
+	--sl-color-accent: #c6a0f6;
+	--sl-color-accent-low: #363a4f;
+	--sl-color-black: #181926;
+	--sl-color-white: #cad3f5;
+	--sl-color-gray-1: #b8c0e0;
+	--sl-color-gray-2: #a5adcb;
+	--sl-color-gray-3: #939ab7;
+	--sl-color-gray-4: #6e738d;
+	--sl-color-gray-5: #5b6078;
+	--sl-color-gray-6: #363a4f;
+	--sl-color-hairline: #363a4f;
+	--sl-color-hairline-shade: #181926;
+	--sl-color-backdrop-overlay: rgba(24, 25, 38, 0.5);
+
+	/* Glass panels (StatsRow, BentoGrid, GlassFeatureRow, tables, FAQ) */
+	--gg-glass-bg: rgba(30, 32, 48, 0.4);
+	--gg-glass-border: var(--sl-color-hairline);
+	--gg-glass-shadow: rgba(0, 0, 0, 0.3);
+	--gg-glass-shadow-hover: rgba(198, 160, 246, 0.15);
+}

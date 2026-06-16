@@ -1,0 +1,69 @@
+---
+---
+<div class="stats-container">
+  <div class="stat-box">
+    <div class="stat-number">30,000+</div>
+    <div class="stat-label">RPS</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-number">0</div>
+    <div class="stat-label">Scripts to Write</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-number">100%</div>
+    <div class="stat-label">Lock-Free Architecture</div>
+  </div>
+</div>
+
+<style>
+  .stats-container {
+    display: flex;
+    justify-content: center;
+    gap: 4rem;
+    padding: 3rem 2rem;
+    margin: -3rem auto 4rem auto;
+    max-width: 1000px;
+    background: var(--gg-glass-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--gg-glass-border);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px var(--gg-glass-shadow);
+    position: relative;
+    z-index: 10;
+  }
+  .stat-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 1;
+    text-align: center;
+  }
+  .stat-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 4rem; /* Fixes horizontal alignment of labels */
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--sl-color-accent);
+    margin-bottom: 0.5rem;
+    background: -webkit-linear-gradient(45deg, var(--sl-color-text), var(--sl-color-accent-high));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .stat-label {
+    font-size: 1.1rem;
+    color: var(--sl-color-gray-2);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  @media (max-width: 768px) {
+    .stats-container {
+      flex-direction: column;
+      gap: 2rem;
+      margin: 0 1rem 3rem 1rem;
+    }
+  }
+</style>
