@@ -50,6 +50,7 @@ export default defineConfig({
 				{ label: 'Snapshots (gg snap)', slug: 'snap' },
 				{ label: 'JetBrains Plugin', slug: 'plugin' },
 				{ label: 'Configuration', slug: 'configuration' },
+				{ label: 'CLI Reference', slug: 'cli-reference' },
 			],
 		}),
 	],

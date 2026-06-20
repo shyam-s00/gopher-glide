@@ -44,8 +44,13 @@ config:
   httpFile: "request.http"        # .http file to load (relative to config.yaml)
   jitter: 0.1                     # ±10% noise on the RPS ticker; 0 disables (default: 0)
   time_scale: 1.0                 # stage clock multiplier; 2.0 = run 2× faster (default: 1.0)
-  prometheus: false               # (planned) expose /metrics endpoint
-  breaker_threshold_pct: 20.0     # (planned) circuit-breaker error-rate threshold %
+
+# Optional — tunes the schema-inference engine used by `--snap`.
+# See https://gopherglide.dev/snap for the full walkthrough.
+snap:
+  sample_rate: 0.05                # fraction of responses to body-sample (default: 0.05)
+  max_samples: 200                 # per-endpoint reservoir cap for body samples (default: 200)
+  max_body_kb: 0                   # per-endpoint byte budget for stored bodies; 0 = no limit
 
 stages:
   - name: "Warm Up"               # optional; inferred from shape if omitted
@@ -118,4 +123,11 @@ stages:
     target_rps: 0
 ```
 
+The TUI timeline visualizes the entire plan before and during the run, with a live cursor showing the current position and an RPS marker per block showing the actual throughput achieved.
+
+---
+
+## CLI flags
+
+Every field above (and `httpFile`, `--snap`, `--headless`, etc.) can also be set or overridden from the command line. See the [CLI Reference](/cli-reference) for the complete, man-page-style flag list.
 The TUI timeline visualizes the entire plan before and during the run, with a live cursor showing the current position and an RPS marker per block showing the actual throughput achieved.
