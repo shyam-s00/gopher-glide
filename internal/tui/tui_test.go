@@ -622,7 +622,7 @@ func TestUpdate_Tick_DispatchesOnRunComplete(t *testing.T) {
 	// (b) Execute the returned batch to drive onRunComplete to completion.
 	// tea.Batch returns a BatchMsg holding the individual commands; running
 	// each one here mirrors what the Bubble Tea event loop would do. tickCmd()
-	// adds ~100 ms of latency, which is acceptable for a unit test.
+	// adds ~42 ms of latency, which is acceptable for a unit test.
 	batchMsg, ok := cmd().(tea.BatchMsg)
 	if !ok {
 		t.Fatalf("expected tea.BatchMsg from the returned Cmd, got %T", cmd())
@@ -649,5 +649,29 @@ func TestUpdate_Tick_NoDispatchWhenAlreadyStopped(t *testing.T) {
 	m2, _ := m.Update(tickMsg(time.Now()))
 	if m2.(model).onRunComplete == nil {
 		t.Error("onRunComplete should not be cleared when there was no running→stopped transition")
+	}
+}
+
+// ── effectiveTickInterval ──────────────────────────────────────────────────────
+
+func TestEffectiveTickInterval_ClampsToRange(t *testing.T) {
+	cases := []struct {
+		name string
+		in   time.Duration
+		want time.Duration
+	}{
+		{"unset uses default", 0, defaultTickInterval},
+		{"negative uses default", -5 * time.Millisecond, defaultTickInterval},
+		{"below floor clamps up", 1 * time.Millisecond, minTickInterval},
+		{"within range passes through", 50 * time.Millisecond, 50 * time.Millisecond},
+		{"above ceiling clamps down", 500 * time.Millisecond, maxTickInterval},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := model{tickInterval: c.in}
+			if got := m.effectiveTickInterval(); got != c.want {
+				t.Errorf("effectiveTickInterval(%v) = %v, want %v", c.in, got, c.want)
+			}
+		})
 	}
 }

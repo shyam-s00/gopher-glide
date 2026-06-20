@@ -26,6 +26,17 @@ const (
 	yAxisWidth  = 5
 	chartHeight = 10
 	minWidth    = 60
+
+	// defaultTickInterval is the redraw cadence used when no --tui-tick-ms
+	// override is supplied — ~24fps, matching the rate set in commit af96369.
+	defaultTickInterval = 42 * time.Millisecond
+
+	// minTickInterval/maxTickInterval bound an explicit --tui-tick-ms
+	// override. Below ~16ms (60fps) a terminal can't render any faster
+	// anyway, so anything past that floor is wasted CPU; above 100ms the
+	// UI starts to feel unresponsive, so there's no reason to go slower.
+	minTickInterval = 16 * time.Millisecond
+	maxTickInterval = 100 * time.Millisecond
 )
 
 // ── model ─────────────────────────────────────────────────────────────────────
@@ -43,6 +54,11 @@ type model struct {
 	width  int
 	height int
 	ready  bool
+
+	// tickInterval is the configured --tui-tick-ms override (0 = use
+	// defaultTickInterval). Read through effectiveTickInterval(), which
+	// clamps to [minTickInterval, maxTickInterval].
+	tickInterval time.Duration
 
 	running      bool
 	showFailures bool
@@ -109,11 +125,26 @@ func (m model) Init() tea.Cmd {
 		_ = m.engine.RunStages(m.ctx, m.config, m.specs)
 		close(m.engineDone) // unblocks Start() so it can return only after the engine is fully stopped
 	}()
-	return tea.Batch(tickCmd(), m.spinner.Tick, tea.EnterAltScreen)
+	return tea.Batch(m.tickCmd(), m.spinner.Tick, tea.EnterAltScreen)
 }
 
-func tickCmd() tea.Cmd {
-	return tea.Tick(42*time.Millisecond, func(t time.Time) tea.Msg {
+// effectiveTickInterval returns the redraw cadence to use, clamping any
+// explicit --tui-tick-ms override into [minTickInterval, maxTickInterval].
+func (m model) effectiveTickInterval() time.Duration {
+	if m.tickInterval <= 0 {
+		return defaultTickInterval
+	}
+	if m.tickInterval < minTickInterval {
+		return minTickInterval
+	}
+	if m.tickInterval > maxTickInterval {
+		return maxTickInterval
+	}
+	return m.tickInterval
+}
+
+func (m model) tickCmd() tea.Cmd {
+	return tea.Tick(m.effectiveTickInterval(), func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -953,7 +984,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.logView.GotoBottom()
 			}
 		}
-		cmds = append(cmds, tickCmd())
+		cmds = append(cmds, m.tickCmd())
 	case snapFinalizedMsg:
 		if msg.status != "" {
 			m.snapStatus = msg.status
@@ -1065,11 +1096,12 @@ func (m model) View() string {
 //   - onRunComplete       → called in a background goroutine once the engine
 //     finishes all stages; must not write to stdout/stderr. The returned
 //     string is shown in the director bar. nil is safe (no-op).
-func Start(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec, snapping bool, snapDir string, onRunComplete func() string) error {
+func Start(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec, snapping bool, snapDir string, onRunComplete func() string, tickInterval time.Duration) error {
 	m := initialModel(eng, cfg, specs)
 	m.snapping = snapping
 	m.snapDir = snapDir
 	m.onRunComplete = onRunComplete
+	m.tickInterval = tickInterval
 	p := tea.NewProgram(
 		m,
 		tea.WithAltScreen(),

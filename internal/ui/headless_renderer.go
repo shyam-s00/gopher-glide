@@ -52,24 +52,36 @@ func (r *HeadlessRenderer) reporter() string {
 	return "text"
 }
 
+// StageInfo is a compact, JSON-friendly description of a single load stage,
+// emitted on the "started" event so consumers don't need to parse the YAML
+// config or profile definition themselves.
+type StageInfo struct {
+	Name            string  `json:"name"`
+	DurationSeconds float64 `json:"duration_seconds"`
+	TargetRPS       int     `json:"target_rps"`
+}
+
 // HeartbeatPayload is the structured representation of a single progress event.
 // It is emitted as a JSON object when Reporter == "json", or formatted as a
 // human-readable line when Reporter == "text".
 type HeartbeatPayload struct {
-	Time         string  `json:"time"`
-	Event        string  `json:"event"` // "heartbeat" | "started" | "finished" | "snap"
-	Stage        int     `json:"stage"` // 1-based
-	TotalStages  int     `json:"total_stages"`
-	TargetRPS    int     `json:"target_rps"`
-	ActualRPS    float64 `json:"actual_rps"`
-	TotalReqs    int64   `json:"total_requests"`
-	SuccessCount int64   `json:"success_count"`
-	FailureCount int64   `json:"failure_count"`
-	ErrorRate    float64 `json:"error_rate"`
-	P50Ms        float64 `json:"p50_ms"`
-	P95Ms        float64 `json:"p95_ms"`
-	P99Ms        float64 `json:"p99_ms"`
-	Message      string  `json:"message,omitempty"` // used for snap / finish lines
+	Time         string      `json:"time"`
+	Event        string      `json:"event"` // "heartbeat" | "started" | "finished" | "snap"
+	Stage        int         `json:"stage"` // 1-based
+	TotalStages  int         `json:"total_stages"`
+	Stages       []StageInfo `json:"stages,omitempty"`        // set on "started" only
+	Profile      string      `json:"profile,omitempty"`       // set on "started" only, when a --profile run
+	ProfileScale float64     `json:"profile_scale,omitempty"` // set on "started" only, when a --profile run
+	TargetRPS    int         `json:"target_rps"`
+	ActualRPS    float64     `json:"actual_rps"`
+	TotalReqs    int64       `json:"total_requests"`
+	SuccessCount int64       `json:"success_count"`
+	FailureCount int64       `json:"failure_count"`
+	ErrorRate    float64     `json:"error_rate"`
+	P50Ms        float64     `json:"p50_ms"`
+	P95Ms        float64     `json:"p95_ms"`
+	P99Ms        float64     `json:"p99_ms"`
+	Message      string      `json:"message,omitempty"` // used for snap / finish lines
 }
 
 // Run executes the engine headlessly and blocks until the run finishes or an
@@ -97,11 +109,34 @@ func (r *HeadlessRenderer) Run(eng engine.Runner, cfg *config.Config, specs []ht
 		})
 	}
 
+	stages := make([]StageInfo, len(cfg.Stages))
+	prevRPS := 0
+	for i, s := range cfg.Stages {
+		stages[i] = StageInfo{
+			Name:            s.Label(prevRPS),
+			DurationSeconds: s.Duration.Seconds(),
+			TargetRPS:       s.TargetRPS,
+		}
+		prevRPS = s.TargetRPS
+	}
+
+	profileName := cfg.ConfigSection.ProfileName
+	startedMsg := fmt.Sprintf("Load test started — %d stage(s)", len(cfg.Stages))
+	var profileScale float64
+	if profileName != "" {
+		profileScale = cfg.ConfigSection.ProfileScale
+		startedMsg = fmt.Sprintf("Load test started — profile=%s (scale=%.2f) — %d stage(s)",
+			profileName, profileScale, len(cfg.Stages))
+	}
+
 	r.emit(HeartbeatPayload{
-		Time:        now(),
-		Event:       "started",
-		TotalStages: len(cfg.Stages),
-		Message:     fmt.Sprintf("Load test started — %d stage(s)", len(cfg.Stages)),
+		Time:         now(),
+		Event:        "started",
+		TotalStages:  len(cfg.Stages),
+		Stages:       stages,
+		Profile:      profileName,
+		ProfileScale: profileScale,
+		Message:      startedMsg,
 	})
 
 	ticker := time.NewTicker(r.heartbeatInterval())

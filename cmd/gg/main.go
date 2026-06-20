@@ -97,6 +97,8 @@ func main() {
 	snapMaxBodyKB := fs.Int("snap-max-body-kb", 0, "per-endpoint byte budget for stored body samples in KB (0 = no byte-based limit)")
 	headless := fs.Bool("headless", false, "run without interactive TUI — emits structured heartbeat logs (for CI)")
 	reporter := fs.String("reporter", "text", "output format in headless mode: text | json")
+	heartbeatInterval := fs.Duration("heartbeat-interval", 0, "headless heartbeat cadence, e.g. 2s (0 = default of 5s)")
+	tuiTickMs := fs.Int("tui-tick-ms", 0, "interactive TUI redraw cadence in ms, clamped to [16, 100] (0 = default of 42ms)")
 	_ = fs.Parse(flagArgs)
 
 	// Track which flags were explicitly provided so we can apply the correct
@@ -368,12 +370,14 @@ func main() {
 	if *headless {
 		if hr, ok := renderer.(*ui.HeadlessRenderer); ok {
 			hr.Reporter = *reporter
+			hr.HeartbeatInterval = *heartbeatInterval
 		}
 	}
 	if err := renderer.Run(eng, cfg, specs, ui.RunOptions{
 		Snapping:      *snapEnabled,
 		SnapDir:       resolvedSnapDir,
 		OnRunComplete: onRunComplete,
+		TickInterval:  time.Duration(*tuiTickMs) * time.Millisecond,
 	}); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error running: %v\n", err)
 		os.Exit(1)

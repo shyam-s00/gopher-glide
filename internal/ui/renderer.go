@@ -8,6 +8,8 @@
 package ui
 
 import (
+	"time"
+
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
@@ -34,6 +36,10 @@ type RunOptions struct {
 	//     has fully exited and before Run returns. Writing to stdout/stderr is
 	//     safe here because there is no alt-screen constraint.
 	OnRunComplete func() string
+
+	// TickInterval overrides the TUI's redraw cadence (--tui-tick-ms).
+	// Ignored by HeadlessRenderer. 0 means "use the TUI's default".
+	TickInterval time.Duration
 }
 
 // Renderer is the common interface for all presentation modes.
