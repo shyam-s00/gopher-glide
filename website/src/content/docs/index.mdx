@@ -94,6 +94,30 @@ import FaqSection from '../../components/FaqSection.astro';
   </div>
 </GlassFeatureRow>
 
+<GlassFeatureRow title="Run From Your IDE, Not a Terminal">
+  <div slot="text">
+    <p><strong>The official <a href="https://plugins.jetbrains.com/plugin/30983-gopher-glide">JetBrains plugin</a> brings the entire workflow into IntelliJ, GoLand, WebStorm, and more.</strong> Click a gutter icon on any <code>.http</code> file, pick a built-in load profile, and watch live RPS, error rate, and latency percentiles update in a native run dashboard.</p>
+    <p>No interactive terminal UI involved — just a lightweight panel fed by <code>gg</code>'s headless JSON heartbeat, so it stays responsive no matter how long or heavy the run is.</p>
+  </div>
+  <div slot="visual">
+    <CodeCompare filename="Gopher Glide — Run">
+      <img src="/assets/plugin-run-view.png" alt="Native run dashboard in the Gopher Glide JetBrains plugin, showing live RPS chart, metrics, and stage timeline" />
+    </CodeCompare>
+  </div>
+</GlassFeatureRow>
+
+<GlassFeatureRow title="Snapshot Diffing, Natively in the IDE" reverse={true}>
+  <div slot="text">
+    <p><strong>The same semantic diffing from <code>gg snap diff</code>, rendered as a native dialog</strong> — no terminal TUI required. Select any two snapshots in the plugin's Snap Explorer to see metric shifts, payload growth, and schema drift side-by-side.</p>
+    <p>Pair it with the built-in <code>gg snap assert</code> action to gate regressions before they ever leave your editor.</p>
+  </div>
+  <div slot="visual">
+    <CodeCompare filename="Gopher Glide — Snap Diff">
+      <img src="/assets/plugin-diff-view.png" alt="Native snapshot diff view in the Gopher Glide JetBrains plugin, highlighting latency, payload, and schema regressions" />
+    </CodeCompare>
+  </div>
+</GlassFeatureRow>
+
 <ComparisonTable />
 
 <FaqSection />
