@@ -15,6 +15,8 @@
   <a href="https://codecov.io/gh/shyam-s00/gopher-glide"><img src="https://codecov.io/gh/shyam-s00/gopher-glide/graph/badge.svg" alt="codecov"></a>
   <a href="https://goreportcard.com/report/github.com/shyam-s00/gopher-glide"><img src="https://goreportcard.com/badge/github.com/shyam-s00/gopher-glide" alt="Go Report Card"></a>
   <a href="https://plugins.jetbrains.com/plugin/30983-gopher-glide"><img src="https://img.shields.io/jetbrains/plugin/v/dev.gopherglide.gg-plugin" alt="JetBrains Plugin Version"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=gopherglide.gg-plugin"><img src="https://img.shields.io/visual-studio-marketplace/v/gopherglide.gg-plugin?label=VS%20Code" alt="VS Code Marketplace Version"></a>
+  <a href="https://open-vsx.org/extension/gopherglide/gg-plugin"><img src="https://img.shields.io/open-vsx/v/gopherglide/gg-plugin?label=Open%20VSX" alt="Open VSX Version"></a>
 </p>
 
 <p align="center">
@@ -74,8 +76,8 @@ The core of `gg` is built on a pure-Go lock-free Actor Model. By isolating conne
 ### 🔬 X-Ray Vision for APIs (`gg snap`)
 Know *exactly* why you broke production, not just when. By passing the `--snap` flag, Gopher-Glide infers your API's JSON schema in real-time. You can then use `gg snap diff` in your CI/CD pipeline to compare two snapshots side-by-side to instantly spot missing fields, type changes, or massive payload bloat.
 
-### 🔌 JetBrains IDE Integration 
-Gopher Glide features an official [JetBrains plugin](https://plugins.jetbrains.com/plugin/30983-gopher-glide) that brings load testing directly into your IDE. Run profiles directly from your `.http` files via the gutter icon, and explore semantic diffs using the Snap UI Tool Window.
+### 🔌 IDE Integration
+Gopher Glide has official plugins for **[JetBrains](https://plugins.jetbrains.com/plugin/30983-gopher-glide)** (IntelliJ, GoLand, WebStorm, Rider, and more) and **[VS Code](https://marketplace.visualstudio.com/items?itemName=gopherglide.gg-plugin)** (also available on [Open VSX](https://open-vsx.org/extension/gopherglide/gg-plugin) for VSCodium, Gitpod, and other compatible editors). Both plugins bring the full `gg` workflow into your editor — run profiles directly from any `.http` file, watch a live RPS/latency dashboard, and explore semantic snapshot diffs, all without touching a terminal.
 
 ### 🔄 Stateful Journeys & Variable Extraction
 No more writing custom JavaScript to test multi-step workflows. `gg` natively understands JetBrains HTTP variable extraction syntax. You can authenticate, extract a token using `@gg-export`, and instantly inject it into the next request using `\{\{token\}\}`.
