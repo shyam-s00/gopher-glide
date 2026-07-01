@@ -48,7 +48,7 @@ export default defineConfig({
 				{ label: 'Benchmarks', slug: 'benchmarks' },
 				{ label: 'The TUI', slug: 'tui' },
 				{ label: 'Snapshots (gg snap)', slug: 'snap' },
-				{ label: 'JetBrains Plugin', slug: 'plugin' },
+				{ label: 'IDE Plugins', slug: 'plugin' },
 				{ label: 'Configuration', slug: 'configuration' },
 				{ label: 'CLI Reference', slug: 'cli-reference' },
 			],
