@@ -15,10 +15,9 @@
   <a href="https://codecov.io/gh/shyam-s00/gopher-glide"><img src="https://codecov.io/gh/shyam-s00/gopher-glide/graph/badge.svg" alt="codecov"></a>
   <a href="https://goreportcard.com/report/github.com/shyam-s00/gopher-glide"><img src="https://goreportcard.com/badge/github.com/shyam-s00/gopher-glide" alt="Go Report Card"></a>
   <a href="https://plugins.jetbrains.com/plugin/30983-gopher-glide"><img src="https://img.shields.io/jetbrains/plugin/v/dev.gopherglide.gg-plugin" alt="JetBrains Plugin Version"></a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=gopherglide.gg-plugin"><img src="https://img.shields.io/visual-studio-marketplace/v/gopherglide.gg-plugin?label=VS%20Code" alt="VS Code Marketplace Version"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=gopherglide.gg-plugin"><img src="https://img.shields.io/github/v/release/shyam-s00/gg-vscode-plugin?label=VS%20Code%20Plugin" alt="VS Code Plugin Version"></a>
   <a href="https://open-vsx.org/extension/gopherglide/gg-plugin"><img src="https://img.shields.io/open-vsx/v/gopherglide/gg-plugin?label=Open%20VSX" alt="Open VSX Version"></a>
 </p>
-
 <p align="center">
   <img src="website/public/assets/demo.gif" alt="Gopher Glide TUI Demo" width="800" />
 </p>
