@@ -52,12 +52,14 @@ The **Snaps** tab is a full native UI for managing Snapshots — list, view, dif
 
 Toolbar actions:
 - **Refresh** — reload the snapshot list from disk.
-- **View Detail** — inspect a snapshot's latency, status distribution, and inferred response schema.
-- **Compare (Diff)** — semantically diff two snapshots side-by-side (select exactly two rows).
+- **View Detail** — inspect a snapshot. The detailed view provides an **Endpoint Breakdown** (Error Rate, P95, Payload Avg) and a dedicated **Inferred JSON Schema** viewer showing the precise `Type`, `Presence %`, and `Stability` of every field observed during the run.
+- **Compare (Diff)** — semantically diff two snapshots side-by-side (select exactly two rows). The diff UI automatically flags **Configuration mismatches** (e.g., if you diff a baseline run with a different config hash) and highlights specific schema regressions, such as a field's presence dropping from 100% to 19% under heavy load.
 - **Assert...** — run `gg snap assert` between any two snapshots against configurable thresholds.
 - **Prune...** — clean up old snapshots by ID(s), tag, keep-last count, or age (e.g. `30d`) — with a dry-run preview by default.
 
-![Native snapshot diff view highlighting latency, payload, and schema regressions between two snapshots](/assets/plugin-diff-view.png)
+![Native snapshot detail view showing inferred JSON schema stability and presence](/assets/plugin-snap-view.png)
+
+![Native snapshot diff view highlighting configuration warnings and schema regressions between two snapshots](/assets/plugin-diff-view.png)
 
 ### 🛡️ One-Click CI Workflow Generator
 
