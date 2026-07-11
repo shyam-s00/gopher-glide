@@ -155,10 +155,12 @@ func formatAssertText(r AssertResult) string {
 		status = "❌ FAILED"
 	}
 	sb.WriteString(fmt.Sprintf("Assert Result: %s\n", status))
-	sb.WriteString(fmt.Sprintf("Baseline : %s  (%s)\n",
-		displayTag(r.DiffResult.Baseline.Tag), r.DiffResult.Baseline.StartTime.Format("2006-01-02 15:04:05Z07:00")))
-	sb.WriteString(fmt.Sprintf("Current  : %s  (%s)\n",
-		displayTag(r.DiffResult.Current.Tag), r.DiffResult.Current.StartTime.Format("2006-01-02 15:04:05Z07:00")))
+	sb.WriteString(fmt.Sprintf("Baseline : %s%s  (%s)\n",
+		displayTag(r.DiffResult.Baseline.Tag), displayProfile(r.DiffResult.Baseline.ProfileName),
+		r.DiffResult.Baseline.StartTime.Format("2006-01-02 15:04:05Z07:00")))
+	sb.WriteString(fmt.Sprintf("Current  : %s%s  (%s)\n",
+		displayTag(r.DiffResult.Current.Tag), displayProfile(r.DiffResult.Current.ProfileName),
+		r.DiffResult.Current.StartTime.Format("2006-01-02 15:04:05Z07:00")))
 
 	// Summary counts.
 	pass, warn, reg := tallyVerdicts(r.DiffResult)
@@ -187,11 +189,11 @@ func formatAssertMarkdown(r AssertResult) string {
 	sb.WriteString(fmt.Sprintf("## `gg snap assert` Result: %s\n\n", status))
 
 	sb.WriteString("| | |\n|---|---|\n")
-	sb.WriteString(fmt.Sprintf("| Baseline | `%s` — %s |\n",
-		displayTag(r.DiffResult.Baseline.Tag),
+	sb.WriteString(fmt.Sprintf("| Baseline | `%s`%s — %s |\n",
+		displayTag(r.DiffResult.Baseline.Tag), displayProfile(r.DiffResult.Baseline.ProfileName),
 		r.DiffResult.Baseline.StartTime.Format("2006-01-02 15:04 UTC")))
-	sb.WriteString(fmt.Sprintf("| Current | `%s` — %s |\n\n",
-		displayTag(r.DiffResult.Current.Tag),
+	sb.WriteString(fmt.Sprintf("| Current | `%s`%s — %s |\n\n",
+		displayTag(r.DiffResult.Current.Tag), displayProfile(r.DiffResult.Current.ProfileName),
 		r.DiffResult.Current.StartTime.Format("2006-01-02 15:04 UTC")))
 
 	pass, warn, reg := tallyVerdicts(r.DiffResult)
@@ -239,6 +241,15 @@ func displayTag(tag string) string {
 		return "(untagged)"
 	}
 	return tag
+}
+
+// displayProfile renders a bracketed profile suffix for reporter output,
+// e.g. " (flash-sale)". Returns "" when no profile was used.
+func displayProfile(name string) string {
+	if name == "" {
+		return ""
+	}
+	return fmt.Sprintf(" (%s)", name)
 }
 
 func tallyVerdicts(r DiffResult) (pass, warn, reg int) {

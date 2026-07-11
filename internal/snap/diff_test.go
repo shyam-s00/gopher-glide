@@ -87,8 +87,10 @@ func TestPctChange_BaseZeroCurrZero(t *testing.T) {
 func TestDiff_MetaIsPreserved(t *testing.T) {
 	base := makeSnap()
 	base.Meta.Tag = "v1"
+	base.Meta.ProfileName = "flash-sale"
 	curr := makeSnap()
 	curr.Meta.Tag = "v2"
+	curr.Meta.ProfileName = "ddos"
 
 	result := Diff(base, curr, defaultOpts())
 	if result.Baseline.Tag != "v1" {
@@ -96,6 +98,12 @@ func TestDiff_MetaIsPreserved(t *testing.T) {
 	}
 	if result.Current.Tag != "v2" {
 		t.Errorf("Current.Tag = %q, want v2", result.Current.Tag)
+	}
+	if result.Baseline.ProfileName != "flash-sale" {
+		t.Errorf("Baseline.ProfileName = %q, want flash-sale", result.Baseline.ProfileName)
+	}
+	if result.Current.ProfileName != "ddos" {
+		t.Errorf("Current.ProfileName = %q, want ddos", result.Current.ProfileName)
 	}
 }
 
