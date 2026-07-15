@@ -324,6 +324,9 @@ func renderSchemaChanges(changes []snap.FieldChange) string {
 		case snap.FieldStabilityChanged:
 			prefix = "~"
 			st = diffWarnStyle
+		case snap.ArrayBloat:
+			prefix = "~"
+			st = diffRegrStyle
 		}
 
 		detail := schemaChangeDetail(c)
@@ -353,6 +356,9 @@ func schemaChangeDetail(c snap.FieldChange) string {
 		return fmt.Sprintf("stability  %s → %s  (%.0f%% → %.0f%%)",
 			c.BaseStability, c.CurrStability,
 			c.BasePresence*100, c.CurrPresence*100)
+	case snap.ArrayBloat:
+		return fmt.Sprintf("array length  %.1f → %.1f avg",
+			c.BaseArrayLength, c.CurrArrayLength)
 	}
 	return ""
 }

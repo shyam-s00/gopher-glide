@@ -64,6 +64,11 @@ type FieldChange struct {
 	CurrPresence  float64         `json:"curr_presence,omitempty"`
 	BaseStability string          `json:"base_stability,omitempty"`
 	CurrStability string          `json:"curr_stability,omitempty"`
+
+	// BaseArrayLength and CurrArrayLength hold the average array length observed
+	// in the baseline/current snapshot. Populated only for Kind == ArrayBloat.
+	BaseArrayLength float64 `json:"base_array_length,omitempty"`
+	CurrArrayLength float64 `json:"curr_array_length,omitempty"`
 }
 
 // FieldChangeKind classifies the nature of a schema-level change.
@@ -79,6 +84,9 @@ const (
 	// FieldStabilityChanged means the field's presence fraction crossed a
 	// stability threshold (e.g. STABLE → VOLATILE).
 	FieldStabilityChanged FieldChangeKind = "stability_changed"
+	// ArrayBloat means an array field's average length grew beyond
+	// DiffOptions.MaxArrayBloatPct relative to the baseline.
+	ArrayBloat FieldChangeKind = "array_bloat"
 )
 
 // DiffVerdict is the summary judgement for an endpoint comparison.
@@ -113,6 +121,11 @@ type DiffOptions struct {
 	// DenyRemovedFields upgrades a removed schema field from WARN to REGRESSION.
 	// Useful in CI pipelines where consumers depend on every field being stable.
 	DenyRemovedFields bool
+
+	// MaxArrayBloatPct is the percentage increase in an array field's average
+	// length (relative to baseline) that triggers a REGRESSION verdict.
+	// Default: 0, meaning array-bloat detection is disabled unless set.
+	MaxArrayBloatPct float64
 }
 
 // DefaultDiffOptions returns a DiffOptions with sensible production thresholds.
@@ -188,7 +201,7 @@ func diffEndpoint(id string, base, curr EndpointSnap, opts DiffOptions) Endpoint
 		PayloadDelta:   diffPayload(base.PayloadSize, curr.PayloadSize),
 		StatusDelta:    diffStatusDist(base.StatusDist, curr.StatusDist),
 		ErrorRateDelta: curr.ErrorRate - base.ErrorRate,
-		SchemaChanges:  diffSchema(base.Schema, curr.Schema),
+		SchemaChanges:  diffSchema(base.Schema, curr.Schema, opts),
 	}
 	d.Verdict = calcVerdict(d, opts)
 	return d
@@ -229,7 +242,7 @@ func diffStatusDist(base, curr map[string]float64) map[string]float64 {
 
 // diffSchema computes field-level changes between two SchemaSnapshots.
 // Either argument may be nil (no schema was captured for that run).
-func diffSchema(base, curr *SchemaSnapshot) []FieldChange {
+func diffSchema(base, curr *SchemaSnapshot, opts DiffOptions) []FieldChange {
 	var baseFields, currFields map[string]FieldSchema
 	if base != nil {
 		baseFields = base.Fields
@@ -278,6 +291,21 @@ func diffSchema(base, curr *SchemaSnapshot) []FieldChange {
 				BaseStability: bf.Stability,
 				CurrStability: cf.Stability,
 			})
+		}
+
+		// Array-bloat detection: only meaningful when both sides are arrays and
+		// the caller opted in via MaxArrayBloatPct > 0.
+		if bf.Type == "array" && cf.Type == "array" && opts.MaxArrayBloatPct > 0 {
+			if pctChange(bf.ArrayLengthAvg, cf.ArrayLengthAvg) > opts.MaxArrayBloatPct {
+				changes = append(changes, FieldChange{
+					Path:            path,
+					Kind:            ArrayBloat,
+					BaseType:        bf.Type,
+					CurrType:        cf.Type,
+					BaseArrayLength: bf.ArrayLengthAvg,
+					CurrArrayLength: cf.ArrayLengthAvg,
+				})
+			}
 		}
 	}
 
@@ -342,6 +370,9 @@ func calcVerdict(d EndpointDiff, opts DiffOptions) DiffVerdict {
 			escalate(VerdictRegression)
 		case FieldAdded, FieldStabilityChanged:
 			escalate(VerdictWarn)
+		case ArrayBloat:
+			// Unbounded array growth (e.g. a missing pagination limit) → REGRESSION.
+			escalate(VerdictRegression)
 		}
 	}
 

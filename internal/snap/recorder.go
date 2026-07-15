@@ -134,6 +134,12 @@ type FieldSchema struct {
 	Type      string  `json:"type"`
 	Presence  float64 `json:"presence"`  // 0.0–1.0 fraction of samples containing the field
 	Stability string  `json:"stability"` // STABLE / VOLATILE / RARE
+
+	// ArrayLengthAvg and ArrayLengthMax are populated only when Type == "array".
+	// They describe the length of the array across samples in which it appeared,
+	// and drive array-bloat detection in diff.go.
+	ArrayLengthAvg float64 `json:"array_length_avg,omitempty"`
+	ArrayLengthMax int     `json:"array_length_max,omitempty"`
 }
 
 // DefaultMaxBodySamples is the per-endpoint reservoir cap used when neither

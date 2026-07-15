@@ -114,6 +114,12 @@ func violationMessages(ep EndpointDiff, opts DiffOptions) []string {
 			if opts.DenyRemovedFields {
 				msgs = append(msgs, fmt.Sprintf("field %q removed", fc.Path))
 			}
+		case ArrayBloat:
+			msgs = append(msgs, fmt.Sprintf(
+				"field %q array length %+.1f%% (%.1f→%.1f avg, threshold: %.0f%%)",
+				fc.Path, pctChange(fc.BaseArrayLength, fc.CurrArrayLength),
+				fc.BaseArrayLength, fc.CurrArrayLength, opts.MaxArrayBloatPct,
+			))
 		}
 	}
 

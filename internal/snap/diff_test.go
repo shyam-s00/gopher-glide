@@ -422,6 +422,67 @@ func TestDiff_SchemaChanges_SortedByPath(t *testing.T) {
 	}
 }
 
+// ── Diff: array bloat ──────────────────────────────────────────────────────────
+
+func TestDiff_ArrayBloat_AboveThreshold_IsRegression(t *testing.T) {
+	base := makeSnap(epWithSchema("GET:/api", makeSchema(map[string]FieldSchema{
+		"items": {Type: "array", Presence: 1.0, Stability: StabilityStable, ArrayLengthAvg: 10, ArrayLengthMax: 12},
+	})))
+	curr := makeSnap(epWithSchema("GET:/api", makeSchema(map[string]FieldSchema{
+		"items": {Type: "array", Presence: 1.0, Stability: StabilityStable, ArrayLengthAvg: 25, ArrayLengthMax: 30},
+	})))
+
+	opts := defaultOpts()
+	opts.MaxArrayBloatPct = 100 // fails only if length more than doubles
+	result := Diff(base, curr, opts)
+	d := result.Endpoints[0]
+	if d.Verdict != VerdictRegression {
+		t.Errorf("expected REGRESSION for 150%% array bloat, got %v", d.Verdict)
+	}
+	if len(d.SchemaChanges) != 1 || d.SchemaChanges[0].Kind != ArrayBloat {
+		t.Fatalf("expected one ArrayBloat change, got %+v", d.SchemaChanges)
+	}
+	if d.SchemaChanges[0].BaseArrayLength != 10 || d.SchemaChanges[0].CurrArrayLength != 25 {
+		t.Errorf("unexpected array lengths: %+v", d.SchemaChanges[0])
+	}
+}
+
+func TestDiff_ArrayBloat_BelowThreshold_IsPass(t *testing.T) {
+	base := makeSnap(epWithSchema("GET:/api", makeSchema(map[string]FieldSchema{
+		"items": {Type: "array", Presence: 1.0, Stability: StabilityStable, ArrayLengthAvg: 10},
+	})))
+	curr := makeSnap(epWithSchema("GET:/api", makeSchema(map[string]FieldSchema{
+		"items": {Type: "array", Presence: 1.0, Stability: StabilityStable, ArrayLengthAvg: 15},
+	})))
+
+	opts := defaultOpts()
+	opts.MaxArrayBloatPct = 100 // 50% growth doesn't cross a 100% threshold
+	result := Diff(base, curr, opts)
+	d := result.Endpoints[0]
+	if d.Verdict != VerdictPass {
+		t.Errorf("expected PASS for 50%% array growth under 100%% threshold, got %v", d.Verdict)
+	}
+	if len(d.SchemaChanges) != 0 {
+		t.Errorf("expected no schema changes, got %+v", d.SchemaChanges)
+	}
+}
+
+func TestDiff_ArrayBloat_DisabledByDefault(t *testing.T) {
+	base := makeSnap(epWithSchema("GET:/api", makeSchema(map[string]FieldSchema{
+		"items": {Type: "array", Presence: 1.0, Stability: StabilityStable, ArrayLengthAvg: 10},
+	})))
+	curr := makeSnap(epWithSchema("GET:/api", makeSchema(map[string]FieldSchema{
+		"items": {Type: "array", Presence: 1.0, Stability: StabilityStable, ArrayLengthAvg: 1000},
+	})))
+
+	// MaxArrayBloatPct defaults to 0 (disabled) — massive growth should not regress.
+	result := Diff(base, curr, defaultOpts())
+	d := result.Endpoints[0]
+	if d.Verdict != VerdictPass {
+		t.Errorf("expected PASS when array-bloat detection is disabled, got %v", d.Verdict)
+	}
+}
+
 // ── Diff: status distribution ─────────────────────────────────────────────────
 
 func TestDiff_StatusDelta_Computed(t *testing.T) {
