@@ -93,6 +93,7 @@ import IDEPlugins from '../../components/IDEPlugins.astro';
   <div slot="text">
     <p><strong>Know exactly why you broke production, not just when.</strong> Traditional tools tell you P99 latency spiked. Gopher-Glide's semantic diffing tells you it spiked because a developer accidentally injected a 2MB blob into the JSON payload.</p>
     <p>Select any two snapshots in the plugin's Snap Explorer to visually compare metric shifts, payload growth, and schema drift side-by-side. Pair it with <code>gg snap assert</code> to gate regressions directly from your editor or in your CI/CD pipelines.</p>
+    <p><strong>New: Array Bloat Detection.</strong> A missing pagination limit shouldn't take down your API in prod. Set <code>--max-array-bloat 30</code> and `gg` fails the build the moment an array field's average length balloons past your threshold — before it ships.</p>
   </div>
   <div slot="visual">
     <CodeCompare filename="Gopher Glide — Snap Diff">

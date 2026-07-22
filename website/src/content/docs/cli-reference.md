@@ -104,7 +104,7 @@ gg snap view <id|tag|file> [--snap-dir DIR]
 ### `gg snap diff <id1|tag1|file1> <id2|tag2|file2>`
 
 ```bash
-gg snap diff <baseline> <current> [--snap-dir DIR]
+gg snap diff <baseline> <current> [--snap-dir DIR] [--max-array-bloat PCT]
 ```
 
 ### `gg snap assert`
@@ -121,6 +121,7 @@ gg snap assert --baseline <id|tag|file> --current <id|tag|file> [flags]
 | `--error-rate-delta <0-1>` | `0.05` | Error rate absolute increase that triggers `REGRESSION`. |
 | `--payload-size-delta <pct>` | `50` | Avg payload size % increase that triggers `WARN`. |
 | `--deny-removed-fields` | `false` | Treat removed schema fields as `REGRESSION` instead of `WARN`. |
+| `--max-array-bloat <pct>` | `0` | Array field avg-length % increase that triggers `REGRESSION`. `0` disables the check. |
 | `--fail-on-warn` | `false` | Exit non-zero on `WARN` verdicts in addition to `REGRESSION`. |
 | `--reporter <text\|json\|md>` | `text` | Output format. `md` is suited for posting as a CI/PR comment. |
 | `--out <path>` | stdout | Write the report to this file instead of stdout. |
