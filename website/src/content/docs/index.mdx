@@ -22,6 +22,8 @@ import IDEPlugins from '../../components/IDEPlugins.astro';
   <div slot="text">
     <p><strong>A modern architecture built for massive scale.</strong> Legacy tools rely on heavy OS threads that choke your machine before they choke your API. The new Hive Engine uses a pure-Go lock-free Actor Model.</p>
     <p>By isolating connections into ultra-lightweight Goroutines, a single instance effortlessly generates <strong>over 30,000 RPS</strong> with zero-garbage (<code>0 allocs/op</code>) overhead.</p>
+
+    > **⚔️ Benchmark:** At 30,000 RPS target load, `gg` consumes **40% less memory** (1.42 GB vs 2.38 GB) and delivers **3x more successful requests** than `k6`. [Read the full breakdown &rarr;](/benchmarks)
   </div>
   <div slot="visual">
     ```mermaid
@@ -70,7 +72,7 @@ import IDEPlugins from '../../components/IDEPlugins.astro';
   </div>
   <div slot="visual">
     <CodeCompare filename="gg --profile ddos">
-      <img src="/assets/demo.gif" alt="Interactive Chaos TUI Demo" />
+      <img src="/assets/demo.gif" alt="Interactive Chaos TUI Demo" loading="lazy" />
     </CodeCompare>
   </div>
 </GlassFeatureRow>
@@ -82,7 +84,7 @@ import IDEPlugins from '../../components/IDEPlugins.astro';
   </div>
   <div slot="visual">
     <CodeCompare filename="Gopher Glide — Run">
-      <img src="/assets/plugin-run-view.png" alt="Native run dashboard in the Gopher Glide JetBrains plugin, showing live RPS chart, metrics, and stage timeline" />
+      <img src="/assets/plugin-run-view.png" alt="Native run dashboard in the Gopher Glide JetBrains plugin, showing live RPS chart, metrics, and stage timeline" loading="lazy" />
     </CodeCompare>
   </div>
 </GlassFeatureRow>
@@ -94,7 +96,7 @@ import IDEPlugins from '../../components/IDEPlugins.astro';
   </div>
   <div slot="visual">
     <CodeCompare filename="Gopher Glide — Snap Diff">
-      <img src="/assets/plugin-diff-view.png" alt="Native snapshot diff view in the Gopher Glide JetBrains plugin" />
+      <img src="/assets/plugin-diff-view.png" alt="Native snapshot diff view in the Gopher Glide JetBrains plugin" loading="lazy" />
     </CodeCompare>
   </div>
 </GlassFeatureRow>
