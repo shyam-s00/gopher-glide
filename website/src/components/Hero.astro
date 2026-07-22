@@ -12,6 +12,11 @@ import HeroVisual from './HeroVisual.astro';
       <span class="stat-chip">100% Lock-Free</span>
     </div>
 
+    <div class="hero-install">
+      <code>brew install shyam-s00/tap/gg</code>
+      <a href="/getting-started/#1-install" class="hero-install-alt">other install options &rarr;</a>
+    </div>
+
     <div class="hero-buttons">
       <a href="/getting-started" class="btn btn-primary">Get Started &rarr;</a>
       <a href="https://github.com/shyam-s00/gopher-glide" class="btn btn-secondary">View on GitHub</a>
@@ -94,6 +99,41 @@ import HeroVisual from './HeroVisual.astro';
     border: 1px solid var(--gg-glass-border);
     color: var(--sl-color-text);
     backdrop-filter: blur(8px);
+  }
+
+  /* Copyable install command — sits between the stat chips and CTA buttons */
+  .hero-install {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 1.75rem;
+    padding: 0.6rem 1.1rem;
+    border-radius: 8px;
+    background: var(--gg-glass-bg);
+    border: 1px solid var(--gg-glass-border);
+    backdrop-filter: blur(8px);
+  }
+  .hero-install code {
+    font-family: var(--__sl-font-mono, monospace);
+    font-size: 0.9rem;
+    color: var(--sl-color-text);
+    background: none;
+    padding: 0;
+  }
+  .hero-install code::before {
+    content: '$ ';
+    color: var(--sl-color-gray-2);
+  }
+  .hero-install-alt {
+    font-size: 0.8rem;
+    color: var(--sl-color-gray-2);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .hero-install-alt:hover {
+    color: var(--sl-color-accent);
   }
 
   .hero-buttons {

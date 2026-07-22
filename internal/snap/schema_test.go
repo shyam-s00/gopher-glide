@@ -36,8 +36,8 @@ func TestExtractFields_FlatObject(t *testing.T) {
 		"active": "boolean",
 	}
 	for path, typ := range want {
-		if fields[path] != typ {
-			t.Errorf("fields[%q] = %q, want %q", path, fields[path], typ)
+		if fields[path].typ != typ {
+			t.Errorf("fields[%q] = %q, want %q", path, fields[path].typ, typ)
 		}
 	}
 	// root object itself must NOT appear as a path
@@ -67,8 +67,8 @@ func TestExtractFields_NestedObject(t *testing.T) {
 		"user.address.city": "string",
 	}
 	for path, typ := range checks {
-		if fields[path] != typ {
-			t.Errorf("fields[%q] = %q, want %q", path, fields[path], typ)
+		if fields[path].typ != typ {
+			t.Errorf("fields[%q] = %q, want %q", path, fields[path].typ, typ)
 		}
 	}
 }
@@ -85,14 +85,17 @@ func TestExtractFields_ArrayOfObjects(t *testing.T) {
 	_ = json.Unmarshal(body, &v)
 	fields := extractFields(v)
 
-	if fields["items"] != "array" {
-		t.Errorf("fields[items] = %q, want array", fields["items"])
+	if fields["items"].typ != "array" {
+		t.Errorf("fields[items] = %q, want array", fields["items"].typ)
 	}
-	if fields["items[].id"] != "number" {
-		t.Errorf("fields[items[].id] = %q, want number", fields["items[].id"])
+	if fields["items"].arrayLen != 2 {
+		t.Errorf("fields[items].arrayLen = %d, want 2", fields["items"].arrayLen)
 	}
-	if fields["items[].name"] != "string" {
-		t.Errorf("fields[items[].name] = %q, want string", fields["items[].name"])
+	if fields["items[].id"].typ != "number" {
+		t.Errorf("fields[items[].id] = %q, want number", fields["items[].id"].typ)
+	}
+	if fields["items[].name"].typ != "string" {
+		t.Errorf("fields[items[].name] = %q, want string", fields["items[].name"].typ)
 	}
 }
 
@@ -102,11 +105,11 @@ func TestExtractFields_NullValue(t *testing.T) {
 	_ = json.Unmarshal(body, &v)
 	fields := extractFields(v)
 
-	if fields["role"] != "null" {
-		t.Errorf("fields[role] = %q, want null", fields["role"])
+	if fields["role"].typ != "null" {
+		t.Errorf("fields[role] = %q, want null", fields["role"].typ)
 	}
-	if fields["name"] != "string" {
-		t.Errorf("fields[name] = %q, want string", fields["name"])
+	if fields["name"].typ != "string" {
+		t.Errorf("fields[name] = %q, want string", fields["name"].typ)
 	}
 }
 
@@ -116,8 +119,11 @@ func TestExtractFields_EmptyArray(t *testing.T) {
 	_ = json.Unmarshal(body, &v)
 	fields := extractFields(v)
 
-	if fields["tags"] != "array" {
-		t.Errorf("fields[tags] = %q, want array", fields["tags"])
+	if fields["tags"].typ != "array" {
+		t.Errorf("fields[tags] = %q, want array", fields["tags"].typ)
+	}
+	if fields["tags"].arrayLen != 0 {
+		t.Errorf("fields[tags].arrayLen = %d, want 0", fields["tags"].arrayLen)
 	}
 	// No element paths expected for an empty array.
 	for k := range fields {
@@ -324,6 +330,49 @@ func TestInferSchema_SpecExample(t *testing.T) {
 		if f.Presence < c.minPres || f.Presence > c.maxPres {
 			t.Errorf("%s.presence = %f, want [%f, %f]", c.field, f.Presence, c.minPres, c.maxPres)
 		}
+	}
+}
+
+// ── array length stats ────────────────────────────────────────────────────────
+
+func TestInferSchema_ArrayLengthAvgAndMax(t *testing.T) {
+	lengths := []int{2, 4, 6}
+	bodies := make([][]byte, len(lengths))
+	for i, n := range lengths {
+		items := make([]any, n)
+		for j := range items {
+			items[j] = map[string]any{"id": j}
+		}
+		bodies[i] = mustJSON(map[string]any{"items": items})
+	}
+
+	snap := InferSchema(bodies)
+	if snap == nil {
+		t.Fatal("nil snapshot")
+	}
+	f, ok := snap.Fields["items"]
+	if !ok {
+		t.Fatal("expected 'items' field in schema")
+	}
+	if f.Type != "array" {
+		t.Fatalf("items type = %q, want array", f.Type)
+	}
+	wantAvg := 4.0 // (2+4+6)/3
+	if f.ArrayLengthAvg != wantAvg {
+		t.Errorf("ArrayLengthAvg = %v, want %v", f.ArrayLengthAvg, wantAvg)
+	}
+	if f.ArrayLengthMax != 6 {
+		t.Errorf("ArrayLengthMax = %v, want 6", f.ArrayLengthMax)
+	}
+}
+
+func TestInferSchema_NonArrayField_HasZeroArrayStats(t *testing.T) {
+	bodies := [][]byte{mustJSON(map[string]any{"id": "x"})}
+	snap := InferSchema(bodies)
+	f := snap.Fields["id"]
+	if f.ArrayLengthAvg != 0 || f.ArrayLengthMax != 0 {
+		t.Errorf("expected zero array stats for non-array field, got avg=%v max=%v",
+			f.ArrayLengthAvg, f.ArrayLengthMax)
 	}
 }
 

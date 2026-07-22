@@ -567,6 +567,7 @@ func runSnapView(args []string) {
 func runSnapDiff(args []string) {
 	fs := flag.NewFlagSet("gg snap diff", flag.ExitOnError)
 	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
+	maxArrayBloat := fs.Float64("max-array-bloat", 0, "array field avg-length % increase that triggers REGRESSION (0 = disabled)")
 
 	// Extract the two positional args before any flags, following the same
 	// pattern as runSnapView.  Accepts: IDs, tag names, or file paths.
@@ -592,7 +593,7 @@ func runSnapDiff(args []string) {
 	}
 
 	if len(positional) != 2 {
-		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR]")
+		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR] [--max-array-bloat PCT]")
 		os.Exit(1)
 	}
 
@@ -629,7 +630,13 @@ func runSnapDiff(args []string) {
 		os.Exit(1)
 	}
 
-	result := snap.Diff(baseSnap, currSnap, snap.DefaultDiffOptions())
+	diffOpts := snap.DefaultDiffOptions()
+	diffOpts.MaxArrayBloatPct = *maxArrayBloat
+	if diffOpts.MaxArrayBloatPct < 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "snap diff: --max-array-bloat must be >= 0, got %g\n", diffOpts.MaxArrayBloatPct)
+		os.Exit(1)
+	}
+	result := snap.Diff(baseSnap, currSnap, diffOpts)
 
 	if err := tui.StartSnapDiff(result, *baseInfo, *currInfo); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap diff: %v\n", err)
@@ -660,6 +667,7 @@ func runSnapAssert(args []string) {
 	errorDelta := fs.Float64("error-rate-delta", 0.05, "error rate absolute increase (0–1) that triggers REGRESSION")
 	payloadPct := fs.Float64("payload-size-delta", 50, "avg payload size % increase that triggers WARN")
 	denyRemoved := fs.Bool("deny-removed-fields", false, "treat removed schema fields as REGRESSION (default: WARN)")
+	maxArrayBloat := fs.Float64("max-array-bloat", 0, "array field avg-length % increase that triggers REGRESSION (0 = disabled)")
 	failOnWarn := fs.Bool("fail-on-warn", false, "exit non-zero on WARN verdicts in addition to REGRESSION")
 	reporter := fs.String("reporter", "text", "output format: text | json | md")
 	out := fs.String("out", "", "write report to this file path instead of stdout")
@@ -672,7 +680,7 @@ func runSnapAssert(args []string) {
 		os.Exit(1)
 	}
 
-	if err := validateAssertFlags(*latencyReg, *errorDelta, *payloadPct); err != nil {
+	if err := validateAssertFlags(*latencyReg, *errorDelta, *payloadPct, *maxArrayBloat); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap assert: invalid flag: %v\n", err)
 		os.Exit(1)
 	}
@@ -716,6 +724,7 @@ func runSnapAssert(args []string) {
 			ErrorRateDeltaThreshold:    *errorDelta,
 			PayloadSizeAvgPctThreshold: *payloadPct,
 			DenyRemovedFields:          *denyRemoved,
+			MaxArrayBloatPct:           *maxArrayBloat,
 		},
 		FailOnWarn: *failOnWarn,
 	}
@@ -964,7 +973,7 @@ func validateSnapTuning(sampleRate float64, maxSamples, maxBodyKB int) error {
 //   - latencyReg  must be > 0   (a % increase; 0 would always trigger, negative is nonsensical)
 //   - errorDelta  must be in [0, 1]  (absolute rate change; 0 would always trigger, >1 is impossible)
 //   - payloadPct  must be > 0   (a % increase; same rationale as latencyReg)
-func validateAssertFlags(latencyReg, errorDelta, payloadPct float64) error {
+func validateAssertFlags(latencyReg, errorDelta, payloadPct, maxArrayBloat float64) error {
 	if latencyReg <= 0 {
 		return fmt.Errorf("--latency-regression must be > 0, got %g", latencyReg)
 	}
@@ -973,6 +982,9 @@ func validateAssertFlags(latencyReg, errorDelta, payloadPct float64) error {
 	}
 	if payloadPct <= 0 {
 		return fmt.Errorf("--payload-size-delta must be > 0, got %g", payloadPct)
+	}
+	if maxArrayBloat < 0 {
+		return fmt.Errorf("--max-array-bloat must be >= 0, got %g", maxArrayBloat)
 	}
 	return nil
 }

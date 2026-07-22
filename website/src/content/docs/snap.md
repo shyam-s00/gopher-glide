@@ -90,6 +90,7 @@ The diff engine compares the Baseline (first argument) against the Current (seco
 - **Metrics Shift:** Changes in Latency (Avg, P95, P99, Max) and Error Rates.
 - **Payload Shift:** Average and max payload size growth (e.g., "Payload size grew by 1.2MB").
 - **Schema Drift:** Specifically calls out JSON Schema changes. `+` for newly added fields, `-` for removed fields, and `~` for fields that changed type (e.g., `string` to `integer`).
+- **Array Bloat:** Flags array fields whose average length grew unexpectedly (e.g., a missing pagination limit silently returning thousands of rows instead of 20). Enable it with `--max-array-bloat <pct>` on either `gg snap diff` or `gg snap assert`.
 
 Green, yellow, and red borders make it easy to instantly see which endpoints **Passed**, received a **Warning**, or suffered a **Regression**.
 
@@ -107,7 +108,8 @@ gg snap assert --baseline main --current pr-123 \
     --latency-regression 10 \
     --error-rate-delta 0.05 \
     --payload-size-delta 50 \
-    --deny-removed-fields
+    --deny-removed-fields \
+    --max-array-bloat 30
 ```
 
 **Threshold Flags Breakdown:**
@@ -115,6 +117,7 @@ gg snap assert --baseline main --current pr-123 \
 - `--error-rate-delta 0.05`: Triggers a failure if the error rate increases by an absolute 5 percentage points.
 - `--payload-size-delta 50`: Triggers a warning if payload sizes increase by 50%.
 - `--deny-removed-fields`: Ensures backward compatibility. If any JSON fields are removed from the payload output, it fails the build.
+- `--max-array-bloat 30`: Triggers a failure if an array field's average length grows by more than 30% versus the baseline — the classic symptom of a missing or broken pagination limit. Disabled by default (`0`).
 - `--fail-on-warn`: Upgrades all warnings (like payload growth) into hard pipeline failures.
 
 ### Headless execution (`--headless`)

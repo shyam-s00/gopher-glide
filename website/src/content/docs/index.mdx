@@ -22,6 +22,8 @@ import IDEPlugins from '../../components/IDEPlugins.astro';
   <div slot="text">
     <p><strong>A modern architecture built for massive scale.</strong> Legacy tools rely on heavy OS threads that choke your machine before they choke your API. The new Hive Engine uses a pure-Go lock-free Actor Model.</p>
     <p>By isolating connections into ultra-lightweight Goroutines, a single instance effortlessly generates <strong>over 30,000 RPS</strong> with zero-garbage (<code>0 allocs/op</code>) overhead.</p>
+
+    > **⚔️ Benchmark:** At 30,000 RPS target load, `gg` consumes **40% less memory** (1.42 GB vs 2.38 GB) and delivers **3x more successful requests** than `k6`. [Read the full breakdown &rarr;](/benchmarks)
   </div>
   <div slot="visual">
     ```mermaid
@@ -70,29 +72,7 @@ import IDEPlugins from '../../components/IDEPlugins.astro';
   </div>
   <div slot="visual">
     <CodeCompare filename="gg --profile ddos">
-      <img src="/assets/demo.gif" alt="Interactive Chaos TUI Demo" />
-    </CodeCompare>
-  </div>
-</GlassFeatureRow>
-
-<GlassFeatureRow title="X-Ray Vision for APIs 🔬" reverse={true}>
-  <div slot="text">
-    <p><strong>Know exactly why you broke production, not just when.</strong> Traditional tools tell you P99 latency spiked. <code>gg snap diff</code> tells you it spiked because a developer accidentally injected a 2MB blob into the JSON payload.</p>
-    <p>Compare two snapshots side-by-side to instantly spot missing fields, type changes, or massive payload bloat. Perfect for automated CI/CD regression gates.</p>
-  </div>
-  <div slot="visual">
-    <CodeCompare filename="gg snap diff main feature-branch">
-      ```text
-      GET:http://localhost:8080/fast-get  [❌ REGRESSION]
-
-      Latency Deltas      Payload Deltas      Error & Status
-       P50:    +100.0%     Avg:    +100.0%     Error: -100.00 pp
-       P99:   +5200.0%     Max:    +100.0%     200:   +100.0 pp
-
-      Schema Changes
-       + email           added  string   100% STABLE
-       + metadata        added  object    18% RARE
-      ```
+      <img src="/assets/demo.gif" alt="Interactive Chaos TUI Demo" loading="lazy" />
     </CodeCompare>
   </div>
 </GlassFeatureRow>
@@ -104,19 +84,20 @@ import IDEPlugins from '../../components/IDEPlugins.astro';
   </div>
   <div slot="visual">
     <CodeCompare filename="Gopher Glide — Run">
-      <img src="/assets/plugin-run-view.png" alt="Native run dashboard in the Gopher Glide JetBrains plugin, showing live RPS chart, metrics, and stage timeline" />
+      <img src="/assets/plugin-run-view.png" alt="Native run dashboard in the Gopher Glide JetBrains plugin, showing live RPS chart, metrics, and stage timeline" loading="lazy" />
     </CodeCompare>
   </div>
 </GlassFeatureRow>
 
-<GlassFeatureRow title="Snapshot Diffing, Natively in the IDE" reverse={true}>
+<GlassFeatureRow title="X-Ray Vision for APIs, Natively in your IDE 🔬" reverse={true}>
   <div slot="text">
-    <p><strong>The same semantic diffing from <code>gg snap diff</code>, rendered as a native dialog</strong> — no terminal TUI required. Select any two snapshots in the plugin's Snap Explorer to see metric shifts, payload growth, and schema drift side-by-side.</p>
-    <p>Pair it with the built-in <code>gg snap assert</code> action to gate regressions before they ever leave your editor.</p>
+    <p><strong>Know exactly why you broke production, not just when.</strong> Traditional tools tell you P99 latency spiked. Gopher-Glide's semantic diffing tells you it spiked because a developer accidentally injected a 2MB blob into the JSON payload.</p>
+    <p>Select any two snapshots in the plugin's Snap Explorer to visually compare metric shifts, payload growth, and schema drift side-by-side. Pair it with <code>gg snap assert</code> to gate regressions directly from your editor or in your CI/CD pipelines.</p>
+    <p><strong>New: Array Bloat Detection.</strong> A missing pagination limit shouldn't take down your API in prod. Set <code>--max-array-bloat 30</code> and `gg` fails the build the moment an array field's average length balloons past your threshold — before it ships.</p>
   </div>
   <div slot="visual">
     <CodeCompare filename="Gopher Glide — Snap Diff">
-      <img src="/assets/plugin-diff-view.png" alt="Native snapshot diff view in the Gopher Glide JetBrains plugin, highlighting latency, payload, and schema regressions" />
+      <img src="/assets/plugin-diff-view.png" alt="Native snapshot diff view in the Gopher Glide JetBrains plugin" loading="lazy" />
     </CodeCompare>
   </div>
 </GlassFeatureRow>

@@ -89,6 +89,7 @@ func (m snapViewModel) renderHeader() string {
 	if tag == "" || tag == "run" {
 		tag = "(untagged)"
 	}
+	profile := formatProfile(s.Meta.ProfileName, s.Meta.ProfileScale)
 	configHash := s.Meta.ConfigHash
 	if len(configHash) > 22 {
 		configHash = configHash[:22] + "…"
@@ -116,6 +117,8 @@ func (m snapViewModel) renderHeader() string {
 		sectionStyle.Render("SNAPSHOT"),
 		labelStyle.Render("Tag:"),
 		valueStyle.Render(tag),
+		labelStyle.Render("Profile:"),
+		valueStyle.Render(profile),
 		labelStyle.Render("Date:"),
 		valueStyle.Render(s.Meta.StartTime.UTC().Format("2006-01-02 15:04 UTC")),
 		labelStyle.Render("Duration:"),
@@ -285,6 +288,18 @@ func renderEndpointPanel(ep snap.EndpointSnap, width int) string {
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+// formatProfile renders a snap's profile name/scale for display, e.g.
+// "flash-sale (1.5x)". Returns "(none)" when no profile was used.
+func formatProfile(name string, scale float64) string {
+	if name == "" {
+		return "(none)"
+	}
+	if scale != 0 && scale != 1.0 {
+		return fmt.Sprintf("%s (%.2gx)", name, scale)
+	}
+	return name
+}
 
 func svFormatCount(n int64) string {
 	switch {

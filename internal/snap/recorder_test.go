@@ -183,6 +183,59 @@ func TestDefaultRecorder_ConfigHash(t *testing.T) {
 	}
 }
 
+func TestDefaultRecorder_ProfileMeta(t *testing.T) {
+	cfg := &config.Config{
+		ConfigSection: config.Section{
+			HTTPFile:     "test.http",
+			ProfileName:  "flash-sale",
+			ProfileScale: 1.5,
+		},
+	}
+	r := NewDefaultRecorder(16)
+	snap, err := r.Finalize(RunMeta{Config: cfg, StartTime: time.Now(), EndTime: time.Now()})
+	if err != nil {
+		t.Fatalf("Finalize() error = %v", err)
+	}
+
+	if snap.Meta.ProfileName != "flash-sale" {
+		t.Errorf("ProfileName = %q, want %q", snap.Meta.ProfileName, "flash-sale")
+	}
+	if snap.Meta.ProfileScale != 1.5 {
+		t.Errorf("ProfileScale = %v, want %v", snap.Meta.ProfileScale, 1.5)
+	}
+}
+
+func TestDefaultRecorder_ProfileMeta_NoProfile(t *testing.T) {
+	cfg := &config.Config{ConfigSection: config.Section{HTTPFile: "test.http"}}
+	r := NewDefaultRecorder(16)
+	snap, err := r.Finalize(RunMeta{Config: cfg, StartTime: time.Now(), EndTime: time.Now()})
+	if err != nil {
+		t.Fatalf("Finalize() error = %v", err)
+	}
+
+	if snap.Meta.ProfileName != "" {
+		t.Errorf("ProfileName = %q, want empty", snap.Meta.ProfileName)
+	}
+	if snap.Meta.ProfileScale != 0 {
+		t.Errorf("ProfileScale = %v, want 0", snap.Meta.ProfileScale)
+	}
+}
+
+func TestDefaultRecorder_ProfileMeta_NilConfig(t *testing.T) {
+	r := NewDefaultRecorder(16)
+	snap, err := r.Finalize(RunMeta{StartTime: time.Now(), EndTime: time.Now()})
+	if err != nil {
+		t.Fatalf("Finalize() error = %v", err)
+	}
+
+	if snap.Meta.ProfileName != "" {
+		t.Errorf("ProfileName = %q, want empty", snap.Meta.ProfileName)
+	}
+	if snap.Meta.ProfileScale != 0 {
+		t.Errorf("ProfileScale = %v, want 0", snap.Meta.ProfileScale)
+	}
+}
+
 func TestPercentile(t *testing.T) {
 	data := []float64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 

@@ -24,12 +24,19 @@ const { filename = "terminal" } = Astro.props;
     overflow: hidden;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
   }
+  :global([data-theme="light"]) .code-compare {
+    background: var(--sl-color-gray-6, #f4f5f8);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  }
   .mac-header {
     display: flex;
     align-items: center;
     padding: 0.75rem 1rem;
     background: #1e2030; /* Mantle */
     border-bottom: 1px solid var(--sl-color-hairline);
+  }
+  :global([data-theme="light"]) .mac-header {
+    background: var(--sl-color-gray-5, #e6e8ee);
   }
   .dot {
     width: 12px;

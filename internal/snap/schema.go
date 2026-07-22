@@ -47,8 +47,15 @@ func InferSchema(bodies [][]byte) *SchemaSnapshot {
 	return m.finalize()
 }
 
+// fieldData captures the JSON type of a field within a single sample and,
+// for array fields, the length of that array (0 for non-array types).
+type fieldData struct {
+	typ      string
+	arrayLen int
+}
+
 // extractFields walks a decoded JSON value and returns a flat map of
-// dot-separated field paths → JSON type names.
+// dot-separated field paths → observed type/array-length data.
 //
 // Type names follow JSON spec vocabulary:
 //
@@ -56,19 +63,19 @@ func InferSchema(bodies [][]byte) *SchemaSnapshot {
 //
 // Nested object fields use dot-notation: "user.address.city"
 // Array element fields use bracket-dot notation: "items[].id"
-func extractFields(root any) map[string]string {
-	out := make(map[string]string)
+func extractFields(root any) map[string]fieldData {
+	out := make(map[string]fieldData)
 	walkValue("", root, out)
 	return out
 }
 
-func walkValue(path string, v any, out map[string]string) {
+func walkValue(path string, v any, out map[string]fieldData) {
 	switch val := v.(type) {
 
 	case map[string]interface{}:
 		// Record the object type for non-root paths.
 		if path != "" {
-			out[path] = "object"
+			out[path] = fieldData{typ: "object"}
 		}
 		for k, child := range val {
 			childPath := k
@@ -79,7 +86,7 @@ func walkValue(path string, v any, out map[string]string) {
 		}
 
 	case []interface{}:
-		out[path] = "array"
+		out[path] = fieldData{typ: "array", arrayLen: len(val)}
 		// Infer element structure from the first element when it is an object.
 		// This handles the common case of paginated list responses.
 		if len(val) > 0 {
@@ -91,24 +98,27 @@ func walkValue(path string, v any, out map[string]string) {
 		}
 
 	case string:
-		out[path] = "string"
+		out[path] = fieldData{typ: "string"}
 
 	case float64:
 		// All JSON numbers decode to float64 in Go's encoding/json.
-		out[path] = "number"
+		out[path] = fieldData{typ: "number"}
 
 	case bool:
-		out[path] = "boolean"
+		out[path] = fieldData{typ: "boolean"}
 
 	case nil:
-		out[path] = "null"
+		out[path] = fieldData{typ: "null"}
 	}
 }
 
 // fieldObs tracks per-field observations across N samples.
 type fieldObs struct {
-	typeVotes map[string]int // type name → vote count
-	seenCount int            // number of samples in which this field appeared
+	typeVotes     map[string]int // type name → vote count
+	seenCount     int            // number of samples in which this field appeared
+	arrayLenSum   int64          // sum of array lengths across samples where this field was an array
+	arrayLenCount int64          // number of samples where this field was observed as an array
+	arrayLenMax   int            // largest array length observed
 }
 
 // schemaMerger accumulates field observations from multiple JSON samples and
@@ -123,16 +133,23 @@ func newSchemaMerger() *schemaMerger {
 }
 
 // observe records one sample's field map into the merger.
-func (m *schemaMerger) observe(fields map[string]string) {
+func (m *schemaMerger) observe(fields map[string]fieldData) {
 	m.sampleCount++
-	for path, typ := range fields {
+	for path, fd := range fields {
 		obs, ok := m.fields[path]
 		if !ok {
 			obs = &fieldObs{typeVotes: make(map[string]int)}
 			m.fields[path] = obs
 		}
 		obs.seenCount++
-		obs.typeVotes[typ]++
+		obs.typeVotes[fd.typ]++
+		if fd.typ == "array" {
+			obs.arrayLenSum += int64(fd.arrayLen)
+			obs.arrayLenCount++
+			if fd.arrayLen > obs.arrayLenMax {
+				obs.arrayLenMax = fd.arrayLen
+			}
+		}
 	}
 }
 
@@ -149,11 +166,16 @@ func (m *schemaMerger) finalize() *SchemaSnapshot {
 	}
 	for path, obs := range m.fields {
 		presence := float64(obs.seenCount) / float64(m.sampleCount)
-		snap.Fields[path] = FieldSchema{
+		fs := FieldSchema{
 			Type:      dominantType(obs.typeVotes),
 			Presence:  presence,
 			Stability: scoreStability(presence),
 		}
+		if fs.Type == "array" && obs.arrayLenCount > 0 {
+			fs.ArrayLengthAvg = float64(obs.arrayLenSum) / float64(obs.arrayLenCount)
+			fs.ArrayLengthMax = obs.arrayLenMax
+		}
+		snap.Fields[path] = fs
 	}
 	return snap
 }

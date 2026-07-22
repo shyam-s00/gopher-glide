@@ -118,11 +118,15 @@ func (m snapDiffModel) renderHeader() string {
 	if currTag == "" || currTag == "run" {
 		currTag = "(untagged)"
 	}
+	baseProfile := formatProfile(m.result.Baseline.ProfileName, m.result.Baseline.ProfileScale)
+	currProfile := formatProfile(m.result.Current.ProfileName, m.result.Current.ProfileScale)
 
 	baseBox := lipgloss.JoinVertical(lipgloss.Left,
 		diffSectionStyle.Render("BASELINE"),
 		diffLabelStyle.Render("Tag:"),
 		diffValueStyle.Render(baseTag),
+		diffLabelStyle.Render("Profile:"),
+		diffValueStyle.Render(baseProfile),
 		diffLabelStyle.Render("Date:"),
 		diffValueStyle.Render(m.result.Baseline.StartTime.UTC().Format("2006-01-02 15:04 UTC")),
 		diffLabelStyle.Render("Requests:"),
@@ -134,6 +138,8 @@ func (m snapDiffModel) renderHeader() string {
 		diffSectionStyle.Render("CURRENT"),
 		diffLabelStyle.Render("Tag:"),
 		diffValueStyle.Render(currTag),
+		diffLabelStyle.Render("Profile:"),
+		diffValueStyle.Render(currProfile),
 		diffLabelStyle.Render("Date:"),
 		diffValueStyle.Render(m.result.Current.StartTime.UTC().Format("2006-01-02 15:04 UTC")),
 		diffLabelStyle.Render("Requests:"),
@@ -318,6 +324,9 @@ func renderSchemaChanges(changes []snap.FieldChange) string {
 		case snap.FieldStabilityChanged:
 			prefix = "~"
 			st = diffWarnStyle
+		case snap.ArrayBloat:
+			prefix = "~"
+			st = diffRegrStyle
 		}
 
 		detail := schemaChangeDetail(c)
@@ -347,6 +356,9 @@ func schemaChangeDetail(c snap.FieldChange) string {
 		return fmt.Sprintf("stability  %s → %s  (%.0f%% → %.0f%%)",
 			c.BaseStability, c.CurrStability,
 			c.BasePresence*100, c.CurrPresence*100)
+	case snap.ArrayBloat:
+		return fmt.Sprintf("array length  %.1f → %.1f avg",
+			c.BaseArrayLength, c.CurrArrayLength)
 	}
 	return ""
 }

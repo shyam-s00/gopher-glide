@@ -17,6 +17,8 @@ func TestWrite_Read_RoundTrip(t *testing.T) {
 		Version: 1,
 		Meta: SnapMeta{
 			Tag:           "v1.0.0",
+			ProfileName:   "flash-sale",
+			ProfileScale:  1.5,
 			StartTime:     time.Date(2026, 3, 16, 14, 30, 22, 0, time.UTC),
 			EndTime:       time.Date(2026, 3, 16, 14, 31, 52, 0, time.UTC),
 			PeakRPS:       500,
@@ -57,6 +59,12 @@ func TestWrite_Read_RoundTrip(t *testing.T) {
 	}
 	if got.Meta.Tag != original.Meta.Tag {
 		t.Errorf("Tag: got %q, want %q", got.Meta.Tag, original.Meta.Tag)
+	}
+	if got.Meta.ProfileName != original.Meta.ProfileName {
+		t.Errorf("ProfileName: got %q, want %q", got.Meta.ProfileName, original.Meta.ProfileName)
+	}
+	if got.Meta.ProfileScale != original.Meta.ProfileScale {
+		t.Errorf("ProfileScale: got %v, want %v", got.Meta.ProfileScale, original.Meta.ProfileScale)
 	}
 	if got.Meta.TotalRequests != original.Meta.TotalRequests {
 		t.Errorf("TotalRequests: got %d, want %d", got.Meta.TotalRequests, original.Meta.TotalRequests)

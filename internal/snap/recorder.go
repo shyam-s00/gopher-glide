@@ -69,7 +69,13 @@ type Snapshot struct {
 
 // SnapMeta holds run-level metadata stored in the snapshot file.
 type SnapMeta struct {
-	Tag           string       `json:"tag"`
+	Tag string `json:"tag"`
+	// ProfileName is the traffic-shape profile (e.g. "flash-sale") used to
+	// generate this run's load stages, if any. Empty when no profile was used.
+	ProfileName string `json:"profile_name,omitempty"`
+	// ProfileScale is the RPS multiplier applied when the profile was loaded.
+	// 0 when no profile was used; 1.0 means no scaling.
+	ProfileScale  float64      `json:"profile_scale,omitempty"`
 	StartTime     time.Time    `json:"start_time"`
 	EndTime       time.Time    `json:"end_time"`
 	PeakRPS       int          `json:"peak_rps"`
@@ -128,6 +134,12 @@ type FieldSchema struct {
 	Type      string  `json:"type"`
 	Presence  float64 `json:"presence"`  // 0.0–1.0 fraction of samples containing the field
 	Stability string  `json:"stability"` // STABLE / VOLATILE / RARE
+
+	// ArrayLengthAvg and ArrayLengthMax are populated only when Type == "array".
+	// They describe the length of the array across samples in which it appeared,
+	// and drive array-bloat detection in diff.go.
+	ArrayLengthAvg float64 `json:"array_length_avg,omitempty"`
+	ArrayLengthMax int     `json:"array_length_max,omitempty"`
 }
 
 // DefaultMaxBodySamples is the per-endpoint reservoir cap used when neither
@@ -416,11 +428,13 @@ func (r *DefaultRecorder) Finalize(meta RunMeta) (*Snapshot, error) {
 	snap := &Snapshot{
 		Version: 1,
 		Meta: SnapMeta{
-			Tag:        meta.Tag,
-			StartTime:  meta.StartTime,
-			EndTime:    meta.EndTime,
-			PeakRPS:    meta.PeakRPS,
-			ConfigHash: configHash(meta.Config),
+			Tag:          meta.Tag,
+			ProfileName:  profileName(meta.Config),
+			ProfileScale: profileScale(meta.Config),
+			StartTime:    meta.StartTime,
+			EndTime:      meta.EndTime,
+			PeakRPS:      meta.PeakRPS,
+			ConfigHash:   configHash(meta.Config),
 			SnapSettings: SnapSettings{
 				SampleRate: meta.SampleRate,
 				MaxSamples: resolveMaxSamples(meta.MaxSamples),
@@ -485,6 +499,24 @@ func configHash(cfg *config.Config) string {
 		return ""
 	}
 	return fmt.Sprintf("sha256:%x", h.Sum(nil))
+}
+
+// profileName returns the traffic-shape profile name recorded on cfg, or ""
+// when cfg is nil or no profile was used.
+func profileName(cfg *config.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.ConfigSection.ProfileName
+}
+
+// profileScale returns the RPS multiplier recorded on cfg, or 0 when cfg is
+// nil or no profile was used.
+func profileScale(cfg *config.Config) float64 {
+	if cfg == nil {
+		return 0
+	}
+	return cfg.ConfigSection.ProfileScale
 }
 
 // resolveMaxSamples returns the effective max-samples value for recording in
