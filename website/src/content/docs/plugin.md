@@ -63,7 +63,7 @@ Toolbar actions:
 
 ### 🛡️ One-Click CI Workflow Generator
 
-**Generate CI Workflow...** (Tools menu, or right-click → **Gopher Glide (GG)**) scaffolds a ready-to-run `.github/workflows/gg.yml` implementing the full headless regression-gating loop with push-to-main baseline capture and PR diff comments.
+**Generate CI Workflow...** (Tools menu, or right-click → **Gopher Glide (GG)**) scaffolds a ready-to-run `.github/workflows/gg.yml` implementing the full headless regression-gating loop with push-to-main baseline capture and PR diff comments. See [CI & Containers](/ci) for what that workflow does under the hood, and for the container image if you're wiring up a different CI system by hand.
 
 ### ⚙️ Settings & Onboarding
 

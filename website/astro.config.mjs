@@ -54,6 +54,7 @@ export default defineConfig({
 				{ label: 'Snapshots (gg snap)', slug: 'snap' },
 				{ label: 'IDE Plugins', slug: 'plugin' },
 				{ label: 'Configuration', slug: 'configuration' },
+				{ label: 'CI & Containers', slug: 'ci' },
 				{ label: 'CLI Reference', slug: 'cli-reference' },
 			],
 		}),

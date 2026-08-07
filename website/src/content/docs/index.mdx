@@ -77,7 +77,7 @@ import IDEPlugins from '../../components/IDEPlugins.astro';
   </div>
 </GlassFeatureRow>
 
-<GlassFeatureRow title="Run From Your IDE, Not a Terminal">
+<GlassFeatureRow title="Run From Your IDE, Not a Terminal" reverse={true}>
   <div slot="text">
     <p><strong>Official plugins for <a href="https://plugins.jetbrains.com/plugin/30983-gopher-glide">JetBrains</a> and <a href="https://marketplace.visualstudio.com/items?itemName=gopherglide.gg-plugin">VS Code</a> bring the entire workflow into IntelliJ, GoLand, WebStorm, VS Code, and more.</strong> Click a gutter icon on any <code>.http</code> file, pick a built-in load profile, and watch live RPS, error rate, and latency percentiles update in a native run dashboard.</p>
     <p>No interactive terminal UI involved — just a lightweight panel fed by <code>gg</code>'s headless JSON heartbeat, so it stays responsive no matter how long or heavy the run is.</p>
@@ -89,7 +89,7 @@ import IDEPlugins from '../../components/IDEPlugins.astro';
   </div>
 </GlassFeatureRow>
 
-<GlassFeatureRow title="X-Ray Vision for APIs, Natively in your IDE 🔬" reverse={true}>
+<GlassFeatureRow title="X-Ray Vision for APIs, Natively in your IDE 🔬">
   <div slot="text">
     <p><strong>Know exactly why you broke production, not just when.</strong> Traditional tools tell you P99 latency spiked. Gopher-Glide's semantic diffing tells you it spiked because a developer accidentally injected a 2MB blob into the JSON payload.</p>
     <p>Select any two snapshots in the plugin's Snap Explorer to visually compare metric shifts, payload growth, and schema drift side-by-side. Pair it with <code>gg snap assert</code> to gate regressions directly from your editor or in your CI/CD pipelines.</p>
