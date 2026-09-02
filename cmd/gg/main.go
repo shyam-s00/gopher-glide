@@ -25,8 +25,8 @@ import (
 )
 
 func main() {
-	// ── version flag — handled before everything else ─────────────────────────
-	// Matches: --version, -version, -v, and the bare subcommand `version`.
+	// Handles --version, -version, -v, and the bare "version" subcommand
+	// before anything else runs.
 	if len(os.Args) >= 2 {
 		a := os.Args[1]
 		if a == "--version" || a == "-version" || a == "-v" || a == "version" {
@@ -43,23 +43,19 @@ func main() {
 	_, _ = fmt.Fprintf(os.Stderr, "gg (Gopher Glide) %s (commit:%s) built %s\n",
 		version.Version, version.GitCommit, version.GetBuildDate())
 
-	// ── snap subcommand router ────────────────────────────────────────────────
-	// Dispatched before the config-load so `gg snap` works without a config file.
+	// Dispatched before the config load so `gg snap` works without a config file.
 	if len(os.Args) >= 2 && os.Args[1] == "snap" {
 		runSnapCmd(os.Args[2:])
 		return
 	}
 
-	// ── profile subcommand router ─────────────────────────────────────────────
 	if len(os.Args) >= 2 && os.Args[1] == "profile" {
 		runProfileCmd(os.Args[2:])
 		return
 	}
 
-	// ── determine config path and flag args ───────────────────────────────────
-	// <config-file> is an optional positional argument. If the first argument
-	// exists and does not start with '-' it is treated as the config file path.
-	// When omitted, gg falls back to an in-memory DefaultConfig.
+	// <config-file> is an optional positional argument: used as the config path
+	// when present and not flag-like, otherwise gg falls back to DefaultConfig.
 	var configPath string
 	var flagArgs []string
 	if len(os.Args) >= 2 && !strings.HasPrefix(os.Args[1], "-") {
@@ -69,7 +65,6 @@ func main() {
 		flagArgs = os.Args[1:]
 	}
 
-	// ── flags ─────────────────────────────────────────────────────────────────
 	// 0 / "" is the sentinel for "not explicitly set on CLI"; effective values
 	// are resolved after config is loaded (CLI > config.yaml > hard default).
 	fs := flag.NewFlagSet("gg", flag.ExitOnError)
@@ -98,8 +93,14 @@ func main() {
 	headless := fs.Bool("headless", false, "run without interactive TUI — emits structured heartbeat logs (for CI)")
 	reporter := fs.String("reporter", "text", "output format in headless mode: text | json")
 	heartbeatInterval := fs.Duration("heartbeat-interval", 0, "headless heartbeat cadence, e.g. 2s (0 = default of 5s)")
+	controlMode := fs.String("control", "stdin", "headless control protocol mode: stdin | none")
 	tuiTickMs := fs.Int("tui-tick-ms", 0, "interactive TUI redraw cadence in ms, clamped to [16, 100] (0 = default of 42ms)")
 	_ = fs.Parse(flagArgs)
+
+	if mode := strings.ToLower(strings.TrimSpace(*controlMode)); mode != "stdin" && mode != "none" {
+		_, _ = fmt.Fprintf(os.Stderr, "Error: --control must be \"stdin\" or \"none\", got %q\n", *controlMode)
+		os.Exit(1)
+	}
 
 	// Track which flags were explicitly provided so we can apply the correct
 	// precedence: CLI (explicit) > config.yaml > hard default.
@@ -142,14 +143,12 @@ func main() {
 	// run a deferred Validate() after CLI overrides have been applied.
 	usingDefaultConfig := configPath == ""
 
-	// ── load config ───────────────────────────────────────────────────────────
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)
 	}
 
-	// ── apply --http-file override  ───────────────────────────────────
 	// --http-file takes the highest precedence for the requests file.
 	// The path is resolved from the current working directory (not the config
 	// file directory) so that CLI callers don't need to know where config lives.
@@ -163,11 +162,9 @@ func main() {
 		cfg.ConfigSection.HTTPFilePath = absHTTPFile
 	}
 
-	// ── validate after CLI overrides ──────────────────────────────────────────
-	// When booting from DefaultConfig, Load() intentionally skips Validate() so
-	// that CLI flags (e.g. --http-file) can be applied first. We run it now,
-	// but only when no profile is being loaded (a profile will supply its own
-	// stages, making the default stage validation irrelevant).
+	// Load() skips Validate() when booting from defaults so CLI overrides can
+	// apply first; skip here too if a profile is loading, since it supplies
+	// its own stages.
 	if usingDefaultConfig && !cliProfileSet {
 		if err := cfg.Validate(); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -178,12 +175,9 @@ func main() {
 		}
 	}
 
-	// ── load and inflate profile  ────────────────────────────────────
-	// Precedence hierarchy for profiles:
-	//   Base Defaults → config.yaml → --profile → --peak-rps / --duration
-	//
-	// When --profile is provided, cfg.Stages is completely replaced by the
-	// inflated concrete stages. The config file's stages (if any) are ignored.
+	// Precedence: Base Defaults → config.yaml → --profile → --peak-rps/--duration.
+	// When --profile is set, cfg.Stages is fully replaced by inflated concrete
+	// stages; any stages from config.yaml are ignored.
 	if cliProfileSet && *profileFlag != "" {
 		prof, err := profile.Load(*profileFlag)
 		if err != nil {
@@ -206,31 +200,24 @@ func main() {
 		// Inflate abstract segments into concrete config.Stage entries.
 		cfg.Stages = profile.InflateSegments(prof, effectivePeak, effectiveDur)
 
-		// Apply profile-level config overrides (e.g. jitter for chaos).
-		// These are lower priority than explicit config.yaml values which were
-		// already loaded, so only apply when the config field is still at its
-		// zero value.
+		// Apply profile-level overrides (e.g. jitter) only when config.yaml
+		// hasn't already set the field — config.yaml takes priority.
 		if prof.ConfigOverride.Jitter > 0 && cfg.ConfigSection.Jitter == 0 {
 			cfg.ConfigSection.Jitter = prof.ConfigOverride.Jitter
 		}
 
-		// Store profile metadata for snapshot traceability.
 		cfg.ConfigSection.ProfileName = prof.Name
-		// ProfileScale records how much the effective peak RPS diverges from the
-		// profile's built-in default. 1.0 means no scaling was applied; any other
-		// value reflects an explicit --peak-rps override (or a future config-level
-		// override). Stored so snapshot metadata accurately reflects the run conditions.
+		// ProfileScale records how far the effective peak RPS diverges from the
+		// profile default (1.0 = no scaling) — stored for snapshot traceability.
 		cfg.ConfigSection.ProfileScale = float64(effectivePeak) / float64(prof.DefaultPeakRPS)
 
 		_, _ = fmt.Fprintf(os.Stderr, "✓ Profile %q loaded  (peak=%d RPS, duration=%s, stages=%d)\n",
 			prof.Name, effectivePeak, effectiveDur, len(cfg.Stages))
 	}
 
-	// ── validate config (including inflated stages) ────────────────────────────
-	// For the default-config + profile path, Validate() was skipped above.
-	// Run it now that stages have been populated. For file-based configs,
-	// Validate() already ran inside Load(); re-running is harmless but we skip
-	// it to avoid double-reporting errors.
+	// The default-config + profile path skipped Validate() above; run it now
+	// that stages are populated. File-based configs already validated inside
+	// Load(), so we skip re-running it here to avoid double-reporting errors.
 	if usingDefaultConfig && cliProfileSet {
 		if err := cfg.Validate(); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -244,7 +231,6 @@ func main() {
 	_, _ = fmt.Fprintf(os.Stderr, "✓ Configuration ready  (httpFile=%s, stages=%d)\n",
 		cfg.ConfigSection.HTTPFile, len(cfg.Stages))
 
-	// ── resolve effective snap tuning values ──────────────────────────────────
 	// Precedence: explicit CLI flag > config.yaml snap: block > hard default.
 	// 0 is the sentinel for "not set at this level".
 	effectiveSampleRate := 0.05 // hard default: 5 %
@@ -268,7 +254,6 @@ func main() {
 		effectiveMaxBodyKB = cfg.Snap.MaxBodyKB
 	}
 
-	// ── validate snap tuning values ───────────────────────────────────────────
 	// Done before any I/O so bad input is caught as early as possible.
 	// Covers both explicit CLI flags and values sourced from config.yaml.
 	if *snapEnabled {
@@ -278,13 +263,9 @@ func main() {
 		}
 	}
 
-	// ── parse .http file ──────────────────────────────────────────────────────
-	// Smart Detection (httpreader.ParseFile) groups @gg-export → {{var}}
-	// chains into stateful Journeys; every other request stays its own
-	// single-step Journey. Flatten back to a flat, ordered spec list since the
-	// Runner interface (and the headless renderer/TUI) operate on
-	// []RequestSpec; the Hive engine re-derives Journeys from this slice via
-	// httpreader.GroupJourneys before dispatch, so step grouping is preserved.
+	// httpreader.ParseFile groups @gg-export → {{var}} chains into Journeys;
+	// Flatten() gives the flat []RequestSpec the Runner interface expects —
+	// hive re-derives Journeys from it via GroupJourneys before dispatch.
 	journeys, err := httpreader.ParseFile(cfg.ConfigSection.HTTPFilePath)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error parsing http file: %v\n", err)
@@ -301,7 +282,6 @@ func main() {
 		_, _ = fmt.Fprintf(os.Stderr, "  [%d] %s %s\n", i+1, s.Method, s.URL)
 	}
 
-	// ── set up recorder (optional) ────────────────────────────────────────────
 	var rec *snap.DefaultRecorder
 	var resolvedSnapDir string
 
@@ -327,18 +307,48 @@ func main() {
 		)
 	}
 
-	// ── build engine ────────────────────────────────────────────────────────
 	var hiveOpts []hive.EngineOption
 	if rec != nil {
 		hiveOpts = append(hiveOpts, hive.WithRecorder(rec), hive.WithSampleRate(effectiveSampleRate))
 	}
 	var eng engine.Runner = hive.New(hiveOpts...)
 
-	// ── start TUI ─────────────────────────────────────────────────────────────
-	// onRunComplete is dispatched by the TUI as a background goroutine once
-	// the engine finishes all stages naturally. It must not write to
-	// stdout/stderr (alt-screen is still active). The returned string is
-	// displayed in the director bar.
+	_, _ = fmt.Fprintln(os.Stderr, "Starting...")
+	// ASCII chart preview: skipped in headless mode, where structured log
+	// output starts immediately after this point.
+	if cliProfileSet && !*headless {
+		if chart := profile.RenderASCIIChart(cfg.Stages); chart != "" {
+			fmt.Print(chart)
+		}
+	}
+	renderer := ui.New(*headless)
+	// hr/tr: exactly one is non-nil depending on *headless. Declared here
+	// (not inside the *headless block) so onRunComplete below can close
+	// over them.
+	hr, _ := renderer.(*ui.HeadlessRenderer)
+	tr, _ := renderer.(*ui.TUIRenderer)
+	if hr != nil {
+		hr.Reporter = *reporter
+		hr.HeartbeatInterval = *heartbeatInterval
+		hr.ControlMode = *controlMode
+	}
+
+	// controlData returns the marks/bias events recorded so far: from hr for
+	// headless, from tr for the TUI (no Marks equivalent there — §3.6). Safe
+	// to call from onRunComplete either way — see hr.Marks()/tr.BiasEvents().
+	controlData := func() ([]snap.Mark, []snap.BiasEvent) {
+		if hr != nil {
+			return hr.Marks(), hr.BiasEvents()
+		}
+		if tr != nil {
+			return nil, tr.BiasEvents()
+		}
+		return nil, nil
+	}
+
+	// onRunComplete is dispatched by the TUI as a background goroutine once the
+	// engine finishes naturally; it must not write to stdout/stderr (alt-screen
+	// is still active) — the returned string is shown in the director bar.
 	var snapDone atomic.Bool
 
 	var onRunComplete func() string
@@ -347,8 +357,9 @@ func main() {
 			if !snapDone.CompareAndSwap(false, true) {
 				return "" // already handled
 			}
+			marks, biasEvents := controlData()
 			status, err := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir,
-				effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB)
+				effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB, marks, biasEvents)
 			if err != nil {
 				return fmt.Sprintf("⚠  snap error: %v", err)
 			}
@@ -356,23 +367,6 @@ func main() {
 		}
 	}
 
-	_, _ = fmt.Fprintln(os.Stderr, "Starting...")
-	// ── ASCII chart preview (profile runs only) ───────────────────────────────
-	// Print the traffic shape so users know exactly what is about to happen
-	// before the TUI takes over the terminal. Skipped in headless mode because
-	// structured log output starts immediately after this point.
-	if cliProfileSet && !*headless {
-		if chart := profile.RenderASCIIChart(cfg.Stages); chart != "" {
-			fmt.Print(chart)
-		}
-	}
-	renderer := ui.New(*headless)
-	if *headless {
-		if hr, ok := renderer.(*ui.HeadlessRenderer); ok {
-			hr.Reporter = *reporter
-			hr.HeartbeatInterval = *heartbeatInterval
-		}
-	}
 	if err := renderer.Run(eng, cfg, specs, ui.RunOptions{
 		Snapping:      *snapEnabled,
 		SnapDir:       resolvedSnapDir,
@@ -383,15 +377,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// ── early-quit fallback ───────────────────────────────────────────────────
-	// Reached when the user presses [q] before all stages completed, meaning
-	// onRunComplete was never called by the TUI.  The CAS ensures we don't
-	// double-finalise when the run completed AND the user then pressed [q].
-	// Printing is safe here: tui.Start has returned and the terminal is restored.
+	// Reached when the user quit before all stages completed, so onRunComplete
+	// never ran. The CAS guards against double-finalizing if it already did.
 	if rec != nil && snapDone.CompareAndSwap(false, true) {
 		_, _ = fmt.Fprintln(os.Stderr, "Finalizing snapshot...")
+		marks, biasEvents := controlData()
 		status, finalErr := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir,
-			effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB)
+			effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB, marks, biasEvents)
 		if finalErr != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", finalErr)
 		} else {
@@ -400,12 +392,12 @@ func main() {
 	}
 }
 
-// finalizeSnapResult drains the recorder, aggregates stats, and writes the
-// .snap file to dir. Returns a human-readable status line on success.
-// It does not write to stdout or stderr, making it safe to call while the
-// TUI alt-screen is active.
+// finalizeSnapResult drains the recorder and writes the .snap file to dir,
+// returning a status line. Never writes to stdout/stderr, so it's safe to
+// call while the TUI alt-screen is active.
 func finalizeSnapResult(rec *snap.DefaultRecorder, eng engine.Runner, cfg *config.Config,
-	tag, dir string, sampleRate float64, maxSamples, maxBodyKB int) (string, error) {
+	tag, dir string, sampleRate float64, maxSamples, maxBodyKB int,
+	marks []snap.Mark, biasEvents []snap.BiasEvent) (string, error) {
 	endTime := eng.GetEndTime()
 	if endTime.IsZero() {
 		endTime = time.Now()
@@ -420,6 +412,11 @@ func finalizeSnapResult(rec *snap.DefaultRecorder, eng engine.Runner, cfg *confi
 		SampleRate: sampleRate,
 		MaxSamples: maxSamples,
 		MaxBodyKB:  maxBodyKB,
+		Marks:      marks,
+		BiasEvents: biasEvents,
+		// Fresh read, not derived from biasEvents' last cached ack value,
+		// which can be stale by the queen-drain lag §2.3 already documents.
+		FinalBias: eng.GetBias(),
 	})
 	if err != nil {
 		return "", fmt.Errorf("finalize recorder: %w", err)
@@ -438,8 +435,6 @@ func finalizeSnapResult(rec *snap.DefaultRecorder, eng engine.Runner, cfg *confi
 	}
 	return status, nil
 }
-
-// ── snap subcommand handlers ──────────────────────────────────────────────────
 
 func runSnapCmd(args []string) {
 	if len(args) == 0 {
@@ -764,7 +759,6 @@ func runSnapPrune(args []string) {
 	reporter := fs.String("reporter", "text", "output format: text | json  (json is the stable contract for the JetBrains plugin)")
 	_ = fs.Parse(args)
 
-	// ── validate: at least one filter required ────────────────────────────────
 	if *keepLast == 0 && *olderThan == "" && *tag == "" && *ids == "" {
 		_, _ = fmt.Fprintln(os.Stderr, "snap prune: at least one filter flag is required")
 		_, _ = fmt.Fprintln(os.Stderr, "")
@@ -772,7 +766,6 @@ func runSnapPrune(args []string) {
 		os.Exit(1)
 	}
 
-	// ── parse filter flags ────────────────────────────────────────────────────
 	olderThanDur, err := snap.ParseOlderThan(*olderThan)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap prune: %v\n", err)
@@ -790,7 +783,6 @@ func runSnapPrune(args []string) {
 		os.Exit(1)
 	}
 
-	// ── resolve snap directory and list snapshots ─────────────────────────────
 	dir, err := snap.ResolveSnapDir(*snapDir)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap prune: resolve directory: %v\n", err)
@@ -808,7 +800,6 @@ func runSnapPrune(args []string) {
 		os.Exit(1)
 	}
 
-	// ── select candidates ─────────────────────────────────────────────────────
 	candidates := snap.SelectForPrune(infos, snap.PruneOptions{
 		KeepLast:  *keepLast,
 		OlderThan: olderThanDur,
@@ -816,7 +807,6 @@ func runSnapPrune(args []string) {
 		IDs:       idList,
 	})
 
-	// ── no-op path ────────────────────────────────────────────────────────────
 	if len(candidates) == 0 {
 		if strings.ToLower(*reporter) == "json" {
 			report := snap.BuildPruneReport(dir, candidates, *dryRun, 0, nil)
@@ -828,7 +818,6 @@ func runSnapPrune(args []string) {
 		return
 	}
 
-	// ── dry-run: preview and exit without deleting ────────────────────────────
 	if *dryRun {
 		if strings.ToLower(*reporter) == "json" {
 			report := snap.BuildPruneReport(dir, candidates, true, 0, nil)
@@ -842,7 +831,7 @@ func runSnapPrune(args []string) {
 		return
 	}
 
-	// ── interactive confirmation (skipped when --yes or --reporter json) ──────
+	// Skipped when --yes or --reporter json is set.
 	isJSON := strings.ToLower(*reporter) == "json"
 	if !*yes && !isJSON {
 		fmt.Printf("The following %d snapshot(s) in %s will be permanently deleted:\n\n", len(candidates), dir)
@@ -868,7 +857,6 @@ func runSnapPrune(args []string) {
 		}
 	}
 
-	// ── delete ────────────────────────────────────────────────────────────────
 	deleted, errs := snap.Delete(candidates)
 
 	if isJSON {
@@ -989,8 +977,6 @@ func validateAssertFlags(latencyReg, errorDelta, payloadPct, maxArrayBloat float
 	return nil
 }
 
-// ── profile subcommand handlers ───────────────────────────────────────────────
-
 func runProfileCmd(args []string) {
 	if len(args) == 0 {
 		profileUsage()
@@ -1014,7 +1000,6 @@ func runProfileList() {
 	builtInNames := profile.ListNames()
 	customNames := profile.ListCustomNames()
 
-	// ── Built-in profiles ──────────────────────────────────────────────────
 	fmt.Printf("Built-in Profiles (%d)\n", len(builtInNames))
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
 	_, _ = fmt.Fprintln(w, "NAME\tPEAK RPS\tDURATION")
@@ -1033,7 +1018,6 @@ func runProfileList() {
 	}
 	_ = w.Flush()
 
-	// ── Custom profiles ────────────────────────────────────────────────────
 	fmt.Printf("\nCustom Profiles (%d)\n", len(customNames))
 	if len(customNames) == 0 {
 		fmt.Println("  (none — use `gg profile export <name>` to create one)")

@@ -9,14 +9,13 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
+	"github.com/shyam-s00/gopher-glide/internal/snap"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
-
-// ── constants ─────────────────────────────────────────────────────────────────
 
 const (
 	// historyInterval is the time resolution of the RPS history.
@@ -38,8 +37,6 @@ const (
 	minTickInterval = 16 * time.Millisecond
 	maxTickInterval = 100 * time.Millisecond
 )
-
-// ── model ─────────────────────────────────────────────────────────────────────
 
 type model struct {
 	engine     engine.Runner
@@ -89,6 +86,12 @@ type model struct {
 	// Returns a short status string shown in the director bar.
 	// nil when no post-run work is needed.
 	onRunComplete func() string
+
+	// biasEventsOut is a pointer to the caller's (TUIRenderer's) slice, so
+	// arrow-key bias reaches main.go's onRunComplete closure while the model
+	// is still running — that closure has no other handle into a live model.
+	// nil in tests that build a model directly instead of via Start().
+	biasEventsOut *[]snap.BiasEvent
 }
 
 type tickMsg time.Time
@@ -96,8 +99,6 @@ type tickMsg time.Time
 // snapFinalizedMsg is sent back into the model once the post-run callback
 // completes in its background goroutine.
 type snapFinalizedMsg struct{ status string }
-
-// ── init ──────────────────────────────────────────────────────────────────────
 
 func initialModel(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec) model {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -148,8 +149,6 @@ func (m model) tickCmd() tea.Cmd {
 		return tickMsg(t)
 	})
 }
-
-// ── layout ────────────────────────────────────────────────────────────────────
 
 type layout struct {
 	chartWidth int
@@ -239,8 +238,6 @@ func (m model) computeLayoutForHeights(headerH, timelineH int) layout {
 	}
 }
 
-// ── time ↔ column helpers ─────────────────────────────────────────────────────
-
 func timeToCol(t, total time.Duration, chartWidth int) int {
 	if total <= 0 || chartWidth <= 0 {
 		return 0
@@ -265,8 +262,6 @@ func slotToCol(slot, totalSlots, chartWidth int) int {
 	}
 	return c
 }
-
-// ── renderHeader ──────────────────────────────────────────────────────────────
 
 func (m model) renderHeader() string {
 	elapsed := m.engine.GetElapsedTime()
@@ -417,8 +412,6 @@ func (m model) renderHeader() string {
 	)
 }
 
-// ── renderTimeline ────────────────────────────────────────────────────────────
-
 func (m model) renderTimeline() string {
 	stages := m.config.Stages
 	if len(stages) == 0 {
@@ -441,7 +434,7 @@ func (m model) renderTimeline() string {
 		peakRPS = 1
 	}
 
-	// ── rpsAt: step function — plan shape matches config intent ──────────
+	// rpsAt is a step function matching the plan's shape to config intent.
 	rpsAt := func(t time.Duration) float64 {
 		acc := time.Duration(0)
 		prev := 0.0
@@ -504,11 +497,9 @@ func (m model) renderTimeline() string {
 	totalElapsed += m.stageElapsed
 	cursorX := timeToCol(totalElapsed, scaledTotalDur, chartWidth)
 
-	// ── Project time-slot history onto columns ────────────────────────────
 	// totalSlots must be based on the wall-clock duration of the run, not the
-	// unscaled plan duration. cfg.TotalDuration() applies TimeScale so that
-	// e.g. time_scale:2 halves the wall-clock duration and the history slots
-	// span the full chart width correctly.
+	// unscaled plan duration — TotalDuration() applies TimeScale so e.g.
+	// time_scale:2 halves it and the history still spans the full chart.
 	wallDur := m.config.TotalDuration()
 	if wallDur == 0 {
 		wallDur = 1
@@ -755,8 +746,6 @@ func (m model) renderTimeline() string {
 	return styles.PanelBase.Width(m.width - 4).Render(sb.String())
 }
 
-// ── formatDuration ────────────────────────────────────────────────────────────
-
 func formatDuration(d time.Duration) string {
 	if d <= 0 {
 		return "0s"
@@ -770,13 +759,9 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%ds", secs)
 }
 
-// ── renderKeycap ─────────────────────────────────────────────────────────────
-
 func renderKeycap(key string) string {
 	return styles.Keycap.Render(key)
 }
-
-// ── renderMethodBadge / renderStatusBadge ────────────────────────────────────
 
 func renderMethodBadge(method string) string {
 	switch method {
@@ -825,8 +810,6 @@ func truncatePath(s string, maxLen int) string {
 	}
 	return string(runes[:maxLen-1]) + "…"
 }
-
-// ── renderLogContent ──────────────────────────────────────────────────────────
 
 // Column widths (visual chars):
 //
@@ -880,8 +863,6 @@ func (m model) renderLogContent() string {
 	return strings.Join(lines, "\n")
 }
 
-// ── Update ────────────────────────────────────────────────────────────────────
-
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		cmd  tea.Cmd
@@ -899,12 +880,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up":
 			if m.running {
 				m.engine.ApplyBias(5)
+				m.recordBiasEvent(5)
 				m.directorMsg = "▲  +5 RPS"
 				m.directorMsgTime = time.Now()
 			}
 		case "down":
 			if m.running {
 				m.engine.ApplyBias(-5)
+				m.recordBiasEvent(-5)
 				m.directorMsg = "▼  -5 RPS"
 				m.directorMsgTime = time.Now()
 			}
@@ -999,7 +982,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// ── View ──────────────────────────────────────────────────────────────────────
+// recordBiasEvent appends one bias command to the shared BiasEvents sink
+// (§3.6). No-op when biasEventsOut is nil (e.g. tests that build a model
+// directly instead of via Start()).
+func (m model) recordBiasEvent(amount int) {
+	if m.biasEventsOut == nil {
+		return
+	}
+	*m.biasEventsOut = append(*m.biasEventsOut, snap.BiasEvent{
+		Amount:     amount,
+		Cumulative: m.engine.GetBias(),
+		ElapsedS:   elapsedSince(m.engine.GetStartTime()),
+	})
+}
+
+// elapsedSince returns seconds since start, or 0 if start is the zero time —
+// time.Since would otherwise saturate. Duplicated from internal/ui's own
+// helper: that package imports internal/tui, so the reverse isn't available.
+func elapsedSince(start time.Time) float64 {
+	if start.IsZero() {
+		return 0
+	}
+	return time.Since(start).Seconds()
+}
 
 func (m model) View() string {
 	if !m.ready {
@@ -1032,7 +1037,6 @@ func (m model) View() string {
 
 	l := m.computeLayoutForHeights(headerH, timelineH)
 
-	// ── director / hint bar ───────────────────────────────────────────────
 	biasStr := ""
 	if bias := m.metrics.Bias; bias != 0 {
 		bs := styles.SuccessBold
@@ -1089,19 +1093,21 @@ func (m model) View() string {
 	)
 }
 
-// ── Start ─────────────────────────────────────────────────────────────────────
-
 // Start launches the Bubble Tea TUI.
 //   - snapping / snapDir  → drives the 📸 indicator
 //   - onRunComplete       → called in a background goroutine once the engine
 //     finishes all stages; must not write to stdout/stderr. The returned
 //     string is shown in the director bar. nil is safe (no-op).
-func Start(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec, snapping bool, snapDir string, onRunComplete func() string, tickInterval time.Duration) error {
+//   - biasEvents           → arrow-key bias nudges are appended here as they
+//     happen, so the caller's onRunComplete (already running by the time the
+//     model would otherwise report them) sees them live. nil is safe (no-op).
+func Start(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec, snapping bool, snapDir string, onRunComplete func() string, tickInterval time.Duration, biasEvents *[]snap.BiasEvent) error {
 	m := initialModel(eng, cfg, specs)
 	m.snapping = snapping
 	m.snapDir = snapDir
 	m.onRunComplete = onRunComplete
 	m.tickInterval = tickInterval
+	m.biasEventsOut = biasEvents
 	p := tea.NewProgram(
 		m,
 		tea.WithAltScreen(),

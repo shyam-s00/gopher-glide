@@ -6,6 +6,7 @@ import (
 
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine/hive"
+	"github.com/shyam-s00/gopher-glide/internal/snap"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -254,6 +255,54 @@ func TestUpdate_Bias_IgnoredWhenNotRunning(t *testing.T) {
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
 	if m2.(model).directorMsg != "" {
 		t.Error("bias key should be ignored when not running")
+	}
+}
+
+// TestUpdate_BiasKeys_NilSink_NoPanic confirms recordBiasEvent's nil-guard:
+// newTestModel builds a model directly (not via Start()), so biasEventsOut
+// is nil, matching every other bias-key test in this file — must not panic.
+func TestUpdate_BiasKeys_NilSink_NoPanic(t *testing.T) {
+	m := newTestModel()
+	m.running = true
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	if m2.(model).biasEventsOut != nil {
+		t.Error("expected biasEventsOut to remain nil")
+	}
+}
+
+// TestUpdate_BiasKeys_ReachSnapMetaBiasEvents is the 2.12 TUI test: arrow-key
+// bias must reach SnapMeta.BiasEvents, not just the live director bar. Wires
+// a real sink the way Start() does, presses both keys, then runs the result
+// through a real snap.DefaultRecorder.Finalize exactly as main.go would.
+func TestUpdate_BiasKeys_ReachSnapMetaBiasEvents(t *testing.T) {
+	m := newTestModel()
+	m.running = true
+	sink := []snap.BiasEvent{}
+	m.biasEventsOut = &sink
+
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	_, _ = m2.(model).Update(tea.KeyMsg{Type: tea.KeyDown})
+
+	if len(sink) != 2 {
+		t.Fatalf("want 2 bias events recorded, got %d: %+v", len(sink), sink)
+	}
+	if sink[0].Amount != 5 {
+		t.Errorf("sink[0].Amount = %d, want 5", sink[0].Amount)
+	}
+	if sink[1].Amount != -5 {
+		t.Errorf("sink[1].Amount = %d, want -5", sink[1].Amount)
+	}
+
+	rec := snap.NewDefaultRecorder(0)
+	snapshot, err := rec.Finalize(snap.RunMeta{BiasEvents: sink})
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if len(snapshot.Meta.BiasEvents) != 2 {
+		t.Fatalf("Meta.BiasEvents = %+v, want 2 entries", snapshot.Meta.BiasEvents)
+	}
+	if snapshot.Meta.BiasEvents[0].Amount != 5 || snapshot.Meta.BiasEvents[1].Amount != -5 {
+		t.Errorf("Meta.BiasEvents amounts wrong: %+v", snapshot.Meta.BiasEvents)
 	}
 }
 

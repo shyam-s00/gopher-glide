@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
@@ -14,7 +15,13 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
+	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
+
+// controlCmdChanCap is cmdCh's buffer size (§3.2) — generous enough for a
+// burst of scripted commands or a throttled slider's queued nudges without
+// blocking controlReader mid-parse.
+const controlCmdChanCap = 32
 
 // HeadlessRenderer runs the engine without any interactive TUI.
 // Progress is emitted as structured heartbeat lines to stdout so that CI
@@ -34,6 +41,23 @@ type HeadlessRenderer struct {
 	// HeartbeatInterval controls how often progress lines are emitted.
 	// Defaults to 5 s when zero.
 	HeartbeatInterval time.Duration
+
+	// ControlMode selects the stdin control protocol: "stdin" (listen for
+	// bias/mark/stop commands) or "none" (read-only, matches pre-v1.3
+	// behavior). Defaults to "stdin" when empty.
+	ControlMode string
+
+	// ControlInput is the source read for control commands when ControlMode
+	// is "stdin". Defaults to os.Stdin; tests inject their own reader.
+	ControlInput io.Reader
+
+	// biasEvents records every bias command applied this run, for
+	// SnapMeta.BiasEvents at finalize (§3.4). Exposed via BiasEvents().
+	biasEvents []snap.BiasEvent
+
+	// marks records every "mark" command received this run, for
+	// SnapMeta.Marks at finalize (§3.4). Exposed via Marks().
+	marks []snap.Mark
 }
 
 // heartbeatInterval returns the effective heartbeat period.
@@ -52,6 +76,52 @@ func (r *HeadlessRenderer) reporter() string {
 	return "text"
 }
 
+// controlMode returns the effective control mode (lower-cased, default
+// "stdin"). main.go validates ControlMode is "stdin" or "none" before it
+// reaches here.
+func (r *HeadlessRenderer) controlMode() string {
+	if norm := strings.ToLower(strings.TrimSpace(r.ControlMode)); norm != "" {
+		return norm
+	}
+	return "stdin"
+}
+
+// controlInput returns ControlInput if set, else os.Stdin.
+func (r *HeadlessRenderer) controlInput() io.Reader {
+	if r.ControlInput != nil {
+		return r.ControlInput
+	}
+	return os.Stdin
+}
+
+// capabilities returns the "started" event's Capabilities pointer: the full
+// LCP set for "stdin", or an explicit empty slice for "none" — distinct from
+// a pre-v1.3 binary that omits the field entirely (§2.4 rule 4).
+func (r *HeadlessRenderer) capabilities() *[]string {
+	caps := []string{}
+	if r.controlMode() == "stdin" {
+		caps = []string{"control.bias", "control.mark", "control.stop"}
+	}
+	return &caps
+}
+
+// Marks returns every "mark" command recorded this run. Safe to call once
+// Run()'s select loop has broken — OnRunComplete runs synchronously before
+// Run() returns, so callers see the final set (§3.5).
+func (r *HeadlessRenderer) Marks() []snap.Mark {
+	return r.marks
+}
+
+// BiasEvents returns every "bias" command recorded this run. Same calling
+// convention as Marks.
+func (r *HeadlessRenderer) BiasEvents() []snap.BiasEvent {
+	return r.biasEvents
+}
+
+// protocolVersion is the LCP wire version emitted on every "started" event.
+// Bumped only for breaking changes — see ignore/live-control-protocol.md §2.4.
+const protocolVersion = 1
+
 // StageInfo is a compact, JSON-friendly description of a single load stage,
 // emitted on the "started" event so consumers don't need to parse the YAML
 // config or profile definition themselves.
@@ -66,7 +136,7 @@ type StageInfo struct {
 // human-readable line when Reporter == "text".
 type HeartbeatPayload struct {
 	Time         string      `json:"time"`
-	Event        string      `json:"event"` // "heartbeat" | "started" | "finished" | "snap"
+	Event        string      `json:"event"` // "heartbeat" | "started" | "finished" | "interrupted" | "snap" | "error" | "ack" | "mark" | "stopped"
 	Stage        int         `json:"stage"` // 1-based
 	TotalStages  int         `json:"total_stages"`
 	Stages       []StageInfo `json:"stages,omitempty"`        // set on "started" only
@@ -82,6 +152,16 @@ type HeartbeatPayload struct {
 	P95Ms        float64     `json:"p95_ms"`
 	P99Ms        float64     `json:"p99_ms"`
 	Message      string      `json:"message,omitempty"` // used for snap / finish lines
+
+	// LCP (v1.3): control protocol fields. See ignore/live-control-protocol.md §2.6.
+	ProtocolVersion int       `json:"protocol_version,omitempty"` // "started" only; 0 is never a real version
+	Capabilities    *[]string `json:"capabilities,omitempty"`     // "started" only; pointer distinguishes absent from --control none's []
+	Bias            int       `json:"bias"`                       // cumulative Director bias; no omitempty, mirrors other metric fields
+	ID              string    `json:"id,omitempty"`               // echoes the command's caller-chosen id, if any
+	Command         string    `json:"command,omitempty"`          // set on ack/error only
+	Reason          string    `json:"reason,omitempty"`           // error replies only
+	Label           string    `json:"label,omitempty"`            // mark replies only
+	ElapsedS        float64   `json:"elapsed_s,omitempty"`        // mark replies only, run-relative offset
 }
 
 // Run executes the engine headlessly and blocks until the run finishes or an
@@ -100,6 +180,15 @@ func (r *HeadlessRenderer) Run(eng engine.Runner, cfg *config.Config, specs []ht
 	go func() {
 		engineDone <- eng.RunStages(ctx, cfg, specs)
 	}()
+
+	// cmdCh stays nil (never assigned) when the listener is disabled — a
+	// nil channel blocks forever in the select below, so the cmdCh arm
+	// simply never fires and no separate on/off branch is needed there.
+	var cmdCh chan controlCommand
+	if r.controlMode() == "stdin" {
+		cmdCh = make(chan controlCommand, controlCmdChanCap)
+		go controlReader(r.controlInput(), cmdCh)
+	}
 
 	if opts.Snapping {
 		r.emit(HeartbeatPayload{
@@ -130,13 +219,15 @@ func (r *HeadlessRenderer) Run(eng engine.Runner, cfg *config.Config, specs []ht
 	}
 
 	r.emit(HeartbeatPayload{
-		Time:         now(),
-		Event:        "started",
-		TotalStages:  len(cfg.Stages),
-		Stages:       stages,
-		Profile:      profileName,
-		ProfileScale: profileScale,
-		Message:      startedMsg,
+		Time:            now(),
+		Event:           "started",
+		TotalStages:     len(cfg.Stages),
+		Stages:          stages,
+		Profile:         profileName,
+		ProfileScale:    profileScale,
+		Message:         startedMsg,
+		ProtocolVersion: protocolVersion,
+		Capabilities:    r.capabilities(),
 	})
 
 	ticker := time.NewTicker(r.heartbeatInterval())
@@ -151,6 +242,11 @@ func (r *HeadlessRenderer) Run(eng engine.Runner, cfg *config.Config, specs []ht
 	// after the loop: on an explicit interrupt we log and still finalize
 	// (preserving partial data); on a natural stop we propagate the error.
 	interrupted := false
+	// stopRequested is set by a "stop" control command. Treated like
+	// interrupted for the post-loop error branch (log and still finalize,
+	// never fail the run) but produces a single "stopped" terminal event
+	// instead of "interrupted"+"finished" (§3.3).
+	stopRequested := false
 
 loop:
 	for {
@@ -160,6 +256,59 @@ loop:
 			cancel()
 			r.emitMessage("interrupted", "Run interrupted by signal")
 			break loop
+
+		case cmd := <-cmdCh:
+			if cmd.Err != nil {
+				r.emit(HeartbeatPayload{
+					Time:    now(),
+					Event:   "error",
+					ID:      cmd.Err.ID,
+					Command: cmd.Err.Command,
+					Reason:  cmd.Err.Reason,
+					Message: cmd.Err.Message,
+				})
+				continue
+			}
+			switch cmd.Command {
+			case "bias":
+				eng.ApplyBias(cmd.Amount)
+				cumulative := eng.GetBias()
+				r.biasEvents = append(r.biasEvents, snap.BiasEvent{
+					Amount:     cmd.Amount,
+					Cumulative: cumulative,
+					ElapsedS:   elapsedSince(eng.GetStartTime()),
+				})
+				r.emit(HeartbeatPayload{
+					Time:    now(),
+					Event:   "ack",
+					ID:      cmd.ID,
+					Command: cmd.Command,
+					Bias:    cumulative,
+					Message: fmt.Sprintf("bias %+d applied (cumulative %+d)", cmd.Amount, cumulative),
+				})
+			case "mark":
+				elapsed := elapsedSince(eng.GetStartTime())
+				r.marks = append(r.marks, snap.Mark{Label: cmd.Label, ElapsedS: elapsed})
+				// The mark event itself is the reply — no separate ack (§2.3).
+				r.emit(HeartbeatPayload{
+					Time:     now(),
+					Event:    "mark",
+					ID:       cmd.ID,
+					Label:    cmd.Label,
+					ElapsedS: elapsed,
+				})
+			case "stop":
+				r.emit(HeartbeatPayload{
+					Time:    now(),
+					Event:   "ack",
+					ID:      cmd.ID,
+					Command: cmd.Command,
+					Message: "stop received",
+				})
+				stopRequested = true
+				cancel()
+				break loop
+			}
 
 		case err := <-engineDone:
 			engineFinished = true
@@ -189,6 +338,7 @@ loop:
 				P50Ms:        m.P50Latency,
 				P95Ms:        m.P95Latency,
 				P99Ms:        m.P99Latency,
+				Bias:         m.Bias,
 			})
 		}
 	}
@@ -199,7 +349,7 @@ loop:
 	// finalizeSnapResult below — preventing a recorder data-race on early quit.
 	if !engineFinished {
 		if err := <-engineDone; err != nil && !errors.Is(err, context.Canceled) {
-			if interrupted {
+			if interrupted || stopRequested {
 				// The run was explicitly aborted — log the unexpected error but
 				// still proceed with snapshot finalization so partial data is
 				// not lost entirely.
@@ -215,16 +365,22 @@ loop:
 
 	// Run complete — call the post-run hook (e.g., write snapshot) synchronously.
 	// In headless mode there is no alt-screen constraint, so printing is safe.
+	// "stopped" replaces "finished" as the terminal event for a stop-ended
+	// run — a single terminal event, not a second one alongside it (§3.3).
+	terminalEvent := "finished"
+	if stopRequested {
+		terminalEvent = "stopped"
+	}
 	if opts.OnRunComplete != nil {
 		status := opts.OnRunComplete()
 		if status != "" {
-			r.emitMessage("finished", status)
+			r.emitMessage(terminalEvent, status)
 		}
 	} else {
 		m := eng.GetMetrics()
 		r.emit(HeartbeatPayload{
 			Time:         now(),
-			Event:        "finished",
+			Event:        terminalEvent,
 			TotalReqs:    m.TotalRequests,
 			SuccessCount: m.SuccessCount,
 			FailureCount: m.FailureCount,
@@ -247,7 +403,7 @@ func (r *HeadlessRenderer) emit(p HeartbeatPayload) {
 		_, _ = fmt.Fprintf(os.Stdout, "%s\n", b)
 	default: // "text"
 		switch p.Event {
-		case "started", "finished", "interrupted", "snap":
+		case "started", "finished", "stopped", "interrupted", "snap":
 			_, _ = fmt.Fprintf(os.Stdout, "[%s] %s\n", p.Time, p.Message)
 		case "heartbeat":
 			_, _ = fmt.Fprintf(os.Stdout,
@@ -260,6 +416,10 @@ func (r *HeadlessRenderer) emit(p HeartbeatPayload) {
 				p.ErrorRate*100,
 				p.P50Ms, p.P95Ms, p.P99Ms,
 			)
+		case "mark":
+			// No Message on this event by design (§2.3) — Label/ElapsedS
+			// already say everything, so the text line is built from those.
+			_, _ = fmt.Fprintf(os.Stdout, "[%s] mark %q (t+%.1fs)\n", p.Time, p.Label, p.ElapsedS)
 		default:
 			if p.Message != "" {
 				_, _ = fmt.Fprintf(os.Stdout, "[%s] %s\n", p.Time, p.Message)
@@ -276,4 +436,14 @@ func (r *HeadlessRenderer) emitMessage(event, message string) {
 // now returns the current UTC time formatted for log lines.
 func now() string {
 	return time.Now().UTC().Format("2006-01-02T15:04:05Z")
+}
+
+// elapsedSince returns seconds since start, or 0 if start is the zero time —
+// a command can reach here before eng.GetStartTime() is set (engine and
+// controlReader both start via unordered `go`), and time.Since would saturate.
+func elapsedSince(start time.Time) float64 {
+	if start.IsZero() {
+		return 0
+	}
+	return time.Since(start).Seconds()
 }
