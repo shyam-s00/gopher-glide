@@ -1,0 +1,10 @@
+{"id":"c1","command":"bias","amount":5}
+{"id":"c2","command":"mark","label":"gameday-start"}
+not even json
+{"id":"c4","command":"bias","amount":-3}
+{"id":"c5","command":"bias","amount":0}
+{"id":"c6","command":"pause"}
+{"id":"c7","command":"mark","label":""}
+{"command":"mark","label":"deploy-v2-canary"}
+{"id":"c9","command":"bias","amount":20}
+{"id":"c10","command":"stop"}
