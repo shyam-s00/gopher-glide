@@ -53,6 +53,7 @@ export default defineConfig({
 				{ label: 'The TUI', slug: 'tui' },
 				{ label: 'Snapshots (gg snap)', slug: 'snap' },
 				{ label: 'IDE Plugins', slug: 'plugin' },
+				{ label: 'Live Control Protocol', slug: 'control-protocol' },
 				{ label: 'Configuration', slug: 'configuration' },
 				{ label: 'CI & Containers', slug: 'ci' },
 				{ label: 'CLI Reference', slug: 'cli-reference' },

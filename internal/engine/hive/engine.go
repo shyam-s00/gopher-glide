@@ -26,35 +26,23 @@ import (
 
 const userAgent = httpreader.UserAgent
 
-// ── Engine ────────────────────────────────────────────────────────────────────
-
 // Engine is the Hive Engine. It implements engine.Runner and is the default
-// (and only) execution engine for gg.
-//
-// Internal architecture:
-//
-//	RunStages → launches Queen + Hatchery under a single errgroup
-//	Queen     → 1-second heartbeat ticker; emits SpawnManifests
-//	Hatchery  → spaces Actor spawns evenly across each 1-second window
-//	Actor     → fire-and-forget goroutine; one HTTP request then exits
+// (and only) execution engine for gg — see the package doc for its internal
+// architecture.
 type Engine struct {
 	// Shared HTTP client — all Actors borrow this, never own it.
 	client *http.Client
 
-	// ── Metrics ───────────────────────────────────────────────────────────
 	counters     metrics
 	activeActors atomic.Int32
 	rpsWin       rpsWindow
 
-	// ── Latency ring buffer ───────────────────────────────────────────────
 	latBuf atomic.Pointer[latencyBuf]
 
-	// ── Call-log ring buffers ─────────────────────────────────────────────
-	// Sharded across numShards independent mutexes — see calllog.go.
+	// logShards is sharded across numShards independent mutexes — see calllog.go.
 	logShards [numShards]logShard
 	maxLogs   int
 
-	// ── Lifecycle ────────────────────────────────────────────────────────
 	isRunning atomic.Bool
 	startTime time.Time
 	endTime   time.Time
@@ -63,27 +51,25 @@ type Engine struct {
 	// concurrently by the TUI at ~10 Hz via GetMetrics / GetElapsedTime.
 	timeMu sync.RWMutex
 
-	// ── Stage progress (written by Queen, read by TUI via GetMetrics) ────
+	// currentStage/totalStages are written by the Queen, read by the TUI
+	// (and headless renderer) via GetMetrics.
 	currentStage atomic.Int32
 	totalStages  atomic.Int32
 
 	// isJourneyMode is true when any parsed Journey has more than one step.
 	isJourneyMode atomic.Bool
 
-	// ── Director / bias controls ──────────────────────────────────────────
 	targetRPS atomic.Int64
 	rpsBias   atomic.Int64
-	// biasCh receives RPS delta values from the TUI.
-	// Buffered so TUI never sends a block regardless of Queen drain speed.
+	// biasCh receives RPS delta values from Director Mode — the TUI's
+	// arrow keys or a headless `bias` control command (LCP). Buffered so
+	// neither sender ever blocks regardless of Queen drain speed.
 	biasCh chan int
 
-	// ── Snap / sampling ───────────────────────────────────────────────────
 	recorder    snap.Recorder
 	sampleCount atomic.Int64
 	sampleEvery int // 0 = disabled; N = capture 1-in-N responses
 }
-
-// ── Constructor ───────────────────────────────────────────────────────────────
 
 // EngineOption is a functional option for New().
 type EngineOption func(*Engine)
@@ -115,8 +101,6 @@ func New(opts ...EngineOption) *Engine {
 	}
 	return e
 }
-
-// ── engine.Runner implementation ─────────────────────────────────────────────
 
 // RunStages executes all configured stages sequentially.
 //
@@ -189,7 +173,6 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 		bufCap = maxLatencyBufCap
 	}
 
-	// ── Reset state ───────────────────────────────────────────────────────
 	// activeActors must be zero here because either:
 	//   - this is the first call (always zero), or
 	//   - the previous RunStages drained actors before returning.
@@ -227,7 +210,6 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 		s.mu.Unlock()
 	}
 
-	// ── Lifecycle: mark start ─────────────────────────────────────────────
 	e.timeMu.Lock()
 	e.startTime = time.Now()
 	e.endTime = time.Time{} // clear previous end time
@@ -241,7 +223,6 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 		e.isRunning.Store(false)
 	}()
 
-	// ── Dynamic connection pool ───────────────────────────────────────────
 	// Rebuild the transport before every run so pool sizes are always tuned
 	// to the current test plan's peak RPS.
 	//
@@ -254,13 +235,11 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 		e.client.Transport = buildTransport(peakRPS)
 	}
 
-	// ── Channel connecting Queen → Hatchery ───────────────────────────────
-	// Buffer sized to peak RPS so the Queen never blocks on a slow Hatchery
-	// during a burst. SpawnManifests are small (two ints), so memory cost is
-	// negligible even at high RPS.
+	// manifestCh connects Queen to Hatchery, buffered to peak RPS so the
+	// Queen never blocks on a slow Hatchery during a burst — SpawnManifests
+	// are small (two ints), so the memory cost is negligible even at high RPS.
 	manifestCh := make(chan SpawnManifest, peakRPS)
 
-	// ── Launch Queen + Hatchery under errgroup ────────────────────────────
 	g, gCtx := errgroup.WithContext(ctx)
 
 	q := &queen{e: e}
@@ -287,7 +266,6 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 
 	err := g.Wait()
 
-	// ── Drain in-flight actors ────────────────────────────────────────────
 	// The Hatchery's dispatch goroutine has exited, but actor goroutines it
 	// spawned may still be executing their HTTP request. We wait until every
 	// actor decrements activeActors (via defer) so that:
@@ -325,8 +303,6 @@ func (e *Engine) Run(ctx context.Context, targetRPS int, duration time.Duration,
 // GetRecentLogs and GetRecentErrorLogs are implemented in calllog.go.
 
 // ApplyBias, GetBias, SetTargetRPS are implemented in director.go.
-
-// ── Compile-time assertion ────────────────────────────────────────────────────
 
 // Ensure *Engine satisfies engine.Runner at compile time.
 var _ engine.Runner = (*Engine)(nil)

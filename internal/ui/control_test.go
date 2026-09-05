@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"bytes"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -148,12 +150,12 @@ func TestControlReader_OrderedDelivery(t *testing.T) {
 	}
 }
 
-// TestControlReader_OversizedLine confirms a line over controlLineMaxBytes
-// produces exactly one parse_error reply and a clean goroutine exit, per the
-// documented (not-yet-resync) behavior in controlReader's own doc comment.
+// TestControlReader_OversizedLine confirms an over-limit line produces one
+// parse_error and — the 3.6 fix — resyncs instead of going deaf: a valid
+// command right after it must still be processed.
 func TestControlReader_OversizedLine(t *testing.T) {
 	huge := strings.Repeat("a", controlLineMaxBytes+1000)
-	in := strings.NewReader(huge + "\n")
+	in := strings.NewReader(huge + "\n" + `{"id":"c1","command":"stop"}` + "\n")
 	cmdCh := make(chan controlCommand, controlCmdChanCap)
 	done := make(chan struct{})
 	go func() {
@@ -170,9 +172,110 @@ func TestControlReader_OversizedLine(t *testing.T) {
 		t.Fatal("timed out")
 	}
 	select {
+	case c := <-cmdCh:
+		if c.Err != nil || c.Command != "stop" {
+			t.Errorf("resync failed: want the stop command after the oversized line, got %+v", c)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the post-oversized-line command")
+	}
+	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("controlReader did not exit after the oversized line")
+		t.Fatal("controlReader did not exit on EOF")
+	}
+}
+
+// TestControlReader_GarbageJSON_SurvivesAndResyncs is the 3.6 "garbage JSON"
+// scenario: malformed lines interleaved with valid commands each get their
+// own reply, and never swallow a valid command sitting next to one.
+func TestControlReader_GarbageJSON_SurvivesAndResyncs(t *testing.T) {
+	in := strings.NewReader(
+		"{not: valid, json ]]]\n" +
+			"random text, no braces at all\n" +
+			`{"id":"c1","command":"bias","amount":5}` + "\n" +
+			"%%%% garbled #### \x00\x01\x02\n" +
+			`{"id":"c2","command":"stop"}` + "\n",
+	)
+	cmdCh := make(chan controlCommand, controlCmdChanCap)
+	done := make(chan struct{})
+	go func() {
+		controlReader(in, cmdCh)
+		close(done)
+	}()
+
+	gotErrs, gotCmds := 0, 0
+	for range 5 { // 3 garbage lines + 2 valid commands
+		select {
+		case c := <-cmdCh:
+			if c.Err != nil {
+				if c.Err.Reason != "parse_error" {
+					t.Errorf("garbage line got reason %q, want parse_error", c.Err.Reason)
+				}
+				gotErrs++
+			} else {
+				gotCmds++
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timed out after %d errors, %d commands", gotErrs, gotCmds)
+		}
+	}
+	if gotErrs != 3 || gotCmds != 2 {
+		t.Errorf("got %d parse_errors and %d commands, want 3 and 2", gotErrs, gotCmds)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("controlReader did not exit on EOF")
+	}
+}
+
+// TestControlReader_BinaryGarbage_100KiB is the 3.6 "pipe /dev/urandom"
+// scenario, made deterministic (fixed seed): ~100 KiB of binary garbage
+// must not crash the reader, and a trailing valid command must get through.
+func TestControlReader_BinaryGarbage_100KiB(t *testing.T) {
+	var buf bytes.Buffer
+	rng := rand.New(rand.NewSource(42))
+	for buf.Len() < 100_000 {
+		n := 50 + rng.Intn(400) // vary line length so this doesn't parallel controlLineMaxBytes
+		line := make([]byte, n)
+		_, _ = rng.Read(line)
+		buf.Write(line)
+		buf.WriteByte('\n')
+	}
+	buf.WriteString(`{"id":"cLast","command":"stop"}` + "\n")
+
+	cmdCh := make(chan controlCommand, controlCmdChanCap)
+	done := make(chan struct{})
+	go func() {
+		controlReader(bytes.NewReader(buf.Bytes()), cmdCh)
+		close(done)
+	}()
+
+	var sawStop bool
+	timeout := time.After(5 * time.Second)
+drain:
+	for {
+		select {
+		case c := <-cmdCh:
+			if c.Err == nil && c.Command == "stop" {
+				sawStop = true
+				break drain
+			}
+			if c.Err != nil && c.Err.Reason != "parse_error" {
+				t.Errorf("unexpected error reason %q for garbage line", c.Err.Reason)
+			}
+		case <-timeout:
+			t.Fatal("timed out draining binary-garbage stream")
+		}
+	}
+	if !sawStop {
+		t.Fatal("trailing stop command after ~100KiB of binary garbage was never delivered")
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("controlReader did not exit on EOF")
 	}
 }
 
@@ -195,5 +298,67 @@ func TestControlReader_EmptyInput_ExitsQuietly(t *testing.T) {
 	case c := <-cmdCh:
 		t.Errorf("expected no commands, got %+v", c)
 	default:
+	}
+}
+
+// TestControlReader_CRLF is the 3.2 Windows line-ending check: a cmd.exe or
+// PowerShell pipe writes \r\n, not \n. readControlLine trims the trailing
+// \r, so no stray \r should ever leak into a parsed field.
+func TestControlReader_CRLF(t *testing.T) {
+	in := strings.NewReader("{\"id\":\"c1\",\"command\":\"bias\",\"amount\":5}\r\n{\"id\":\"c2\",\"command\":\"stop\"}\r\n")
+	cmdCh := make(chan controlCommand, controlCmdChanCap)
+	done := make(chan struct{})
+	go func() {
+		controlReader(in, cmdCh)
+		close(done)
+	}()
+
+	var got []controlCommand
+	for len(got) < 2 {
+		select {
+		case c := <-cmdCh:
+			got = append(got, c)
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timed out after %d commands", len(got))
+		}
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("controlReader did not exit on EOF")
+	}
+
+	if got[0].Command != "bias" || got[0].Amount != 5 || got[0].Err != nil {
+		t.Errorf("got[0] = %+v", got[0])
+	}
+	if got[1].Command != "stop" || got[1].Err != nil {
+		t.Errorf("got[1] = %+v", got[1])
+	}
+}
+
+// TestControlReader_NoTrailingNewline confirms a final command with no
+// trailing newline — the stream just closes right after, as happens when a
+// Windows console pipe is torn down mid-line — is still parsed, not dropped.
+func TestControlReader_NoTrailingNewline(t *testing.T) {
+	in := strings.NewReader(`{"id":"c1","command":"mark","label":"eof-close"}`)
+	cmdCh := make(chan controlCommand, controlCmdChanCap)
+	done := make(chan struct{})
+	go func() {
+		controlReader(in, cmdCh)
+		close(done)
+	}()
+
+	select {
+	case c := <-cmdCh:
+		if c.Command != "mark" || c.Label != "eof-close" || c.Err != nil {
+			t.Errorf("got %+v", c)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out")
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("controlReader did not exit on EOF")
 	}
 }

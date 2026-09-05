@@ -2,14 +2,14 @@ package ui
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 )
 
-// controlLineMaxBytes caps a single control command line (§3.2). It matches
-// bufio.Scanner's own default, but is set explicitly since it's a designed
-// protocol limit, not an incidental one.
+// controlLineMaxBytes caps a single control command line — a designed
+// protocol limit (§3.2), not an incidental one.
 const controlLineMaxBytes = 64 * 1024
 
 // controlCommand is one parsed, validated command from the stdin control
@@ -120,34 +120,53 @@ func decodeString(raw json.RawMessage) (string, bool) {
 	return s, true
 }
 
-// controlReader scans r for NDJSON lines and pushes each parsed result —
-// valid or carrying Err — into cmdCh. It only parses; the select loop reading
-// cmdCh does the executing and all stdout emission (§3.2).
-//
-// Sends block when cmdCh is full (backpressure, not drop) — every command
-// gets a reply, so dropping one here isn't an option. Never closes cmdCh:
-// EOF means no more commands, not that the run should stop.
-//
-// Exits quietly on EOF. Any other scan error (e.g. a line over
-// controlLineMaxBytes) gets one parse_error reply, then exits — the Scanner
-// can't resync mid-oversized-line; full recovery is Phase 3's job (§3.6).
+// controlReader reads r line by line into cmdCh — parsing only, not
+// executing (§3.2). Sends block rather than drop on a full channel (every
+// command needs a reply); it never closes cmdCh, since EOF isn't a stop.
 func controlReader(r io.Reader, cmdCh chan<- controlCommand) {
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, controlLineMaxBytes), controlLineMaxBytes)
-
-	for sc.Scan() {
-		cmd, cerr := parseControlLine(sc.Bytes())
-		if cerr != nil {
-			cmdCh <- controlCommand{Err: cerr}
-			continue
+	br := bufio.NewReaderSize(r, controlLineMaxBytes+2) // +2: content up to the cap, plus a CRLF terminator
+	for {
+		line, tooLong, err := readControlLine(br)
+		if tooLong {
+			cmdCh <- controlCommand{Err: &controlError{
+				Reason:  "parse_error",
+				Message: fmt.Sprintf("line exceeds %d byte limit", controlLineMaxBytes),
+			}}
+		} else if len(line) > 0 {
+			cmd, cerr := parseControlLine(line)
+			if cerr != nil {
+				cmdCh <- controlCommand{Err: cerr}
+			} else {
+				cmdCh <- cmd
+			}
 		}
-		cmdCh <- cmd
+		if err != nil {
+			if err != io.EOF {
+				cmdCh <- controlCommand{Err: &controlError{
+					Reason:  "parse_error",
+					Message: fmt.Sprintf("control stream read error: %v", err),
+				}}
+			}
+			return
+		}
 	}
+}
 
-	if err := sc.Err(); err != nil {
-		cmdCh <- controlCommand{Err: &controlError{
-			Reason:  "parse_error",
-			Message: fmt.Sprintf("control stream read error: %v", err),
-		}}
+// readControlLine returns one \n-terminated line (trailing \r trimmed). A
+// line over the buffer's capacity sets tooLong and is discarded up to its
+// next newline (or EOF), so the caller resyncs cleanly on the line after it.
+func readControlLine(br *bufio.Reader) (line []byte, tooLong bool, err error) {
+	for {
+		line, err = br.ReadSlice('\n')
+		if err != bufio.ErrBufferFull {
+			break
+		}
+		tooLong = true
 	}
+	if tooLong {
+		line = nil // discard whatever surrounds the line that overflowed the buffer
+	}
+	line = bytes.TrimSuffix(line, []byte("\n"))
+	line = bytes.TrimSuffix(line, []byte("\r"))
+	return line, tooLong, err
 }

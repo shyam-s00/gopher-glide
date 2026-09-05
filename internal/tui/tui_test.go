@@ -11,8 +11,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// ── timeToCol ─────────────────────────────────────────────────────────────────
-
 func TestTimeToCol_Zero(t *testing.T) {
 	if got := timeToCol(0, 60*time.Second, 60); got != 0 {
 		t.Errorf("want 0, got %d", got)
@@ -68,8 +66,6 @@ func TestTimeToCol_Proportional(t *testing.T) {
 	}
 }
 
-// ── slotToCol ─────────────────────────────────────────────────────────────────
-
 func TestSlotToCol_Zero(t *testing.T) {
 	if got := slotToCol(0, 100, 60); got != 0 {
 		t.Errorf("want 0, got %d", got)
@@ -111,8 +107,6 @@ func TestSlotToCol_Proportional(t *testing.T) {
 	}
 }
 
-// ── formatDuration ────────────────────────────────────────────────────────────
-
 func TestFormatDuration(t *testing.T) {
 	cases := []struct {
 		input time.Duration
@@ -134,8 +128,6 @@ func TestFormatDuration(t *testing.T) {
 		}
 	}
 }
-
-// ── computeLayout ─────────────────────────────────────────────────────────────
 
 func TestComputeLayout_MinWidth(t *testing.T) {
 	m := model{width: 10, height: 50} // narrower than minWidth
@@ -184,8 +176,6 @@ func newTestModel() model {
 	return m
 }
 
-// ── Update: quit keys ─────────────────────────────────────────────────────────
-
 func TestUpdate_QuitKey(t *testing.T) {
 	for _, key := range []string{"q", "ctrl+c", "esc"} {
 		m := newTestModel()
@@ -204,8 +194,6 @@ func TestUpdate_QuitKey(t *testing.T) {
 	}
 }
 
-// ── Update: toggle log mode ───────────────────────────────────────────────────
-
 func TestUpdate_ToggleLogs(t *testing.T) {
 	m := newTestModel()
 	initial := m.showFailures
@@ -220,8 +208,6 @@ func TestUpdate_ToggleLogs(t *testing.T) {
 		t.Error("pressing f twice should restore showFailures")
 	}
 }
-
-// ── Update: bias keys ─────────────────────────────────────────────────────────
 
 func TestUpdate_BiasUp_SetsDirectorMsg(t *testing.T) {
 	m := newTestModel()
@@ -306,8 +292,6 @@ func TestUpdate_BiasKeys_ReachSnapMetaBiasEvents(t *testing.T) {
 	}
 }
 
-// ── Update: tick — director message expiry ────────────────────────────────────
-
 func TestUpdate_Tick_ExpiresDirectorMsg(t *testing.T) {
 	m := newTestModel()
 	m.directorMsg = "some message"
@@ -330,7 +314,6 @@ func TestUpdate_Tick_KeepsDirectorMsgWhileFresh(t *testing.T) {
 	}
 }
 
-// ── Stage sync logic ──────────────────────────────────────────────────────────
 // These tests exercise the stage-tracking fields directly on the model struct,
 // which is the correct approach: the logic is internal state on model, and
 // Update() has an irreducible dependency on a live engine that makes it the
@@ -395,8 +378,6 @@ func TestStageSync_NoStartTime(t *testing.T) {
 		t.Errorf("stageElapsed should remain 0 when stageStartTime is zero, got %v", m.stageElapsed)
 	}
 }
-
-// ── RPS history logic ─────────────────────────────────────────────────────────
 
 func TestRpsHistory_Recorded(t *testing.T) {
 	m := newTestModel()
@@ -463,8 +444,6 @@ func TestRpsHistory_CorrectSlot(t *testing.T) {
 	}
 }
 
-// ── Update: window resize ─────────────────────────────────────────────────────
-
 func TestUpdate_WindowSize(t *testing.T) {
 	m := newTestModel()
 	m2, _ := m.Update(tea.WindowSizeMsg{Width: 180, Height: 45})
@@ -480,8 +459,6 @@ func TestUpdate_WindowSize(t *testing.T) {
 		t.Error("ready should be true after WindowSizeMsg")
 	}
 }
-
-// ── renderLogContent ──────────────────────────────────────────────────────────
 
 func TestRenderLogContent_EmptyLogs(t *testing.T) {
 	m := newTestModel()
@@ -517,8 +494,6 @@ func TestRenderLogContent_WithSuccessLogs(t *testing.T) {
 	}
 }
 
-// ── renderHeader ──────────────────────────────────────────────────────────────
-
 func TestRenderHeader_WithJitter(t *testing.T) {
 	m := newTestModel()
 	m.config.ConfigSection.Jitter = 0.1 // ±10% jitter enabled
@@ -545,8 +520,6 @@ func TestRenderHeader_Running(t *testing.T) {
 		t.Error("renderHeader when running should return non-empty string")
 	}
 }
-
-// ── View branches ─────────────────────────────────────────────────────────────
 
 func TestView_WithPositiveBias(t *testing.T) {
 	m := newTestModel()
@@ -609,8 +582,6 @@ func TestView_Snapping(t *testing.T) {
 	}
 }
 
-// ── renderLogContent with error logs ─────────────────────────────────────────
-
 func TestRenderLogContent_WithErrorLogs(t *testing.T) {
 	m := newTestModel()
 	m.showFailures = true // failures only mode
@@ -636,8 +607,6 @@ func TestRenderLogContent_NonSuccessStatus(t *testing.T) {
 		t.Error("renderLogContent with non-2xx status should return non-empty string")
 	}
 }
-
-// ── Update: onRunComplete dispatch ───────────────────────────────────────────
 
 // TestUpdate_Tick_DispatchesOnRunComplete verifies that when the engine
 // transitions from running→stopped during a tick, onRunComplete is:
@@ -700,8 +669,6 @@ func TestUpdate_Tick_NoDispatchWhenAlreadyStopped(t *testing.T) {
 		t.Error("onRunComplete should not be cleared when there was no running→stopped transition")
 	}
 }
-
-// ── effectiveTickInterval ──────────────────────────────────────────────────────
 
 func TestEffectiveTickInterval_ClampsToRange(t *testing.T) {
 	cases := []struct {

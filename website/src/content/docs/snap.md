@@ -75,6 +75,16 @@ gg snap view v1-baseline
 # Or target by ID: gg snap view 1
 ```
 
+### Manual bias & marks in the raw file
+
+If a run was manually nudged — a live RPS bias via `↑`/`↓` in the TUI, or a `bias`/`mark` command sent over the [Live Control Protocol](/control-protocol) — and `--snap` was set, that's captured in the snapshot's `meta` object too:
+
+- `marks` — labeled, timestamped annotations you sent during the run (e.g. `"deploy-v2-canary"` at `t+12.4s`).
+- `bias_events` — the full timeline of manual RPS nudges: each entry's `amount`, the `cumulative` value at that point, and `elapsed_s`.
+- `final_bias` — the cumulative bias in effect when the run ended (`0` if nobody touched it).
+
+All three are additive — only present when `--snap` was set for that run — and today they're written to the file but not yet rendered by `gg snap view` or `gg snap diff`. Until that lands, `jq '.meta.bias_events, .meta.final_bias' your.snap` is the way to check whether a run was manually biased.
+
 ---
 
 ## 🔍 3. Semantic Diffing (`gg snap diff`)
@@ -93,6 +103,8 @@ The diff engine compares the Baseline (first argument) against the Current (seco
 - **Array Bloat:** Flags array fields whose average length grew unexpectedly (e.g., a missing pagination limit silently returning thousands of rows instead of 20). Enable it with `--max-array-bloat <pct>` on either `gg snap diff` or `gg snap assert`.
 
 Green, yellow, and red borders make it easy to instantly see which endpoints **Passed**, received a **Warning**, or suffered a **Regression**.
+
+Before trusting a latency delta as a real regression, check both snapshots' `final_bias`/`bias_events` (see [Manual bias & marks](#manual-bias--marks-in-the-raw-file) above) — the diff doesn't surface this yet, but a nonzero `final_bias` means a human was leaning on the RPS slider, not a code change.
 
 ---
 

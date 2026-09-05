@@ -50,12 +50,13 @@ gg [config-file] [flags]
 |---|---|---|
 | `--headless` | `false` | Run without the interactive TUI — emits structured heartbeat logs to stdout instead. Use this in CI. |
 | `--reporter <text\|json>` | `text` | Output format in headless mode. `json` emits one [`HeartbeatPayload`](#headless-heartbeat-payload) object per line. |
+| `--control <stdin\|none>` | `stdin` | In headless mode, `stdin` listens for `bias`/`mark`/`stop` commands; `none` disables the listener for locked-down CI. See [Live Control Protocol](/control-protocol). |
 | `--heartbeat-interval <dur>` | `5s` | Headless heartbeat cadence, e.g. `2s` for smoother dashboard repaints. `0` or a negative value falls back to the default. |
 | `--tui-tick-ms <n>` | `42` (~24fps) | Interactive TUI redraw cadence in milliseconds. Clamped to `[16, 100]` — below 16ms wastes CPU on redraws no terminal can render that fast anyway; above 100ms the UI starts to feel unresponsive. `0` uses the default. Ignored in `--headless` mode. |
 
 #### Headless heartbeat payload
 
-Each line in `--reporter json` mode is one JSON object. `event` is one of `started`, `heartbeat`, `snap`, `interrupted`, `finished`.
+Each line in `--reporter json` mode is one JSON object. `event` is one of `started`, `heartbeat`, `snap`, `interrupted`, `finished`, `ack`, `error`, `mark`, `stopped`. The last four are replies/events on the [Live Control Protocol](/control-protocol)'s stdin channel.
 
 ```json
 {"time":"2026-06-20T01:00:24Z","event":"started","total_stages":2,
@@ -66,7 +67,8 @@ Each line in `--reporter json` mode is one JSON object. `event` is one of `start
 
 - `stages` — the full stage plan (name inferred the same way the TUI infers it; see [Stage inference rules](/configuration#stage-inference-rules)), sent once on `started`.
 - `profile` / `profile_scale` — only present when the run was launched via `--profile`; omitted entirely for plain config/`.http`-file runs.
-- `heartbeat` events additionally carry `stage`, `total_stages`, `target_rps`, `actual_rps`, `total_requests`, `success_count`, `failure_count`, `error_rate`, `p50_ms`, `p95_ms`, `p99_ms`.
+- `heartbeat` events additionally carry `stage`, `total_stages`, `target_rps`, `actual_rps`, `total_requests`, `success_count`, `failure_count`, `error_rate`, `p50_ms`, `p95_ms`, `p99_ms`, `bias` (cumulative Director bias, `0` if none applied).
+- `started` also carries `protocol_version` and `capabilities` — see [Versioning & capabilities](/control-protocol#versioning--capabilities).
 
 ---
 
