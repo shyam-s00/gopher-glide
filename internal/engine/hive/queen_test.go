@@ -177,7 +177,7 @@ func TestQueen_Bias_PositiveBiasIncreasesCount(t *testing.T) {
 	}
 }
 
-func TestQueen_Bias_ApplyBiasViaChan_DrainedByQueen(t *testing.T) {
+func TestQueen_Bias_AppliedMidRun_RaisesManifestCount(t *testing.T) {
 	// 30s at 10x = 3s real so we have multiple ticks and time to inject bias.
 	stages := singleStage(30*time.Second, 20)
 	e := New()
@@ -187,13 +187,16 @@ func TestQueen_Bias_ApplyBiasViaChan_DrainedByQueen(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() { done <- q.run(ctx, stages, 10.0, manifestCh) }()
-	// Give the queen time to start the ticker, then send delta.
+	// Give the queen time to start, then apply a delta mid-run.
 	time.Sleep(200 * time.Millisecond)
-	e.biasCh <- 15
-	_ = collectManifests(manifestCh, 5*time.Second)
+	e.ApplyBias(15)
+	manifests := collectManifests(manifestCh, 5*time.Second)
 	<-done
-	if e.rpsBias.Load() != 15 {
-		t.Errorf("expected rpsBias=15 after drain, got %d", e.rpsBias.Load())
+	if e.GetBias() != 15 {
+		t.Errorf("expected bias=15, got %d", e.GetBias())
+	}
+	if last := manifests[len(manifests)-1]; last.Count < 15 {
+		t.Errorf("expected late manifest Count to reflect +15 bias, got %d", last.Count)
 	}
 }
 

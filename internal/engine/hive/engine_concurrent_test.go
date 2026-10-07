@@ -295,14 +295,9 @@ func TestConcurrent_ActiveActors_NeverExceedsSpawned(t *testing.T) {
 func TestConcurrent_ApplyBias_ManySenders(t *testing.T) {
 	srv := slowHiveSrv(t, 200, 0)
 	e := New()
-	// 2.5-second run: the Queen fires its 1s heartbeat at t≈1s and t≈2s,
-	// calling drainBias() each time. We send exactly 15 deltas total —
-	// safely below biasCh's capacity of 16 — so no sends are dropped and
-	// after the first drain all 15 are reflected in rpsBias.
 	cfg := hiveStage(2500*time.Millisecond, 5)
 
-	// 5 goroutines × 3 sends = 15 total (< biasCh cap 16).
-	// All sends complete within the first ~100ms, well before the 1s Queen tick.
+	// 5 goroutines × 3 sends = 15 total.
 	const biasSenders = 5
 	const biasEach = 3
 
@@ -326,12 +321,11 @@ func TestConcurrent_ApplyBias_ManySenders(t *testing.T) {
 	wg.Wait()
 	<-runDone
 
-	// All 15 deltas must be absorbed: they all fit in biasCh (cap=16) and
-	// the Queen drains the channel on its first 1-second heartbeat tick.
+	// All 15 deltas must be absorbed.
 	got := e.GetBias()
 	want := biasSenders * biasEach
 	if got != want {
-		t.Errorf("bias: want %d, got %d (some deltas dropped — check biasCh cap vs send count)", want, got)
+		t.Errorf("bias: want %d, got %d (some deltas lost)", want, got)
 	}
 }
 

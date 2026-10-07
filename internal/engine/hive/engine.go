@@ -60,11 +60,10 @@ type Engine struct {
 	isJourneyMode atomic.Bool
 
 	targetRPS atomic.Int64
-	rpsBias   atomic.Int64
-	// biasCh receives RPS delta values from Director Mode — the TUI's
-	// arrow keys or a headless `bias` control command (LCP). Buffered so
-	// neither sender ever blocks regardless of Queen drain speed.
-	biasCh chan int
+	// rpsBias is the cumulative manual RPS delta from Director Mode — the
+	// TUI's arrow keys or a headless `bias` control command (LCP). Written
+	// by ApplyBias, read by the Queen at each window boundary.
+	rpsBias atomic.Int64
 
 	recorder    snap.Recorder
 	sampleCount atomic.Int64
@@ -87,7 +86,6 @@ func New(opts ...EngineOption) *Engine {
 			Transport: buildTransport(1000), // baseline; tuned in RunStages
 		},
 		maxLogs:     100,
-		biasCh:      make(chan int, 16),
 		sampleEvery: 20, // 5 % default — 1-in-20 responses body-sampled
 	}
 	for i := range e.logShards {
@@ -190,7 +188,8 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	e.targetRPS.Store(0)
 	e.currentStage.Store(0)
 	e.totalStages.Store(int32(len(cfg.Stages)))
-	e.rpsBias.Store(0)
+	// rpsBias is deliberately not reset: a bias command can arrive before this
+	// point (stdin is read concurrently with engine start-up) and must survive.
 
 	// Re-allocate the latency ring buffer sized for this run.
 	// cap = peakRPS × ⌈totalDurationSeconds⌉  +  10 % headroom, minimum 1024.

@@ -52,7 +52,6 @@ func (q *queen) run(
 			if rps < 1 {
 				rps = 1
 			}
-			q.drainBias()
 			biasedRPS := rps + int(q.e.rpsBias.Load())
 			if biasedRPS < 1 {
 				biasedRPS = 1
@@ -106,7 +105,6 @@ func (q *queen) run(
 				pct = 0
 			}
 
-			q.drainBias()
 			currentRPS := startRPS + (endRPS-startRPS)*pct
 			biasedRPS := currentRPS + float64(q.e.rpsBias.Load())
 			if biasedRPS < 1 {
@@ -133,16 +131,14 @@ func (q *queen) run(
 
 			// 4. Sleep for the window duration. Emit first so the Hatchery is
 			// already dispatching while the Queen waits; a timer + select
-			// (not time.Sleep) keeps cancellation responsive. Draining
-			// biasCh once the timer fires folds mid-sleep bias into the next
-			// window's LERP.
+			// (not time.Sleep) keeps cancellation responsive. Bias applied
+			// mid-sleep is picked up by the next window's LERP.
 			timer := time.NewTimer(windowDur)
 			select {
 			case <-ctx.Done():
 				timer.Stop()
 				return nil
 			case <-timer.C:
-				q.drainBias()
 			}
 
 			// Advance to the next window using the computed boundary (not
@@ -153,18 +149,4 @@ func (q *queen) run(
 		prevRPS = stage.TargetRPS
 	}
 	return nil
-}
-
-// drainBias reads all pending deltas from biasCh and accumulates them into the
-// rpsBias atomic. Non-blocking — returns immediately when the channel is empty.
-func (q *queen) drainBias() {
-drainLoop:
-	for {
-		select {
-		case delta := <-q.e.biasCh:
-			q.e.rpsBias.Add(int64(delta))
-		default:
-			break drainLoop
-		}
-	}
 }

@@ -147,7 +147,7 @@ whether it succeeded:
 |---|---|
 | `id` | Echoes the command's `id`, if one was given. |
 | `command` | Which command this acknowledges. |
-| `bias` | Present on `bias` command acks: the resulting cumulative bias value. This is best-effort and may lag slightly behind the command that produced it — treat it as an estimate that will catch up within a second or two, not a guaranteed-current value. The same value also appears on every `heartbeat` line (see [Heartbeat Additions](#6-heartbeat-additions)). |
+| `bias` | Present on `bias` command acks only: the cumulative bias value *including* the command just applied. The engine folds it into the target rate at the start of its next 1-second window, so the effect shows up on the following `heartbeat`. Not present on any other event — read the running value from `heartbeat`. |
 | `message` | Human-readable summary. Not intended to be machine-parsed — use the structured fields instead. |
 
 ### 4.2 `error`
@@ -194,7 +194,7 @@ specifically handle.
 ```
 
 The run's terminal event when ended via `stop`, in place of `finished`. Carries the same final
-run statistics `finished` would have. A stream that ends in `stopped` and one that ends in
+run statistics `finished` would have (always — also when `--snap` is on, in which case `message` is the snapshot status line). A stream that ends in `stopped` and one that ends in
 `finished` both represent a completed, valid run — the difference is only *why* it ended.
 
 ---

@@ -156,7 +156,7 @@ type HeartbeatPayload struct {
 	// LCP (v1.3): control protocol fields. See ignore/live-control-protocol.md §2.6.
 	ProtocolVersion int       `json:"protocol_version,omitempty"` // "started" only; 0 is never a real version
 	Capabilities    *[]string `json:"capabilities,omitempty"`     // "started" only; pointer distinguishes absent from --control none's []
-	Bias            int       `json:"bias"`                       // cumulative Director bias; no omitempty, mirrors other metric fields
+	Bias            *int      `json:"bias,omitempty"`             // cumulative Director bias; set on heartbeat and bias ack only — pointer so a real 0 is still emitted
 	ID              string    `json:"id,omitempty"`               // echoes the command's caller-chosen id, if any
 	Command         string    `json:"command,omitempty"`          // set on ack/error only
 	Reason          string    `json:"reason,omitempty"`           // error replies only
@@ -283,7 +283,7 @@ loop:
 					Event:   "ack",
 					ID:      cmd.ID,
 					Command: cmd.Command,
-					Bias:    cumulative,
+					Bias:    &cumulative,
 					Message: fmt.Sprintf("bias %+d applied (cumulative %+d)", cmd.Amount, cumulative),
 				})
 			case "mark":
@@ -338,7 +338,7 @@ loop:
 				P50Ms:        m.P50Latency,
 				P95Ms:        m.P95Latency,
 				P99Ms:        m.P99Latency,
-				Bias:         m.Bias,
+				Bias:         &m.Bias,
 			})
 		}
 	}
@@ -371,12 +371,15 @@ loop:
 	if stopRequested {
 		terminalEvent = "stopped"
 	}
-	if opts.OnRunComplete != nil {
-		status := opts.OnRunComplete()
-		if status != "" {
-			r.emitMessage(terminalEvent, status)
-		}
-	} else {
+	// The terminal event always carries the final run statistics; the post-run
+	// hook's status line (e.g. snapshot saved), when there is one, becomes its
+	// message.
+	message := "Load test completed"
+	hasHook := opts.OnRunComplete != nil
+	if hasHook {
+		message = opts.OnRunComplete()
+	}
+	if !hasHook || message != "" {
 		m := eng.GetMetrics()
 		r.emit(HeartbeatPayload{
 			Time:         now(),
@@ -388,7 +391,7 @@ loop:
 			P50Ms:        m.P50Latency,
 			P95Ms:        m.P95Latency,
 			P99Ms:        m.P99Latency,
-			Message:      "Load test completed",
+			Message:      message,
 		})
 	}
 

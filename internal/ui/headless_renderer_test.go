@@ -130,8 +130,8 @@ func TestHeadlessRenderer_StartedEvent_Capabilities(t *testing.T) {
 			if !strings.Contains(started, tt.wantCaps) {
 				t.Errorf("started event capabilities mismatch: want substring %q, got: %s", tt.wantCaps, started)
 			}
-			if !strings.Contains(started, `"bias":0`) {
-				t.Errorf("started event missing bias:0 (should have no omitempty), got: %s", started)
+			if strings.Contains(started, `"bias"`) {
+				t.Errorf("started event should not carry a bias field, got: %s", started)
 			}
 		})
 	}
@@ -212,9 +212,9 @@ func TestHeadlessRenderer_GamedayScript(t *testing.T) {
 	if line8.Event != "mark" || line8.ID != "" || line8.Label != "deploy-v2-canary" {
 		t.Errorf("id-less mark line wrong: %+v", line8)
 	}
-	line9 := payloads[9]  // bias +20 ack
-	if line9.Bias != 22 { // 5 - 3 + 20
-		t.Errorf("final bias ack cumulative = %d, want 22", line9.Bias)
+	line9 := payloads[9]                        // bias +20 ack
+	if line9.Bias == nil || *line9.Bias != 22 { // 5 - 3 + 20
+		t.Errorf("final bias ack cumulative = %v, want 22", line9.Bias)
 	}
 	stopped := payloads[11]
 	if stopped.ID != "" || stopped.Command != "" {
@@ -340,5 +340,81 @@ func TestHeadlessRenderer_TextReporter_Unaffected(t *testing.T) {
 	}
 	if !strings.HasPrefix(started, "[") || !strings.Contains(started, "Load test started") {
 		t.Errorf("text reporter started line has unexpected shape: %s", started)
+	}
+}
+
+// metricsRunner reports non-zero final stats so terminal-event tests can tell
+// "carries stats" from "zero-valued".
+type metricsRunner struct{ blockingRunner }
+
+func (*metricsRunner) GetMetrics() *engine.MetricsSnapshot {
+	return &engine.MetricsSnapshot{TotalRequests: 42, SuccessCount: 40, FailureCount: 2, Bias: 7}
+}
+
+// TestHeadlessRenderer_BiasField_OnlyWhereMeaningful pins the raw JSON: bias
+// is on heartbeats and bias acks (even at a real 0), and on nothing else.
+func TestHeadlessRenderer_BiasField_OnlyWhereMeaningful(t *testing.T) {
+	script := strings.Join([]string{
+		`{"id":"b1","command":"bias","amount":5}`,
+		`{"id":"b2","command":"bias","amount":-5}`, // cumulative back to a real 0
+		`{"id":"m1","command":"mark","label":"x"}`,
+		`{"id":"e1","command":"nope"}`,
+		`{"id":"s1","command":"stop"}`,
+	}, "\n") + "\n"
+	r := &HeadlessRenderer{
+		Reporter:          "json",
+		ControlInput:      strings.NewReader(script),
+		HeartbeatInterval: 20 * time.Millisecond,
+	}
+	rb := &metricsRunner{}
+	out := captureStdout(t, func() {
+		_ = r.Run(rb, testConfig(), nil, RunOptions{})
+	})
+
+	for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
+		var p HeartbeatPayload
+		if err := json.Unmarshal([]byte(l), &p); err != nil {
+			t.Fatalf("bad line %s: %v", l, err)
+		}
+		has := strings.Contains(l, `"bias":`)
+		switch {
+		case p.Event == "heartbeat", p.Event == "ack" && p.Command == "bias":
+			if !has {
+				t.Errorf("%s/%s must carry bias: %s", p.Event, p.Command, l)
+			}
+		default:
+			if has {
+				t.Errorf("%s/%s must not carry bias: %s", p.Event, p.Command, l)
+			}
+		}
+		if p.Event == "ack" && p.ID == "b2" && (p.Bias == nil || *p.Bias != 0) {
+			t.Errorf("b2 ack must report an explicit cumulative bias of 0: %s", l)
+		}
+	}
+}
+
+// TestHeadlessRenderer_Stopped_WithHook_CarriesStats covers the --snap path:
+// the terminal event must hold the final stats and the hook's status message.
+func TestHeadlessRenderer_Stopped_WithHook_CarriesStats(t *testing.T) {
+	r := &HeadlessRenderer{
+		Reporter:          "json",
+		ControlInput:      strings.NewReader(`{"command":"stop"}` + "\n"),
+		HeartbeatInterval: time.Hour,
+	}
+	out := captureStdout(t, func() {
+		_ = r.Run(&metricsRunner{}, testConfig(), nil, RunOptions{
+			OnRunComplete: func() string { return "snapshot saved" },
+		})
+	})
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	var last HeartbeatPayload
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &last); err != nil {
+		t.Fatal(err)
+	}
+	if last.Event != "stopped" || last.Message != "snapshot saved" {
+		t.Fatalf("terminal event = %+v", last)
+	}
+	if last.TotalReqs != 42 || last.SuccessCount != 40 || last.FailureCount != 2 {
+		t.Errorf("stopped event lost final stats: %+v", last)
 	}
 }

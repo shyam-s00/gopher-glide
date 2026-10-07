@@ -7,92 +7,57 @@ import (
 
 // ── ApplyBias ─────────────────────────────────────────────────────────────────
 
-func TestApplyBias_SendsDeltaToBiasCh(t *testing.T) {
+func TestApplyBias_AccumulatesImmediately(t *testing.T) {
 	e := New()
 	e.ApplyBias(10)
-	select {
-	case got := <-e.biasCh:
-		if got != 10 {
-			t.Fatalf("expected delta=10, got %d", got)
-		}
-	default:
-		t.Fatal("expected a value in biasCh, channel was empty")
+	if got := e.GetBias(); got != 10 {
+		t.Fatalf("expected bias=10 right after ApplyBias, got %d", got)
+	}
+	e.ApplyBias(-4)
+	if got := e.GetBias(); got != 6 {
+		t.Fatalf("expected cumulative bias=6, got %d", got)
 	}
 }
 
 func TestApplyBias_NegativeDelta(t *testing.T) {
 	e := New()
 	e.ApplyBias(-5)
-	select {
-	case got := <-e.biasCh:
-		if got != -5 {
-			t.Fatalf("expected delta=-5, got %d", got)
-		}
-	default:
-		t.Fatal("expected a value in biasCh, channel was empty")
+	if got := e.GetBias(); got != -5 {
+		t.Fatalf("expected bias=-5, got %d", got)
 	}
 }
 
 func TestApplyBias_ZeroDelta(t *testing.T) {
 	e := New()
 	e.ApplyBias(0)
-	select {
-	case got := <-e.biasCh:
-		if got != 0 {
-			t.Fatalf("expected delta=0, got %d", got)
-		}
-	default:
-		t.Fatal("expected a value in biasCh, channel was empty")
+	if got := e.GetBias(); got != 0 {
+		t.Fatalf("expected bias=0, got %d", got)
 	}
 }
 
-func TestApplyBias_DropWhenChannelFull(t *testing.T) {
-	e := New() // biasCh capacity = 16
-	// Fill the channel to capacity.
-	for i := 0; i < 16; i++ {
+func TestApplyBias_NeverDrops(t *testing.T) {
+	e := New()
+	for i := 0; i < 1000; i++ {
 		e.ApplyBias(1)
 	}
-	// This 17th send must not block and must be silently dropped.
-	e.ApplyBias(99)
-
-	// Drain all 16 slots — the dropped value must not appear.
-	count := 0
-	for {
-		select {
-		case v := <-e.biasCh:
-			if v == 99 {
-				t.Fatal("dropped value 99 must not appear in channel")
-			}
-			count++
-		default:
-			goto done
-		}
-	}
-done:
-	if count != 16 {
-		t.Fatalf("expected 16 values in channel, got %d", count)
+	if got := e.GetBias(); got != 1000 {
+		t.Fatalf("expected all 1000 deltas applied, got %d", got)
 	}
 }
 
-func TestApplyBias_ConcurrentSenders_NoDeadlock(t *testing.T) {
+func TestApplyBias_ConcurrentSenders(t *testing.T) {
 	e := New()
 	var wg sync.WaitGroup
-	// 64 concurrent senders — only 16 will land; rest are dropped silently.
 	for i := 0; i < 64; i++ {
 		wg.Add(1)
-		go func(delta int) {
+		go func() {
 			defer wg.Done()
-			e.ApplyBias(delta)
-		}(i)
+			e.ApplyBias(2)
+		}()
 	}
-	wg.Wait() // must complete without deadlock
-	// Drain whatever landed.
-	for {
-		select {
-		case <-e.biasCh:
-		default:
-			return
-		}
+	wg.Wait()
+	if got := e.GetBias(); got != 128 {
+		t.Fatalf("expected bias=128, got %d", got)
 	}
 }
 
@@ -123,10 +88,9 @@ func TestGetBias_NegativeBias(t *testing.T) {
 
 func TestGetBias_ReflectsAccumulatedDeltas(t *testing.T) {
 	e := New()
-	// Simulate Queen draining and accumulating bias deltas.
-	e.rpsBias.Add(10)
-	e.rpsBias.Add(5)
-	e.rpsBias.Add(-3)
+	e.ApplyBias(10)
+	e.ApplyBias(5)
+	e.ApplyBias(-3)
 	if got := e.GetBias(); got != 12 {
 		t.Fatalf("expected accumulated bias=12, got %d", got)
 	}
