@@ -18,7 +18,7 @@ import (
 //     Built-in names are reserved: if the file exists but the slug matches a
 //     built-in profile, Load returns ErrBuiltInProfileConflict instead of
 //     silently overriding the canonical definition.
-//  3. Embedded binary     — the 21 profiles baked into the binary at build time.
+//  3. Embedded binary     — the profiles baked into the binary at build time.
 //
 // name should be the profile slug (e.g. "flash-sale") without the .yaml suffix,
 // or a full file path for custom profiles outside the standard directories.
@@ -53,7 +53,7 @@ func Load(name string) (*Profile, error) {
 }
 
 // ListNames returns the names of all profiles available from the embedded
-// binary (i.e. the 21 shipped profiles). Names are returned without the
+// binary (i.e. the shipped profiles). Names are returned without the
 // .yaml suffix, sorted alphabetically.
 func ListNames() []string {
 	entries, err := fs.ReadDir(embeddedProfiles, "data")
@@ -69,7 +69,7 @@ func ListNames() []string {
 	return names
 }
 
-// IsBuiltIn reports whether name matches one of the 21 shipped built-in
+// IsBuiltIn reports whether name matches one of the shipped built-in
 // profiles. The .yaml extension is stripped before comparison.
 func IsBuiltIn(name string) bool {
 	slug := strings.TrimSuffix(name, ".yaml")

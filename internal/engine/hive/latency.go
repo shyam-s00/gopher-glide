@@ -71,9 +71,8 @@ func newLatencyBuf(cap int) latencyBuf {
 // the percentiles track current behaviour, which is especially important during
 // ramp stages where response times change rapidly.
 //
-// Concurrent-safety: count is loaded once; individual slot loads may see a
-// write that happened after the count snapshot. The resulting off-by-one is
-// bounded to one entry and is acceptable for a display-only metric.
+// Count is loaded once, so a slot load may see a newer write: an off-by-one
+// bounded to one entry (see the metrics type).
 func (e *Engine) computeLatency() (min, max, p50, p95, p99 float64) {
 	lb := e.latBuf.Load()
 	if lb == nil {

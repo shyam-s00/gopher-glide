@@ -23,7 +23,7 @@ package hive
 //   - IsRunning clean transition
 //   - GetMetrics latency-snapshot consistency (p99 ≥ p50)
 //   - Multiple specs at high RPS — counter invariant holds
-//   - Context cancel racing with bias drain — no deadlock
+//   - Context cancel racing with bias updates — no deadlock
 
 import (
 	"context"
@@ -37,8 +37,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 )
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 // slowHiveSrv starts a test server that optionally delays before responding.
 func slowHiveSrv(t *testing.T, statusCode int, delay time.Duration) *httptest.Server {
@@ -70,8 +68,6 @@ func hiveStage(dur time.Duration, rps int) *config.Config {
 	}
 }
 
-// ── 1. rpsWindow: concurrent record + rate ────────────────────────────────────
-
 func TestConcurrent_RpsWindow_RecordAndRate(t *testing.T) {
 	var w rpsWindow
 	const goroutines = 50
@@ -98,8 +94,6 @@ func TestConcurrent_RpsWindow_RecordAndRate(t *testing.T) {
 	}
 	wg.Wait()
 }
-
-// ── 2. logCall: concurrent writes + reads ─────────────────────────────────────
 
 func TestConcurrent_LogCall_ConcurrentWritesAndReads(t *testing.T) {
 	e := New()
@@ -134,8 +128,6 @@ func TestConcurrent_LogCall_ConcurrentWritesAndReads(t *testing.T) {
 	}
 }
 
-// ── 3. logCall: error buffer never exceeds max ────────────────────────────────
-
 func TestConcurrent_LogCall_ErrorBuffer_NeverExceedsMax(t *testing.T) {
 	e := New()
 	e.maxLogs = 20
@@ -160,13 +152,9 @@ func TestConcurrent_LogCall_ErrorBuffer_NeverExceedsMax(t *testing.T) {
 	}
 }
 
-// ── 4. latencies slice: concurrent appends + computeLatency reads ─────────────
-
 func TestConcurrent_Latencies_ConcurrentAppends(t *testing.T) {
 	t.Skip("latency write path not yet implemented")
 }
-
-// ── 5. GetMetrics counter invariant during a live run ─────────────────────────
 
 func TestConcurrent_GetMetrics_DuringRun(t *testing.T) {
 	srv := slowHiveSrv(t, 200, 0)
@@ -210,8 +198,6 @@ func TestConcurrent_GetMetrics_DuringRun(t *testing.T) {
 	wg.Wait()
 }
 
-// ── 6. Mixed-response counter invariant after run ─────────────────────────────
-
 func TestConcurrent_CounterInvariant_MixedResponses(t *testing.T) {
 	var reqCount atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -236,8 +222,6 @@ func TestConcurrent_CounterInvariant_MixedResponses(t *testing.T) {
 		t.Error("expected requests to be sent")
 	}
 }
-
-// ── 7. activeActors never exceeds spawned count ───────────────────────────────
 
 func TestConcurrent_ActiveActors_NeverExceedsSpawned(t *testing.T) {
 	// Slow server keeps actors alive long enough to observe concurrency.
@@ -290,8 +274,6 @@ func TestConcurrent_ActiveActors_NeverExceedsSpawned(t *testing.T) {
 	}
 }
 
-// ── 8. ApplyBias: many concurrent senders, all deltas absorbed ────────────────
-
 func TestConcurrent_ApplyBias_ManySenders(t *testing.T) {
 	srv := slowHiveSrv(t, 200, 0)
 	e := New()
@@ -329,8 +311,6 @@ func TestConcurrent_ApplyBias_ManySenders(t *testing.T) {
 	}
 }
 
-// ── 9. Round-robin: all specs receive requests under concurrency ──────────────
-
 func TestConcurrent_RoundRobin_AllSpecsReceiveRequests(t *testing.T) {
 	const numSpecs = 3
 	hits := make([]atomic.Int64, numSpecs)
@@ -366,8 +346,6 @@ func TestConcurrent_RoundRobin_AllSpecsReceiveRequests(t *testing.T) {
 	}
 }
 
-// ── 10. Log buffer: no panic on concurrent eviction ──────────────────────────
-
 func TestConcurrent_LogBuffer_NoPanicOnEviction(t *testing.T) {
 	e := New()
 	e.maxLogs = 10 // tiny cap forces frequent eviction
@@ -391,8 +369,6 @@ func TestConcurrent_LogBuffer_NoPanicOnEviction(t *testing.T) {
 	}
 	wg.Wait()
 }
-
-// ── 11. IsRunning: clean false-after-done transition ─────────────────────────
 
 func TestConcurrent_IsRunning_CleanTransition(t *testing.T) {
 	srv := slowHiveSrv(t, 200, 0)
@@ -425,8 +401,6 @@ func TestConcurrent_IsRunning_CleanTransition(t *testing.T) {
 		t.Error("IsRunning() returned true after RunStages completed")
 	}
 }
-
-// ── 12. GetMetrics latency snapshot consistency ───────────────────────────────
 
 func TestConcurrent_GetMetrics_LatencySnapshot(t *testing.T) {
 	srv := slowHiveSrv(t, 200, 2*time.Millisecond)
@@ -464,8 +438,6 @@ func TestConcurrent_GetMetrics_LatencySnapshot(t *testing.T) {
 	wg.Wait()
 }
 
-// ── 13. Multiple specs at high RPS — counter invariant ───────────────────────
-
 func TestConcurrent_MultipleSpecs_HighRPS(t *testing.T) {
 	srv := slowHiveSrv(t, 200, 0)
 	e := New()
@@ -487,9 +459,7 @@ func TestConcurrent_MultipleSpecs_HighRPS(t *testing.T) {
 	}
 }
 
-// ── 14. Context cancel during bias drain — no deadlock ───────────────────────
-
-func TestConcurrent_CancelDuringBiasDrain_NoDeadlock(t *testing.T) {
+func TestConcurrent_CancelDuringBias_NoDeadlock(t *testing.T) {
 	srv := slowHiveSrv(t, 200, 0)
 	e := New()
 	cfg := hiveStage(10*time.Second, 20) // long stage so cancel fires mid-run

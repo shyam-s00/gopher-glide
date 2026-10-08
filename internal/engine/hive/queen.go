@@ -25,7 +25,7 @@ import (
 //   - RC3 Full-count burst: Count is always scaled to windowDur / 1 s, so a
 //     10 ms fractional window never receives a full second's worth of actors.
 type queen struct {
-	e *Engine // back-pointer to shared atomics and channels
+	e *Engine // back-pointer to the shared engine state
 }
 
 // run is the Queen's main loop. It is launched as a goroutine by RunStages and

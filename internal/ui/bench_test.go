@@ -1,4 +1,4 @@
-// LCP 3.1 zero-cost check — see ignore/live-control-protocol.md §3.1.
+// LCP zero-cost check: the control listener must not slow the heartbeat loop.
 //
 // Run: go test -bench=BenchmarkHeadlessRenderer_Idle -benchmem ./internal/ui/
 package ui
@@ -40,7 +40,7 @@ func (b blockUntil) Read(p []byte) (int, error) {
 	return 0, io.EOF
 }
 
-// BenchmarkHeadlessRenderer_Idle is the 3.1 zero-cost check: the extra
+// BenchmarkHeadlessRenderer_Idle is the zero-cost check: the extra
 // select arm must not slow the heartbeat loop, disabled or idle. ns/op
 // should match; allocs/op differs only by the listener's one-time setup.
 func BenchmarkHeadlessRenderer_Idle(b *testing.B) {

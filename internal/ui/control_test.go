@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// TestParseControlLine is the 2.12 parse table: every documented outcome in
-// §2.3, exercised directly against parseControlLine.
+// TestParseControlLine is the parse table: every documented outcome,
+// exercised directly against parseControlLine.
 func TestParseControlLine(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -151,7 +151,7 @@ func TestControlReader_OrderedDelivery(t *testing.T) {
 }
 
 // TestControlReader_OversizedLine confirms an over-limit line produces one
-// parse_error and — the 3.6 fix — resyncs instead of going deaf: a valid
+// parse_error and resyncs instead of going deaf: a valid
 // command right after it must still be processed.
 func TestControlReader_OversizedLine(t *testing.T) {
 	huge := strings.Repeat("a", controlLineMaxBytes+1000)
@@ -186,7 +186,7 @@ func TestControlReader_OversizedLine(t *testing.T) {
 	}
 }
 
-// TestControlReader_GarbageJSON_SurvivesAndResyncs is the 3.6 "garbage JSON"
+// TestControlReader_GarbageJSON_SurvivesAndResyncs covers the "garbage JSON"
 // scenario: malformed lines interleaved with valid commands each get their
 // own reply, and never swallow a valid command sitting next to one.
 func TestControlReader_GarbageJSON_SurvivesAndResyncs(t *testing.T) {
@@ -230,7 +230,7 @@ func TestControlReader_GarbageJSON_SurvivesAndResyncs(t *testing.T) {
 	}
 }
 
-// TestControlReader_BinaryGarbage_100KiB is the 3.6 "pipe /dev/urandom"
+// TestControlReader_BinaryGarbage_100KiB covers the "pipe /dev/urandom"
 // scenario, made deterministic (fixed seed): ~100 KiB of binary garbage
 // must not crash the reader, and a trailing valid command must get through.
 func TestControlReader_BinaryGarbage_100KiB(t *testing.T) {
@@ -301,7 +301,7 @@ func TestControlReader_EmptyInput_ExitsQuietly(t *testing.T) {
 	}
 }
 
-// TestControlReader_CRLF is the 3.2 Windows line-ending check: a cmd.exe or
+// TestControlReader_CRLF is the Windows line-ending check: a cmd.exe or
 // PowerShell pipe writes \r\n, not \n. readControlLine trims the trailing
 // \r, so no stray \r should ever leak into a parsed field.
 func TestControlReader_CRLF(t *testing.T) {

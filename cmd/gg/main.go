@@ -334,8 +334,8 @@ func main() {
 	}
 
 	// controlData returns the marks/bias events recorded so far: from hr for
-	// headless, from tr for the TUI (no Marks equivalent there — §3.6). Safe
-	// to call from onRunComplete either way — see hr.Marks()/tr.BiasEvents().
+	// headless, from tr for the TUI (which has no marks). Safe to call from
+	// onRunComplete either way.
 	controlData := func() ([]snap.Mark, []snap.BiasEvent) {
 		if hr != nil {
 			return hr.Marks(), hr.BiasEvents()
@@ -414,8 +414,7 @@ func finalizeSnapResult(rec *snap.DefaultRecorder, eng engine.Runner, cfg *confi
 		MaxBodyKB:  maxBodyKB,
 		Marks:      marks,
 		BiasEvents: biasEvents,
-		// Fresh read, not derived from biasEvents' last cached ack value,
-		// which can be stale by the queen-drain lag §2.3 already documents.
+		// Read from the engine at finalize time, not derived from biasEvents.
 		FinalBias: eng.GetBias(),
 	})
 	if err != nil {

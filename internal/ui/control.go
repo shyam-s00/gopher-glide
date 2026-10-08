@@ -8,13 +8,12 @@ import (
 	"io"
 )
 
-// controlLineMaxBytes caps a single control command line — a designed
-// protocol limit (§3.2), not an incidental one.
+// controlLineMaxBytes caps a single control command line — a deliberate
+// protocol limit, not an incidental one.
 const controlLineMaxBytes = 64 * 1024
 
 // controlCommand is one parsed, validated command from the stdin control
 // protocol (LCP), or a failed one carrying the error to reply with instead.
-// See ignore/live-control-protocol.md §2.2.
 type controlCommand struct {
 	ID      string // caller-chosen correlation id; empty if omitted
 	Command string // "bias" | "mark" | "stop"
@@ -23,11 +22,11 @@ type controlCommand struct {
 
 	// Err is set when the line failed to parse or validate. Every other
 	// field is zero; the select loop should reply with Err, not execute
-	// anything (§2.3).
+	// anything.
 	Err *controlError
 }
 
-// controlError is a typed command-line failure, carrying the §2.3 error
+// controlError is a typed command-line failure, carrying the error
 // reason plus whatever of id/command survived parsing.
 type controlError struct {
 	Reason  string // parse_error | unknown_command | invalid_argument
@@ -40,7 +39,7 @@ func (e *controlError) Error() string { return e.Message }
 
 // rawControlCommand keeps Amount/Label raw so a bad type there doesn't fail
 // decoding — only a non-string id/command, or broken JSON, is parse_error.
-// Amount/Label are validated separately, into invalid_argument (§2.3).
+// Amount/Label are validated separately, into invalid_argument.
 type rawControlCommand struct {
 	ID      string          `json:"id"`
 	Command string          `json:"command"`
@@ -49,12 +48,12 @@ type rawControlCommand struct {
 }
 
 // parseControlLine decodes and validates one NDJSON command line, returning
-// either a ready-to-execute controlCommand or a *controlError typed per §2.3.
+// either a ready-to-execute controlCommand or a typed *controlError.
 func parseControlLine(line []byte) (controlCommand, *controlError) {
 	var raw rawControlCommand
 	if err := json.Unmarshal(line, &raw); err != nil {
 		// id/command are non-string or the line isn't JSON at all — neither
-		// is recoverable, so the reply carries no id/command (§2.3).
+		// is recoverable, so the reply carries no id/command.
 		return controlCommand{}, &controlError{
 			Reason:  "parse_error",
 			Message: fmt.Sprintf("invalid command line: %v", err),
@@ -121,7 +120,7 @@ func decodeString(raw json.RawMessage) (string, bool) {
 }
 
 // controlReader reads r line by line into cmdCh — parsing only, not
-// executing (§3.2). Sends block rather than drop on a full channel (every
+// executing. Sends block rather than drop on a full channel (every
 // command needs a reply); it never closes cmdCh, since EOF isn't a stop.
 func controlReader(r io.Reader, cmdCh chan<- controlCommand) {
 	br := bufio.NewReaderSize(r, controlLineMaxBytes+2) // +2: content up to the cap, plus a CRLF terminator

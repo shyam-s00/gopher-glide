@@ -18,7 +18,7 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
 
-// controlCmdChanCap is cmdCh's buffer size (§3.2) — generous enough for a
+// controlCmdChanCap is cmdCh's buffer size — generous enough for a
 // burst of scripted commands or a throttled slider's queued nudges without
 // blocking controlReader mid-parse.
 const controlCmdChanCap = 32
@@ -52,11 +52,11 @@ type HeadlessRenderer struct {
 	ControlInput io.Reader
 
 	// biasEvents records every bias command applied this run, for
-	// SnapMeta.BiasEvents at finalize (§3.4). Exposed via BiasEvents().
+	// SnapMeta.BiasEvents at finalize. Exposed via BiasEvents().
 	biasEvents []snap.BiasEvent
 
 	// marks records every "mark" command received this run, for
-	// SnapMeta.Marks at finalize (§3.4). Exposed via Marks().
+	// SnapMeta.Marks at finalize. Exposed via Marks().
 	marks []snap.Mark
 }
 
@@ -96,7 +96,7 @@ func (r *HeadlessRenderer) controlInput() io.Reader {
 
 // capabilities returns the "started" event's Capabilities pointer: the full
 // LCP set for "stdin", or an explicit empty slice for "none" — distinct from
-// a pre-v1.3 binary that omits the field entirely (§2.4 rule 4).
+// a pre-v1.3 binary that omits the field entirely.
 func (r *HeadlessRenderer) capabilities() *[]string {
 	caps := []string{}
 	if r.controlMode() == "stdin" {
@@ -107,7 +107,7 @@ func (r *HeadlessRenderer) capabilities() *[]string {
 
 // Marks returns every "mark" command recorded this run. Safe to call once
 // Run()'s select loop has broken — OnRunComplete runs synchronously before
-// Run() returns, so callers see the final set (§3.5).
+// Run() returns, so callers see the final set.
 func (r *HeadlessRenderer) Marks() []snap.Mark {
 	return r.marks
 }
@@ -119,7 +119,7 @@ func (r *HeadlessRenderer) BiasEvents() []snap.BiasEvent {
 }
 
 // protocolVersion is the LCP wire version emitted on every "started" event.
-// Bumped only for breaking changes — see ignore/live-control-protocol.md §2.4.
+// Bumped only for breaking changes.
 const protocolVersion = 1
 
 // StageInfo is a compact, JSON-friendly description of a single load stage,
@@ -153,7 +153,7 @@ type HeartbeatPayload struct {
 	P99Ms        float64     `json:"p99_ms"`
 	Message      string      `json:"message,omitempty"` // used for snap / finish lines
 
-	// LCP (v1.3): control protocol fields. See ignore/live-control-protocol.md §2.6.
+	// LCP (v1.3) control protocol fields.
 	ProtocolVersion int       `json:"protocol_version,omitempty"` // "started" only; 0 is never a real version
 	Capabilities    *[]string `json:"capabilities,omitempty"`     // "started" only; pointer distinguishes absent from --control none's []
 	Bias            *int      `json:"bias,omitempty"`             // cumulative Director bias; set on heartbeat and bias ack only — pointer so a real 0 is still emitted
@@ -245,7 +245,7 @@ func (r *HeadlessRenderer) Run(eng engine.Runner, cfg *config.Config, specs []ht
 	// stopRequested is set by a "stop" control command. Treated like
 	// interrupted for the post-loop error branch (log and still finalize,
 	// never fail the run) but produces a single "stopped" terminal event
-	// instead of "interrupted"+"finished" (§3.3).
+	// instead of "interrupted"+"finished".
 	stopRequested := false
 
 loop:
@@ -289,7 +289,7 @@ loop:
 			case "mark":
 				elapsed := elapsedSince(eng.GetStartTime())
 				r.marks = append(r.marks, snap.Mark{Label: cmd.Label, ElapsedS: elapsed})
-				// The mark event itself is the reply — no separate ack (§2.3).
+				// The mark event itself is the reply — no separate ack.
 				r.emit(HeartbeatPayload{
 					Time:     now(),
 					Event:    "mark",
@@ -366,7 +366,7 @@ loop:
 	// Run complete — call the post-run hook (e.g., write snapshot) synchronously.
 	// In headless mode there is no alt-screen constraint, so printing is safe.
 	// "stopped" replaces "finished" as the terminal event for a stop-ended
-	// run — a single terminal event, not a second one alongside it (§3.3).
+	// run — a single terminal event, not a second one alongside it.
 	terminalEvent := "finished"
 	if stopRequested {
 		terminalEvent = "stopped"
@@ -420,7 +420,7 @@ func (r *HeadlessRenderer) emit(p HeartbeatPayload) {
 				p.P50Ms, p.P95Ms, p.P99Ms,
 			)
 		case "mark":
-			// No Message on this event by design (§2.3) — Label/ElapsedS
+			// No Message on this event by design — Label/ElapsedS
 			// already say everything, so the text line is built from those.
 			_, _ = fmt.Fprintf(os.Stdout, "[%s] mark %q (t+%.1fs)\n", p.Time, p.Label, p.ElapsedS)
 		default:

@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// ── ApplyBias ─────────────────────────────────────────────────────────────────
-
 func TestApplyBias_AccumulatesImmediately(t *testing.T) {
 	e := New()
 	e.ApplyBias(10)
@@ -61,8 +59,6 @@ func TestApplyBias_ConcurrentSenders(t *testing.T) {
 	}
 }
 
-// ── GetBias ───────────────────────────────────────────────────────────────────
-
 func TestGetBias_ZeroInitially(t *testing.T) {
 	e := New()
 	if got := e.GetBias(); got != 0 {
@@ -95,8 +91,6 @@ func TestGetBias_ReflectsAccumulatedDeltas(t *testing.T) {
 		t.Fatalf("expected accumulated bias=12, got %d", got)
 	}
 }
-
-// ── SetTargetRPS ──────────────────────────────────────────────────────────────
 
 func TestSetTargetRPS_StoresValue(t *testing.T) {
 	e := New()

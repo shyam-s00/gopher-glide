@@ -982,8 +982,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// recordBiasEvent appends one bias command to the shared BiasEvents sink
-// (§3.6). No-op when biasEventsOut is nil (e.g. tests that build a model
+// recordBiasEvent appends one bias command to the shared BiasEvents sink.
+// No-op when biasEventsOut is nil (e.g. tests that build a model
 // directly instead of via Start()).
 func (m model) recordBiasEvent(amount int) {
 	if m.biasEventsOut == nil {

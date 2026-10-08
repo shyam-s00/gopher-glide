@@ -58,20 +58,18 @@ type RunMeta struct {
 	MaxBodyKB  int     // effective per-endpoint byte budget in KB (0 = unlimited)
 
 	// Marks and BiasEvents are LCP control-protocol events recorded during
-	// the run, copied into SnapMeta at Finalize (§3.4/§3.5). Both nil when
+	// the run, copied into SnapMeta at Finalize. Both nil when
 	// --snap wasn't paired with any control activity.
 	Marks      []Mark
 	BiasEvents []BiasEvent
 
-	// FinalBias is a fresh eng.GetBias() read taken by the caller right
-	// before Finalize, not derived from BiasEvents — the last ack's cached
-	// cumulative can be stale by the same queen-drain lag §2.3 documents for
-	// the ack itself (§3.4, decided under 0.6).
+	// FinalBias is the engine's cumulative bias, read by the caller right
+	// before Finalize.
 	FinalBias int
 }
 
 // Mark is one recorded LCP "mark" annotation, threaded into RunMeta →
-// SnapMeta.Marks at finalize. See ignore/live-control-protocol.md §3.4.
+// SnapMeta.Marks at finalize.
 type Mark struct {
 	Label    string  `json:"label"`
 	ElapsedS float64 `json:"elapsed_s"` // run-relative offset from run start
@@ -79,10 +77,9 @@ type Mark struct {
 
 // BiasEvent is one recorded LCP bias command (headless "bias" or the TUI's
 // arrow-key nudge), threaded into RunMeta → SnapMeta.BiasEvents at finalize.
-// See ignore/live-control-protocol.md §3.4.
 type BiasEvent struct {
 	Amount     int     `json:"amount"`     // the delta this command applied
-	Cumulative int     `json:"cumulative"` // eng.GetBias() best-effort, same value as the ack
+	Cumulative int     `json:"cumulative"` // eng.GetBias() after the delta, same value as the ack
 	ElapsedS   float64 `json:"elapsed_s"`  // run-relative offset, same convention as Mark
 }
 

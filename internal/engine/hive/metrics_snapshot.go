@@ -5,10 +5,8 @@ import "github.com/shyam-s00/gopher-glide/internal/engine"
 // GetMetrics returns a point-in-time snapshot of all engine counters,
 // latency percentiles, stage progress, and director-mode bias.
 //
-// Reading across the 16 sharded counter arrays is not collectively atomic.
-// A snapshot taken during a live run may transiently show success+failure off
-// by 1 vs. totalRequests — this is mathematically acceptable for a ~10 Hz TUI
-// and correct over any observation window longer than a few microseconds.
+// The sharded counters are not read atomically as a set, so success+failure
+// may transiently differ from totalRequests by 1 (see the metrics type).
 //
 // Safe to call from any goroutine at any time.
 func (e *Engine) GetMetrics() *engine.MetricsSnapshot {

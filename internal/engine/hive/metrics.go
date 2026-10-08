@@ -129,8 +129,7 @@ type rpsWindow struct {
 
 // reset zeroes all slots atomically.
 //
-// Callers may observe a transient zero across slots if rate() is called
-// concurrently — this is acceptable for a display-only metric.
+// A concurrent rate() call may see a transient zero across slots.
 func (w *rpsWindow) reset() {
 	for i := range w.buckets {
 		w.seconds[i].Store(0)
@@ -148,8 +147,7 @@ func (w *rpsWindow) reset() {
 //
 // At a second boundary there is a narrow window where a late-arriving goroutine
 // may Store(0) after an earlier goroutine already incremented the fresh bucket,
-// clobbering that count. This is accepted — the metric is display-only and
-// self-corrects within one second.
+// clobbering that count. Accepted: it self-corrects within one second.
 func (w *rpsWindow) record(count int64) {
 	now := time.Now().Unix()
 	slot := int(now % rpsWindowSize)
@@ -166,8 +164,7 @@ func (w *rpsWindow) record(count int64) {
 // Each slot is read with two independent atomic loads (seconds then buckets).
 // A concurrent record() call may land between the two loads, causing the
 // bucket to be read before the second is updated, or vice-versa. The
-// resulting off-by-one is bounded to a single request and is acceptable for
-// a display-only metric sampled at ~10 Hz.
+// resulting off-by-one is bounded to a single request.
 func (w *rpsWindow) rate() float64 {
 	now := time.Now().Unix()
 	var total int64

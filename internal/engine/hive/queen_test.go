@@ -9,8 +9,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/config"
 )
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 func singleStage(dur time.Duration, rps int) []config.Stage {
 	return []config.Stage{{Duration: dur, TargetRPS: rps}}
 }
@@ -51,8 +49,6 @@ func runQueen(
 	return manifests, e
 }
 
-// ── manifest count matches target RPS ─────────────────────────────────────────
-
 func TestQueen_SingleStage_ManifestCountMatchesTargetRPS(t *testing.T) {
 	// 2-second stage at 10 RPS -> expect at least 1 manifest each with Count>0.
 	stages := singleStage(2*time.Second, 10)
@@ -81,8 +77,6 @@ func TestQueen_ManifestCount_ReflectsTargetRPS(t *testing.T) {
 	}
 }
 
-// ── LERP values increase across a ramp stage ──────────────────────────────────
-
 func TestQueen_Lerp_CountIncreasesAcrossRamp(t *testing.T) {
 	// Ramp from 0 to 60 RPS over 30 seconds (10x scale = 3s actual, ~3 ticks).
 	stages := singleStage(30*time.Second, 60)
@@ -96,8 +90,6 @@ func TestQueen_Lerp_CountIncreasesAcrossRamp(t *testing.T) {
 		t.Errorf("expected LERP to increase: first=%d last=%d", first, last)
 	}
 }
-
-// ── zero-duration stage: instant step ─────────────────────────────────────────
 
 func TestQueen_ZeroDurationStage_EmitsOneManifest(t *testing.T) {
 	stages := []config.Stage{
@@ -139,8 +131,6 @@ func TestQueen_ZeroDurationStage_SetsCurrentStage(t *testing.T) {
 	}
 }
 
-// ── multi-stage: zero-duration step then sustained stage ──────────────────────
-
 func TestQueen_MultiStage_ZeroThenSustain(t *testing.T) {
 	stages := []config.Stage{
 		{Duration: 0, TargetRPS: 50},
@@ -152,10 +142,8 @@ func TestQueen_MultiStage_ZeroThenSustain(t *testing.T) {
 	}
 }
 
-// ── bias: pre-loaded positive bias increases count ────────────────────────────
-
 func TestQueen_Bias_PositiveBiasIncreasesCount(t *testing.T) {
-	// 30s at 10x = 3s real, ~3 ticks — gives enough time to drain bias.
+	// 30s at 10x = 3s real, ~3 ticks — gives enough time to apply bias.
 	stages := singleStage(30*time.Second, 10)
 	e := New()
 	q := &queen{e: e}
@@ -220,8 +208,6 @@ func TestQueen_Bias_NegativeBias_ClampsToOne(t *testing.T) {
 	}
 }
 
-// ── context cancel exits cleanly ──────────────────────────────────────────────
-
 func TestQueen_ContextCancel_ExitsCleanly(t *testing.T) {
 	stages := singleStage(60*time.Second, 10)
 	e := New()
@@ -261,8 +247,6 @@ func TestQueen_ContextAlreadyCancelled_ExitsImmediately(t *testing.T) {
 	}
 }
 
-// ── currentStage advances across two stages ───────────────────────────────────
-
 func TestQueen_CurrentStage_AdvancesAsExpected(t *testing.T) {
 	stages := []config.Stage{
 		{Duration: 10 * time.Second, TargetRPS: 10},
@@ -283,8 +267,6 @@ func TestQueen_CurrentStage_AdvancesAsExpected(t *testing.T) {
 	}
 }
 
-// ── targetRPS atomic is updated each tick ────────────────────────────────────
-
 func TestQueen_TargetRPS_UpdatedEachTick(t *testing.T) {
 	stages := singleStage(30*time.Second, 30)
 	e := New()
@@ -301,8 +283,6 @@ func TestQueen_TargetRPS_UpdatedEachTick(t *testing.T) {
 	}
 }
 
-// ── full stage completes without hanging ──────────────────────────────────────
-
 func TestQueen_FullStage_CompletesWithoutHang(t *testing.T) {
 	stages := singleStage(2*time.Second, 5)
 	finished := make(chan struct{})
@@ -316,8 +296,6 @@ func TestQueen_FullStage_CompletesWithoutHang(t *testing.T) {
 		t.Fatal("Queen did not complete stage within timeout")
 	}
 }
-
-// ── full channel does not block the Queen ─────────────────────────────────────
 
 func TestQueen_FullChannel_DoesNotBlock(t *testing.T) {
 	stages := singleStage(3*time.Second, 10)
@@ -338,8 +316,6 @@ func TestQueen_FullChannel_DoesNotBlock(t *testing.T) {
 		t.Fatal("Queen blocked on full channel")
 	}
 }
-
-// ── manifest Duration field ────────────────────────────────────────────────────
 
 func TestQueen_NormalTick_ManifestDurationIsOneSecond(t *testing.T) {
 	// 30s at 10x = 3s real → exactly 3 windows of 1s each.
@@ -389,8 +365,6 @@ func TestQueen_SubSecondStage_ManifestDurationIsSubSecond(t *testing.T) {
 		t.Errorf("sub-second stage manifest: expected Duration > 0, got %v", last.Duration)
 	}
 }
-
-// ── 1.5.2 proportional count scaling ─────────────────────────────────────────
 
 func TestQueen_FractionalLastWindow_CountIsProportional(t *testing.T) {
 	// 2500ms stage at 1x with 100 RPS produces:

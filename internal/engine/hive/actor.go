@@ -260,8 +260,8 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 //  3. Store the IEEE-754 bit representation of the ms value.
 //
 // Wrapping at capacity (pos = idx % cap) prevents unbounded growth. A slot
-// overwritten mid-flight by a subsequent writer produces at most one slightly
-// stale percentile sample — acceptable for a display-only metric.
+// overwritten mid-flight by a subsequent writer yields at most one slightly
+// stale percentile sample (see the metrics type for why that's fine).
 //
 // Sub-millisecond durations are rounded up to 1 ms for the sharded counter so
 // that the counter is always non-zero after any real request. The float64 ring

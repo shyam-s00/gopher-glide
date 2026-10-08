@@ -256,8 +256,8 @@ func TestUpdate_BiasKeys_NilSink_NoPanic(t *testing.T) {
 	}
 }
 
-// TestUpdate_BiasKeys_ReachSnapMetaBiasEvents is the 2.12 TUI test: arrow-key
-// bias must reach SnapMeta.BiasEvents, not just the live director bar. Wires
+// TestUpdate_BiasKeys_ReachSnapMetaBiasEvents checks that arrow-key
+// bias reaches SnapMeta.BiasEvents, not just the live director bar. Wires
 // a real sink the way Start() does, presses both keys, then runs the result
 // through a real snap.DefaultRecorder.Finalize exactly as main.go would.
 func TestUpdate_BiasKeys_ReachSnapMetaBiasEvents(t *testing.T) {

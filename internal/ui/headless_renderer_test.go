@@ -93,10 +93,10 @@ func testConfig() *config.Config {
 	}
 }
 
-// TestHeadlessRenderer_StartedEvent_Capabilities is the 1.4 golden-JSON test:
+// TestHeadlessRenderer_StartedEvent_Capabilities is a golden-JSON test:
 // it asserts on the raw marshaled string, not just an unmarshal round-trip,
 // because a round-trip can't distinguish nil from an explicitly-empty slice
-// (the exact bug the *[]string pointer type in §2.4/0.2 exists to avoid).
+// (the exact bug the *[]string pointer type exists to avoid).
 func TestHeadlessRenderer_StartedEvent_Capabilities(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -137,8 +137,8 @@ func TestHeadlessRenderer_StartedEvent_Capabilities(t *testing.T) {
 	}
 }
 
-// TestHeadlessRenderer_GamedayScript is the 2.12 loop-level test: the scripted
-// reader is fed testdata/gameday-script.jsonl (§3.10) — the single source of
+// TestHeadlessRenderer_GamedayScript is the loop-level test: the scripted
+// reader is fed testdata/gameday-script.jsonl — the single source of
 // truth for this known-good sequence — and the resulting event stream must
 // match its documented outcomes exactly, in order.
 func TestHeadlessRenderer_GamedayScript(t *testing.T) {
@@ -175,7 +175,7 @@ func TestHeadlessRenderer_GamedayScript(t *testing.T) {
 	}
 
 	// One event per fixture line, plus "started" at the front and "stopped"
-	// tacked on the end by line 10's stop command (§3.10) — 12 total.
+	// tacked on the end by line 10's stop command — 12 total.
 	wantEvents := []string{
 		"started",
 		"ack",     // 1: bias +5
@@ -240,7 +240,7 @@ func eventNames(payloads []HeartbeatPayload) []string {
 	return out
 }
 
-// TestHeadlessRenderer_Stop_SingleTerminalEvent confirms §3.3: a stop-ended
+// TestHeadlessRenderer_Stop_SingleTerminalEvent confirms a stop-ended
 // run produces exactly one terminal event (stopped, never stopped+finished),
 // and Run() returns nil (exit 0).
 func TestHeadlessRenderer_Stop_SingleTerminalEvent(t *testing.T) {
