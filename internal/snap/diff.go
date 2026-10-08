@@ -2,8 +2,6 @@ package snap
 
 import "sort"
 
-// ── Public types ──────────────────────────────────────────────────────────────
-
 // DiffResult is the complete behavioral comparison between two snapshots.
 // Endpoints are sorted deterministically by ID so output is stable across runs.
 type DiffResult struct {
@@ -137,8 +135,6 @@ func DefaultDiffOptions() DiffOptions {
 	}
 }
 
-// ── Engine ────────────────────────────────────────────────────────────────────
-
 // Diff compares baseline and current snapshots using opts as regression
 // thresholds. The returned DiffResult contains one EndpointDiff per unique
 // endpoint ID across both snapshots, sorted alphabetically by ID.
@@ -183,8 +179,6 @@ func Diff(baseline, current *Snapshot, opts DiffOptions) DiffResult {
 
 	return result
 }
-
-// ── Internal helpers ──────────────────────────────────────────────────────────
 
 func indexEndpoints(eps []EndpointSnap) map[string]EndpointSnap {
 	m := make(map[string]EndpointSnap, len(eps))

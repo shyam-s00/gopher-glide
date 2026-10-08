@@ -12,8 +12,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 )
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 // makeURLJourneys returns n independent single-step Journeys, each a GET
 // against the given URL — exactly what Smart Detection produces for a
 // purely stateless .http file.
@@ -37,8 +35,6 @@ func waitForActors(t *testing.T, e *Engine, deadline time.Duration) {
 	}
 }
 
-// ── dispatch: zero / empty ────────────────────────────────────────────────────
-
 func TestHatchery_Dispatch_ZeroCount_SpawnsNothing(t *testing.T) {
 	srv := newTestServer(http.StatusOK, "")
 	defer srv.Close()
@@ -60,8 +56,6 @@ func TestHatchery_Dispatch_EmptySpecs_SpawnsNothing(t *testing.T) {
 		t.Fatalf("expected 0 active actors, got %d", e.activeActors.Load())
 	}
 }
-
-// ── dispatch: MaxActors safeguard ────────────────────────────────────────────
 
 // TestHatchery_Dispatch_AtMaxActors_SkipsSpawning pre-saturates activeActors
 // to the maxActiveActors ceiling and verifies the Hatchery refuses to launch
@@ -132,8 +126,6 @@ func TestHatchery_Dispatch_BelowMaxActors_SpawnsNormally(t *testing.T) {
 	}
 }
 
-// ── dispatch: correct actor count ────────────────────────────────────────────
-
 func TestHatchery_Dispatch_SmallCount_AllActorsSpawned(t *testing.T) {
 	var served atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -188,8 +180,6 @@ func TestHatchery_Dispatch_ExactlyTicksPerSec_AllActorsSpawned(t *testing.T) {
 	}
 }
 
-// ── dispatch: remainder math ──────────────────────────────────────────────────
-
 func TestHatchery_Dispatch_RemainderDistributed_Correctly(t *testing.T) {
 	// count=7, duration=1s (100 ticks) → batchSize=0, remainder=7.
 	// Ticks 0-6 each spawn 1; ticks 7+ spawn 0 (but loop exits at spawned==7).
@@ -219,8 +209,6 @@ func TestHatchery_Dispatch_RemainderDistributed_Correctly(t *testing.T) {
 	}
 }
 
-// ── dispatch: spawnIdx drives shard assignment ────────────────────────────────
-
 func TestHatchery_Dispatch_SpawnIdx_Advances(t *testing.T) {
 	srv := newTestServer(http.StatusOK, "")
 	defer srv.Close()
@@ -236,8 +224,6 @@ func TestHatchery_Dispatch_SpawnIdx_Advances(t *testing.T) {
 		t.Fatalf("expected spawnIdx=%d after dispatch, got %d", count, idx)
 	}
 }
-
-// ── dispatch: multi-step journeys & round-robin ──────────────────────────────
 
 func TestHatchery_Dispatch_MultiStepJourney_ExecutesAllStepsInOrder(t *testing.T) {
 	// A single 2-step Journey: every Actor that picks it must hit both
@@ -304,8 +290,6 @@ func TestHatchery_Dispatch_RoundRobinsAcrossJourneys(t *testing.T) {
 	}
 }
 
-// ── dispatch: activeActors lifecycle ─────────────────────────────────────────
-
 func TestHatchery_Dispatch_ActiveActors_ReturnToZero(t *testing.T) {
 	srv := newTestServer(http.StatusOK, "")
 	defer srv.Close()
@@ -341,8 +325,6 @@ func TestHatchery_Dispatch_ActiveActors_NonNegative(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 }
-
-// ── dispatch: metrics counters ────────────────────────────────────────────────
 
 func TestHatchery_Dispatch_TotalRequests_Incremented(t *testing.T) {
 	srv := newTestServer(http.StatusOK, "")
@@ -392,8 +374,6 @@ func TestHatchery_Dispatch_FailureCount_Incremented(t *testing.T) {
 	}
 }
 
-// ── dispatch: context cancel stops mid-dispatch ───────────────────────────────
-
 func TestHatchery_Dispatch_ContextCancel_StopsMidway(t *testing.T) {
 	// Hang server so actors stay in flight while we cancel.
 	hangCh := make(chan struct{})
@@ -429,8 +409,6 @@ func TestHatchery_Dispatch_ContextCancel_StopsMidway(t *testing.T) {
 		t.Fatal("dispatch did not return after context cancellation")
 	}
 }
-
-// ── run: closes on cancelled context ─────────────────────────────────────────
 
 func TestHatchery_Run_ContextCancel_Returns(t *testing.T) {
 	srv := newTestServer(http.StatusOK, "")
@@ -479,8 +457,6 @@ func TestHatchery_Run_ClosedChannel_Returns(t *testing.T) {
 	}
 }
 
-// ── run: processes multiple manifests ────────────────────────────────────────
-
 func TestHatchery_Run_MultipleManifests_AllActorsSpawned(t *testing.T) {
 	var served atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -508,8 +484,6 @@ func TestHatchery_Run_MultipleManifests_AllActorsSpawned(t *testing.T) {
 	}
 }
 
-// ── micro-batching timing ─────────────────────────────────────────────────────
-
 func TestHatchery_Dispatch_SpacingBoundedWithinWindow(t *testing.T) {
 	// Verify that dispatching count=5 over 1s takes at most 1s.
 	var served atomic.Int32
@@ -531,8 +505,6 @@ func TestHatchery_Dispatch_SpacingBoundedWithinWindow(t *testing.T) {
 		t.Fatalf("dispatch took too long: %v (expected ≤ 1s for count=5)", elapsed)
 	}
 }
-
-// ── variable-duration dispatch: the core of 1.2.13 ───────────────────────────
 
 func TestHatchery_Dispatch_400ms_Duration_BoundedWithinWindow(t *testing.T) {
 	// count=5, duration=400ms → 40 ticks. batchSize=0, remainder=5.
@@ -641,8 +613,6 @@ func TestHatchery_Dispatch_ZeroDuration_FallsBackToOneTick(t *testing.T) {
 	}
 }
 
-// ── concurrent safety ─────────────────────────────────────────────────────────
-
 func TestHatchery_Dispatch_ConcurrentCalls_NoRace(t *testing.T) {
 	srv := newTestServer(http.StatusOK, "")
 	defer srv.Close()
@@ -672,8 +642,6 @@ func TestHatchery_Dispatch_ConcurrentCalls_NoRace(t *testing.T) {
 	}
 	waitForActors(t, e, 3*time.Second)
 }
-
-// ── benchmark ─────────────────────────────────────────────────────────────────
 
 // BenchmarkHatchery_Dispatch measures dispatch throughput.
 // Run with: go test -bench=BenchmarkHatchery -benchtime=5s ./internal/engine/hive/

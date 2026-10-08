@@ -2,8 +2,6 @@ package snap
 
 import "net/http"
 
-// ── Sanitizer interface ───────────────────────────────────────────────────────
-
 // Sanitizer cleans a RecordEntry before it is accumulated by the recorder.
 // Implementations must be safe for concurrent use (called from the drain
 // goroutine, but only one goroutine ever calls it).
@@ -11,16 +9,12 @@ type Sanitizer interface {
 	Sanitize(entry RecordEntry) RecordEntry
 }
 
-// ── NoopSanitizer ─────────────────────────────────────────────────────────────
-
 // NoopSanitizer passes entries through unchanged.
 // Use it in tests when sanitization is not the concern, or to explicitly
 // disable scrubbing.
 type NoopSanitizer struct{}
 
 func (NoopSanitizer) Sanitize(entry RecordEntry) RecordEntry { return entry }
-
-// ── DefaultSanitizer ─────────────────────────────────────────────────────────
 
 // DefaultSensitiveHeaders is the out-of-the-box set of headers that are
 // stripped from every RecordEntry before it is accumulated.

@@ -8,8 +8,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
 
-// ── snapDisplayTag ────────────────────────────────────────────────────────────
-
 func TestSnapDisplayTag(t *testing.T) {
 	cases := []struct {
 		input string
@@ -27,8 +25,6 @@ func TestSnapDisplayTag(t *testing.T) {
 		}
 	}
 }
-
-// ── resolveDisplayMaxSamples ─────────────────────────────────────────────────
 
 func TestResolveDisplayMaxSamples_Zero(t *testing.T) {
 	got := resolveDisplayMaxSamples(0)
@@ -50,8 +46,6 @@ func TestResolveDisplayMaxSamples_Positive(t *testing.T) {
 		t.Errorf("resolveDisplayMaxSamples(50) = %d, want 50", got)
 	}
 }
-
-// ── snapFormatCount ───────────────────────────────────────────────────────────
 
 func TestSnapFormatCount(t *testing.T) {
 	cases := []struct {
@@ -75,8 +69,6 @@ func TestSnapFormatCount(t *testing.T) {
 		}
 	}
 }
-
-// ── resolveSnapTarget ────────────────────────────────────────────────────────
 
 func TestResolveSnapTarget(t *testing.T) {
 	dir := t.TempDir()

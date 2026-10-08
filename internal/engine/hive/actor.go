@@ -62,11 +62,9 @@ var bufferPool = sync.Pool{
 func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, shard int, mem *ActorMemory) error {
 	start := time.Now()
 
-	// ── 1. Record request count and RPS window tick ───────────────────────
 	e.counters.incTotalRequests(shard)
 	e.rpsWin.record(1)
 
-	// ── 2. Build request (inject variables from actor memory) ────────────
 	var vars map[string]string
 	if mem != nil {
 		vars = mem.ToMap()
@@ -89,7 +87,6 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		return err
 	}
 
-	// ── 3. Attach context + User-Agent ───────────────────────────────────
 	req = req.WithContext(ctx)
 	// Static specs get User-Agent baked into PrebuiltHeaders by Compile(),
 	// avoiding a per-request map write (and potential rehash).
@@ -104,7 +101,6 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		resolvedURL = req.URL.String()
 	}
 
-	// ── 4. Execute ───────────────────────────────────────────────────────
 	resp, err := e.client.Do(req)
 	duration := time.Since(start)
 
@@ -125,7 +121,6 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	// ── 5. Drain or capture body ─────────────────────────────────────────
 	// The body must be read (not discarded) when either:
 	//   a) the snap recorder is active and this request is within the sample
 	//      window (schema inference), or
@@ -160,10 +155,8 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		bodySize = int64(len(respBody))
 	}
 
-	// ── 6. Record latency ─────────────────────────────────────────────────
 	e.recordLatency(shard, duration)
 
-	// ── 7. HTTP error gate ────────────────────────────────────────────────
 	// Log, count, snap, and abort — extraction is never attempted on a
 	// failed HTTP response.
 	if resp.StatusCode >= 400 {
@@ -190,7 +183,6 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		return ErrHttpError
 	}
 
-	// ── 8. @gg-export variable extraction (2xx only) ─────────────────────
 	// Each directive is evaluated in declaration order. The first extraction
 	// failure aborts the journey: the variable would be empty/wrong, making
 	// every downstream step invalid.
@@ -225,11 +217,9 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		}
 	}
 
-	// ── 9. Log + count success ────────────────────────────────────────────
 	e.logCall(shard, spec.Method, resolvedURL, resp.StatusCode, duration, nil)
 	e.counters.incSuccess(shard)
 
-	// ── 10. Snap record ───────────────────────────────────────────────────
 	if e.recorder != nil {
 		var snapBody []byte
 		if doSample {

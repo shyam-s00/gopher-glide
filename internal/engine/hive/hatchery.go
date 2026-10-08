@@ -8,8 +8,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 )
 
-// ── Hatchery constants ────────────────────────────────────────────────────────
-
 // hatcheryTick is the micro-batch dispatch interval.
 //
 // Using a fixed 10 ms tick rather than per-Actor sleep sidesteps the OS
@@ -39,8 +37,6 @@ const maxActiveActors = 10_000
 // p50 latency does not meaningfully change within 100 ms, so the cached
 // value is reused between recomputations.
 const backpressureCheckInterval = 100 * time.Millisecond
-
-// ── hatchery ─────────────────────────────────────────────────────────────────
 
 // hatchery is the Smooth Dispatcher. It reads SpawnManifests from the Queen
 // and spreads the requested number of Actor goroutines evenly across the

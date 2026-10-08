@@ -56,8 +56,6 @@ func theme() Theme {
 	return macchiato
 }
 
-// ── Pre-compiled styles ───────────────────────────────────────────────────────
-
 // uiStyles holds the complete set of pre-compiled lipgloss.Style values used
 // across the dashboard. All View()-path rendering draws from here instead of
 // allocating new style chains on every tick.

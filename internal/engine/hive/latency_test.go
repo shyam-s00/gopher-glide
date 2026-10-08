@@ -23,8 +23,6 @@ func seedLatBuf(e *Engine, values ...float64) {
 	}
 }
 
-// ── percentile ────────────────────────────────────────────────────────────────
-
 func TestPercentile_Empty(t *testing.T) {
 	if got := percentile(nil, 50); got != 0 {
 		t.Errorf("want 0 for empty slice, got %f", got)
@@ -89,8 +87,6 @@ func TestPercentile_Interpolation(t *testing.T) {
 		}
 	}
 }
-
-// ── computeLatency ────────────────────────────────────────────────────────────
 
 func TestComputeLatency_Empty(t *testing.T) {
 	e := New()
@@ -187,8 +183,6 @@ func TestComputeLatency_P99GeP95GeP50(t *testing.T) {
 		t.Errorf("p95 (%f) should be >= p50 (%f)", p95, p50)
 	}
 }
-
-// ── 1.4.1i — lock-free latencyBuf integration tests ──────────────────────────
 
 // TestLatencyBuf_RecordAndSnapshot verifies that a value written via the real
 // recordLatency() hot-path is visible in computeLatency().
@@ -324,8 +318,6 @@ func TestLatencyBuf_LiveEngine_Consistency(t *testing.T) {
 		}
 	}
 }
-
-// ── latencySampleSize cap ─────────────────────────────────────────────────────
 
 // TestComputeLatency_LargeBuf_OnlyRecentSampled verifies that computeLatency()
 // reads at most latencySampleSize entries even when the ring holds far more,

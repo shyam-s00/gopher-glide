@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 func mustJSON(v any) []byte {
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -14,8 +12,6 @@ func mustJSON(v any) []byte {
 	}
 	return b
 }
-
-// ── extractFields ─────────────────────────────────────────────────────────────
 
 func TestExtractFields_FlatObject(t *testing.T) {
 	body := mustJSON(map[string]any{
@@ -132,8 +128,6 @@ func TestExtractFields_EmptyArray(t *testing.T) {
 		}
 	}
 }
-
-// ── InferSchema ───────────────────────────────────────────────────────────────
 
 func TestInferSchema_NilOnNoBodies(t *testing.T) {
 	if got := InferSchema(nil); got != nil {
@@ -333,8 +327,6 @@ func TestInferSchema_SpecExample(t *testing.T) {
 	}
 }
 
-// ── array length stats ────────────────────────────────────────────────────────
-
 func TestInferSchema_ArrayLengthAvgAndMax(t *testing.T) {
 	lengths := []int{2, 4, 6}
 	bodies := make([][]byte, len(lengths))
@@ -376,8 +368,6 @@ func TestInferSchema_NonArrayField_HasZeroArrayStats(t *testing.T) {
 	}
 }
 
-// ── stability scorer ──────────────────────────────────────────────────────────
-
 func TestScoreStability_Boundaries(t *testing.T) {
 	cases := []struct {
 		presence float64
@@ -397,8 +387,6 @@ func TestScoreStability_Boundaries(t *testing.T) {
 		}
 	}
 }
-
-// ── dominant type ─────────────────────────────────────────────────────────────
 
 func TestDominantType_TieBreak(t *testing.T) {
 	// Tie between "string" and "null" — string has higher rank → wins.

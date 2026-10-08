@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-// ── buildTransport ─────────────────────────────────────────────────────────────
-
 func TestBuildTransport_Floor(t *testing.T) {
 	// Any RPS below the threshold that would push perHost under minPoolPerHost
 	// must be clamped up to minPoolPerHost.
@@ -84,8 +82,6 @@ func TestBuildTransport_KeepAlives(t *testing.T) {
 		t.Error("DisableKeepAlives must be false — keep-alives are required for connection reuse")
 	}
 }
-
-// ── fdBudget ───────────────────────────────────────────────────────────────────
 
 func TestFdBudget_Positive(t *testing.T) {
 	// On any Unix-like system (macOS, Linux) the FD limit should be queryable

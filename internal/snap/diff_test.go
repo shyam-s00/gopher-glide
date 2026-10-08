@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 func makeSnap(endpoints ...EndpointSnap) *Snapshot {
 	return &Snapshot{Version: 1, Endpoints: endpoints}
 }
@@ -45,8 +43,6 @@ func makeSchema(fields map[string]FieldSchema) *SchemaSnapshot {
 
 func defaultOpts() DiffOptions { return DefaultDiffOptions() }
 
-// ── pctChange ─────────────────────────────────────────────────────────────────
-
 func TestPctChange_Increase(t *testing.T) {
 	got := pctChange(100, 120)
 	if got != 20.0 {
@@ -81,8 +77,6 @@ func TestPctChange_BaseZeroCurrZero(t *testing.T) {
 		t.Errorf("pctChange(0,0) = %v, want 0", got)
 	}
 }
-
-// ── Diff: basic structure ─────────────────────────────────────────────────────
 
 func TestDiff_MetaIsPreserved(t *testing.T) {
 	base := makeSnap()
@@ -127,8 +121,6 @@ func TestDiff_EndpointsSortedAlphabetically(t *testing.T) {
 	}
 }
 
-// ── Diff: baseline-only / current-only ────────────────────────────────────────
-
 func TestDiff_BaselineOnly_IsWarn(t *testing.T) {
 	base := makeSnap(ep("GET:/gone", 10, 20, 30, 50, 0))
 	curr := makeSnap()
@@ -162,8 +154,6 @@ func TestDiff_CurrentOnly_IsWarn(t *testing.T) {
 		t.Errorf("expected WARN, got %v", d.Verdict)
 	}
 }
-
-// ── Diff: latency regression ──────────────────────────────────────────────────
 
 func TestDiff_P99Regression_AboveThreshold(t *testing.T) {
 	base := makeSnap(ep("GET:/api", 10, 20, 100, 200, 0))
@@ -202,8 +192,6 @@ func TestDiff_LatencyImproved_IsPass(t *testing.T) {
 	}
 }
 
-// ── Diff: error rate ──────────────────────────────────────────────────────────
-
 func TestDiff_ErrorRateSpike_IsRegression(t *testing.T) {
 	// baseline 0 % → current 10 % errors (Δ = 0.10 > threshold 0.05)
 	base := makeSnap(ep("POST:/api", 10, 20, 30, 50, 0.0))
@@ -229,8 +217,6 @@ func TestDiff_ErrorRateReduction_IsPass(t *testing.T) {
 		t.Errorf("expected PASS for reduced error rate, got %v", result.Endpoints[0].Verdict)
 	}
 }
-
-// ── Diff: payload size ────────────────────────────────────────────────────────
 
 func TestDiff_PayloadGrowth_AboveThreshold_IsWarn(t *testing.T) {
 	// avg payload 1000 → 1600 bytes = 60 % increase, threshold is 50 %
@@ -284,8 +270,6 @@ func TestDiff_PayloadZeroBase_IsHandled(t *testing.T) {
 		t.Errorf("expected WARN when base payload is zero and current is non-zero, got %v", d.Verdict)
 	}
 }
-
-// ── Diff: schema changes ──────────────────────────────────────────────────────
 
 func TestDiff_FieldAdded_IsWarn(t *testing.T) {
 	base := makeSnap(epWithSchema("GET:/api", makeSchema(map[string]FieldSchema{
@@ -422,8 +406,6 @@ func TestDiff_SchemaChanges_SortedByPath(t *testing.T) {
 	}
 }
 
-// ── Diff: array bloat ──────────────────────────────────────────────────────────
-
 func TestDiff_ArrayBloat_AboveThreshold_IsRegression(t *testing.T) {
 	base := makeSnap(epWithSchema("GET:/api", makeSchema(map[string]FieldSchema{
 		"items": {Type: "array", Presence: 1.0, Stability: StabilityStable, ArrayLengthAvg: 10, ArrayLengthMax: 12},
@@ -483,8 +465,6 @@ func TestDiff_ArrayBloat_DisabledByDefault(t *testing.T) {
 	}
 }
 
-// ── Diff: status distribution ─────────────────────────────────────────────────
-
 func TestDiff_StatusDelta_Computed(t *testing.T) {
 	base := makeSnap(EndpointSnap{
 		ID:         "GET:/api",
@@ -511,8 +491,6 @@ func TestDiff_StatusDelta_Computed(t *testing.T) {
 	}
 }
 
-// ── Diff: combined regression ─────────────────────────────────────────────────
-
 func TestDiff_MultipleRegressions_HighestWins(t *testing.T) {
 	// Both latency and error rate regress.
 	base := makeSnap(ep("GET:/api", 10, 20, 100, 200, 0.01))
@@ -523,8 +501,6 @@ func TestDiff_MultipleRegressions_HighestWins(t *testing.T) {
 		t.Errorf("expected REGRESSION when multiple regressions, got %v", result.Endpoints[0].Verdict)
 	}
 }
-
-// ── calcVerdict unit tests ────────────────────────────────────────────────────
 
 func TestCalcVerdict_Pass_WhenNoThresholdBreached(t *testing.T) {
 	d := EndpointDiff{
@@ -553,8 +529,6 @@ func TestCalcVerdict_WarnNotDowngradedToPass(t *testing.T) {
 		t.Errorf("expected WARN, got %v", v)
 	}
 }
-
-// ── diffStatusDist ────────────────────────────────────────────────────────────
 
 func TestDiffStatusDist_EmptyMaps(t *testing.T) {
 	delta := diffStatusDist(nil, nil)

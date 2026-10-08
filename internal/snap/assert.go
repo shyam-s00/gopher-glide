@@ -134,8 +134,6 @@ func violationMessages(ep EndpointDiff, opts DiffOptions) []string {
 	return msgs
 }
 
-// ── Reporters ─────────────────────────────────────────────────────────────────
-
 // FormatAssertResult serialises an AssertResult to the requested format.
 // Supported formats: "text" (default), "json", "md".
 func FormatAssertResult(r AssertResult, format string) (string, error) {
@@ -239,8 +237,6 @@ func formatAssertMarkdown(r AssertResult) string {
 	}
 	return sb.String()
 }
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 func displayTag(tag string) string {
 	if tag == "" || tag == "run" {

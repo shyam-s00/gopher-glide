@@ -7,8 +7,6 @@ import (
 	"unsafe"
 )
 
-// ── paddedCounter ─────────────────────────────────────────────────────────────
-
 func TestPaddedCounter_CacheLineSize(t *testing.T) {
 	// Each paddedCounter must be exactly 64 bytes so it occupies one CPU cache
 	// line and no two shards share a line.
@@ -24,8 +22,6 @@ func TestPaddedCounter_ZeroValue(t *testing.T) {
 		t.Errorf("zero paddedCounter should have value 0, got %d", c.value)
 	}
 }
-
-// ── metrics — write path ──────────────────────────────────────────────────────
 
 func TestMetrics_ZeroState(t *testing.T) {
 	var m metrics
@@ -65,8 +61,6 @@ func TestMetrics_IncAndLoad(t *testing.T) {
 		t.Errorf("totalLatency: want 250, got %d", v)
 	}
 }
-
-// ── metrics — shard distribution ─────────────────────────────────────────────
 
 func TestMetrics_ShardDistribution(t *testing.T) {
 	var m metrics
@@ -115,8 +109,6 @@ func TestMetrics_LatencyShardAccumulation(t *testing.T) {
 	}
 }
 
-// ── metrics — counter invariant ───────────────────────────────────────────────
-
 func TestMetrics_CounterInvariant(t *testing.T) {
 	var m metrics
 	// Distribute 20 requests across shards; alternate success/failure.
@@ -137,8 +129,6 @@ func TestMetrics_CounterInvariant(t *testing.T) {
 			total, success, failure, success+failure)
 	}
 }
-
-// ── rpsWindow ────────────────────────────────────────────────────────────────
 
 func TestRpsWindow_ZeroBeforeRecord(t *testing.T) {
 	var w rpsWindow
@@ -215,8 +205,6 @@ func TestRpsWindow_RateAveragesOverWindow(t *testing.T) {
 		t.Errorf("rate: want 100.0, got %f", rate)
 	}
 }
-
-// ── rpsWindow: concurrent access under -race ──────────────────────────────────
 
 // TestRpsWindow_Concurrent_Record verifies that many goroutines calling
 // record() simultaneously produce no data races. The exact final count in

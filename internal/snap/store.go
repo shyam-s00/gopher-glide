@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// ── Directory resolution ──────────────────────────────────────────────────────
-
 // ResolveSnapDir returns the directory where snapshots are stored.
 //
 // Priority (highest → lowest):
@@ -48,8 +46,6 @@ func EnsureSnapDir(override string) (string, error) {
 	}
 	return dir, nil
 }
-
-// ── Snapshot listing ──────────────────────────────────────────────────────────
 
 // SnapInfo summarises a snapshot file without deserialising the full JSON.
 type SnapInfo struct {
@@ -125,8 +121,6 @@ func FindByTag(dir, tag string) (*SnapInfo, error) {
 	}
 	return nil, fmt.Errorf("snap: no snapshot with tag %q in %q", tag, dir)
 }
-
-// ── File name parsing ─────────────────────────────────────────────────────────
 
 // parseSnapInfo derives a SnapInfo from an absolute .snap file path.
 //

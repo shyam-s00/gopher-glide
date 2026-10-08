@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// ── DefaultSanitizer ─────────────────────────────────────────────────────────
-
 func TestDefaultSanitizer_StripsDefaultHeaders(t *testing.T) {
 	s := NewDefaultSanitizer()
 
@@ -164,8 +162,6 @@ func TestDefaultSanitizer_StripList(t *testing.T) {
 	}
 }
 
-// ── NoopSanitizer ─────────────────────────────────────────────────────────────
-
 func TestNoopSanitizer_PassesThrough(t *testing.T) {
 	s := NoopSanitizer{}
 	entry := RecordEntry{
@@ -182,8 +178,6 @@ func TestNoopSanitizer_PassesThrough(t *testing.T) {
 		t.Error("NoopSanitizer should pass Authorization through unchanged")
 	}
 }
-
-// ── WithSanitizer option ──────────────────────────────────────────────────────
 
 func TestWithSanitizer_NoopOverride(t *testing.T) {
 	// Using WithSanitizer(NoopSanitizer{}) should disable all scrubbing.

@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 func assertOpts() AssertOptions { return DefaultAssertOptions() }
 
 func snapWithMeta(tag string, endpoints ...EndpointSnap) *Snapshot {
@@ -17,8 +15,6 @@ func snapWithMeta(tag string, endpoints ...EndpointSnap) *Snapshot {
 	s.Meta.StartTime = time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
 	return s
 }
-
-// ── DefaultAssertOptions ──────────────────────────────────────────────────────
 
 func TestDefaultAssertOptions_SensibleDefaults(t *testing.T) {
 	opts := DefaultAssertOptions()
@@ -35,8 +31,6 @@ func TestDefaultAssertOptions_SensibleDefaults(t *testing.T) {
 		t.Error("FailOnWarn should default to false")
 	}
 }
-
-// ── Assert: Passed flag ───────────────────────────────────────────────────────
 
 func TestAssert_NoRegressions_Passes(t *testing.T) {
 	base := snapWithMeta("v1", ep("GET:/api", 10, 20, 100, 200, 0.01))
@@ -162,8 +156,6 @@ func TestAssert_FieldRemoved_WithDeny_Fails(t *testing.T) {
 	}
 }
 
-// ── Assert: FailOnWarn ────────────────────────────────────────────────────────
-
 func TestAssert_PayloadGrowth_PassesWithoutFailOnWarn(t *testing.T) {
 	// 60% payload growth → WARN, but FailOnWarn is false
 	base := snapWithMeta("v1", epWithPayload("GET:/api", 10, 1000, 1500, 3000))
@@ -211,8 +203,6 @@ func TestAssert_FieldAdded_FailsWithFailOnWarn(t *testing.T) {
 	}
 }
 
-// ── Assert: baseline-only / current-only ──────────────────────────────────────
-
 func TestAssert_BaselineOnlyEndpoint_FailsWithFailOnWarn(t *testing.T) {
 	base := snapWithMeta("v1", ep("GET:/gone", 10, 20, 30, 50, 0))
 	curr := snapWithMeta("v2")
@@ -246,8 +236,6 @@ func TestAssert_CurrentOnlyEndpoint_FailsWithFailOnWarn(t *testing.T) {
 	}
 }
 
-// ── Assert: multiple endpoints & violations ───────────────────────────────────
-
 func TestAssert_MultipleEndpoints_ViolationPerEndpoint(t *testing.T) {
 	base := snapWithMeta("v1",
 		ep("GET:/a", 10, 20, 100, 200, 0.0),
@@ -280,8 +268,6 @@ func TestAssert_DiffResultPreserved(t *testing.T) {
 	}
 }
 
-// ── Assert: custom thresholds ─────────────────────────────────────────────────
-
 func TestAssert_CustomLatencyThreshold_Stricter(t *testing.T) {
 	// P99: 100 → 108 = 8% increase — passes default (20%) but fails custom (5%)
 	base := snapWithMeta("v1", ep("GET:/api", 10, 20, 100, 200, 0))
@@ -307,8 +293,6 @@ func TestAssert_CustomLatencyThreshold_Looser(t *testing.T) {
 		t.Errorf("expected Passed=true with loose threshold (40%%), got violations: %+v", result.Violations)
 	}
 }
-
-// ── FormatAssertResult: text ──────────────────────────────────────────────────
 
 func TestFormatAssertResult_Text_Passed(t *testing.T) {
 	base := snapWithMeta("v1", ep("GET:/api", 10, 20, 100, 200, 0))
@@ -370,8 +354,6 @@ func TestFormatAssertResult_Text_ShowsVerdictCounts(t *testing.T) {
 	}
 }
 
-// ── FormatAssertResult: json ──────────────────────────────────────────────────
-
 func TestFormatAssertResult_JSON_IsValid(t *testing.T) {
 	base := snapWithMeta("v1", ep("GET:/api", 10, 20, 100, 200, 0))
 	curr := snapWithMeta("v2", ep("GET:/api", 10, 20, 135, 200, 0))
@@ -413,8 +395,6 @@ func TestFormatAssertResult_JSON_ViolationsArray(t *testing.T) {
 		t.Errorf("EndpointID = %q, want GET:/api", decoded.Violations[0].EndpointID)
 	}
 }
-
-// ── FormatAssertResult: markdown ──────────────────────────────────────────────
 
 func TestFormatAssertResult_Markdown_Passed(t *testing.T) {
 	base := snapWithMeta("v1", ep("GET:/api", 10, 20, 100, 200, 0))
@@ -479,8 +459,6 @@ func TestFormatAssertResult_Markdown_Alias(t *testing.T) {
 	}
 }
 
-// ── FormatAssertResult: unknown format falls back to text ─────────────────────
-
 func TestFormatAssertResult_UnknownFormat_FallsBackToText(t *testing.T) {
 	base := snapWithMeta("v1", ep("GET:/api", 10, 20, 100, 200, 0))
 	curr := snapWithMeta("v2", ep("GET:/api", 10, 20, 100, 200, 0))
@@ -495,8 +473,6 @@ func TestFormatAssertResult_UnknownFormat_FallsBackToText(t *testing.T) {
 		t.Errorf("expected text fallback, got:\n%s", out)
 	}
 }
-
-// ── internal helpers ──────────────────────────────────────────────────────────
 
 func TestDisplayTag_Empty(t *testing.T) {
 	if got := displayTag(""); got != "(untagged)" {

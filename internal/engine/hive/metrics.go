@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// ── Striped atomics ───────────────────────────────────────────────────────────
-
 // numShards is the number of independent counter shards.
 // 16 shards eliminates contention across machines with up to 32 cores.
 // Must be a power of two so shard % numShards compiles to a bitwise AND.
@@ -44,8 +42,6 @@ type metrics struct {
 	totalLatency  [numShards]paddedCounter // cumulative milliseconds
 }
 
-// ── Write path (hot) ──────────────────────────────────────────────────────────
-
 func (m *metrics) incTotalRequests(shard int) {
 	atomic.AddInt64(&m.totalRequests[shard%numShards].value, 1)
 }
@@ -65,8 +61,6 @@ func (m *metrics) incDropped(shard int) {
 func (m *metrics) addLatency(shard int, ms int64) {
 	atomic.AddInt64(&m.totalLatency[shard%numShards].value, ms)
 }
-
-// ── Read path (cold) ──────────────────────────────────────────────────────────
 
 func (m *metrics) loadTotalRequests() int64 {
 	var n int64
@@ -107,8 +101,6 @@ func (m *metrics) loadTotalLatency() int64 {
 	}
 	return n
 }
-
-// ── rpsWindow ────────────────────────────────────────────────────────────────
 
 // rpsWindowSize is the number of past seconds averaged to compute current RPS.
 // 3 keeps the reading responsive to bursts without single-second oscillation.

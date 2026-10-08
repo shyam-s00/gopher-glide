@@ -32,8 +32,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 )
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 func newCountingServer(t *testing.T, status int) (*httptest.Server, *atomic.Int64) {
 	t.Helper()
 	var hits atomic.Int64
@@ -55,8 +53,6 @@ func singleStageCfg(dur time.Duration, rps int) *config.Config {
 func specsFor(url string) []httpreader.RequestSpec {
 	return []httpreader.RequestSpec{{Method: http.MethodGet, URL: url}}
 }
-
-// ── Input validation ──────────────────────────────────────────────────────────
 
 func TestRunStages_NoSpecs_ReturnsErrNoRequests(t *testing.T) {
 	e := New()
@@ -81,8 +77,6 @@ func TestRunStages_NilConfig_ReturnsErrNoStages(t *testing.T) {
 		t.Fatalf("want ErrNoStages for nil cfg, got %v", err)
 	}
 }
-
-// ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 func TestRunStages_IsRunning_DuringRun(t *testing.T) {
 	srv, _ := newCountingServer(t, 200)
@@ -177,8 +171,6 @@ func TestGetElapsedTime_Integration_LiveDuringRun(t *testing.T) {
 	<-done
 }
 
-// ── Context cancellation ──────────────────────────────────────────────────────
-
 func TestRunStages_ContextCancel_ReturnsNil(t *testing.T) {
 	srv, _ := newCountingServer(t, 200)
 	e := New()
@@ -218,8 +210,6 @@ func TestRunStages_ContextCancel_IsRunning_False(t *testing.T) {
 	}
 }
 
-// ── Request dispatch ──────────────────────────────────────────────────────────
-
 func TestRunStages_RequestsAreSent(t *testing.T) {
 	srv, hits := newCountingServer(t, 200)
 	e := New()
@@ -251,8 +241,6 @@ func TestRunStages_UserAgentSet(t *testing.T) {
 		t.Errorf("User-Agent: want %q, got %q", userAgent, capturedUA)
 	}
 }
-
-// ── Counter correctness ───────────────────────────────────────────────────────
 
 func TestRunStages_SuccessCountsRecorded(t *testing.T) {
 	srv, _ := newCountingServer(t, 200)
@@ -321,8 +309,6 @@ func TestRunStages_TotalMatchesSuccessPlusFailure(t *testing.T) {
 	}
 }
 
-// ── Stage count in metrics ────────────────────────────────────────────────────
-
 func TestRunStages_StageCountInMetrics(t *testing.T) {
 	srv, _ := newCountingServer(t, 200)
 	e := New()
@@ -341,13 +327,9 @@ func TestRunStages_StageCountInMetrics(t *testing.T) {
 	}
 }
 
-// ── Latency recorded ─────────────────────────────────────────────────────────
-
 func TestRunStages_LatencyRecorded(t *testing.T) {
 	t.Skip("latency write path not yet implemented")
 }
-
-// ── Bias applied during run ───────────────────────────────────────────────────
 
 func TestRunStages_BiasApplied_ReflectedAfterRun(t *testing.T) {
 	srv, _ := newCountingServer(t, 200)
@@ -364,8 +346,6 @@ func TestRunStages_BiasApplied_ReflectedAfterRun(t *testing.T) {
 		t.Errorf("want bias 5 after run, got %d", e.GetBias())
 	}
 }
-
-// ── Run() backward compat ─────────────────────────────────────────────────────
 
 func TestRun_BackwardCompat_RequestsSent(t *testing.T) {
 	srv, hits := newCountingServer(t, 200)
@@ -397,8 +377,6 @@ func TestRun_BackwardCompat_NoSpecs_ReturnsErrNoRequests(t *testing.T) {
 	}
 }
 
-// ── TimeScale compression ─────────────────────────────────────────────────────
-
 func TestRunStages_TimeScale_CompressesDuration(t *testing.T) {
 	srv, hits := newCountingServer(t, 200)
 	e := New()
@@ -418,8 +396,6 @@ func TestRunStages_TimeScale_CompressesDuration(t *testing.T) {
 		t.Error("expected at least one request with compressed stage")
 	}
 }
-
-// ── State reset across back-to-back runs ─────────────────────────────────────
 
 func TestRunStages_StateReset_BetweenRuns(t *testing.T) {
 	// First run: all failures. Second run: all successes.
@@ -449,8 +425,6 @@ func TestRunStages_StateReset_LatenciesCleared(t *testing.T) {
 	t.Skip("latency write path not yet implemented")
 }
 
-// ── Multiple specs round-robin ────────────────────────────────────────────────
-
 func TestRunStages_MultipleSpecs_BothHit(t *testing.T) {
 	var hit0, hit1 atomic.Int64
 	srv0 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -476,8 +450,6 @@ func TestRunStages_MultipleSpecs_BothHit(t *testing.T) {
 	}
 }
 
-// ── Metrics: initial zero state ───────────────────────────────────────────────
-
 func TestEngine_InitialState_MetricsAreZero(t *testing.T) {
 	e := New()
 	m := e.GetMetrics()
@@ -491,8 +463,6 @@ func TestEngine_InitialState_MetricsAreZero(t *testing.T) {
 		t.Errorf("fresh engine: Bias should be 0, got %d", m.Bias)
 	}
 }
-
-// ── Zero-duration stage (spike) ───────────────────────────────────────────────
 
 func TestRunStages_ZeroDurationStage_Spike(t *testing.T) {
 	srv, hits := newCountingServer(t, 200)

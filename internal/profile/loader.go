@@ -23,7 +23,6 @@ import (
 // name should be the profile slug (e.g. "flash-sale") without the .yaml suffix,
 // or a full file path for custom profiles outside the standard directories.
 func Load(name string) (*Profile, error) {
-	// ── 1. Exact path ──────────────────────────────────────────────────────
 	if isFilePath(name) {
 		return loadFile(name)
 	}
@@ -31,7 +30,6 @@ func Load(name string) (*Profile, error) {
 	slug := strings.TrimSuffix(name, ".yaml")
 	filename := slug + ".yaml"
 
-	// ── 2. Global ~/.config/gg/profiles/ ──────────────────────────────────
 	if home, err := os.UserHomeDir(); err == nil {
 		globalPath := filepath.Join(home, ".config", "gg", "profiles", filename)
 		if _, err := os.Stat(globalPath); err == nil {
@@ -48,7 +46,6 @@ func Load(name string) (*Profile, error) {
 		}
 	}
 
-	// ── 3. Embedded fallback ───────────────────────────────────────────────
 	return loadEmbedded(slug)
 }
 

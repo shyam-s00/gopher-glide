@@ -6,8 +6,6 @@ import (
 	"sync/atomic"
 )
 
-// ── latency buffer capacity bounds ───────────────────────────────────────────
-
 const (
 	// minLatencyBufCap is the smallest ring buffer we ever allocate.
 	// 1 024 slots is enough for any test that runs at ≤ 1 RPS for ~17 min.

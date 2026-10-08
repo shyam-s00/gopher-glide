@@ -7,13 +7,9 @@ import (
 	"time"
 )
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 func newTestEngine() *Engine {
 	return New()
 }
-
-// ── logCall: success path ─────────────────────────────────────────────────────
 
 func TestLogCall_SuccessPath(t *testing.T) {
 	e := newTestEngine()
@@ -42,8 +38,6 @@ func TestLogCall_SuccessPath(t *testing.T) {
 	}
 }
 
-// ── logCall: success NOT routed to errorLogs ──────────────────────────────────
-
 func TestLogCall_SuccessNotInErrorLog(t *testing.T) {
 	e := newTestEngine()
 	e.logCall(0, "GET", "http://example.com/ok", http.StatusOK, 5*time.Millisecond, nil)
@@ -53,8 +47,6 @@ func TestLogCall_SuccessNotInErrorLog(t *testing.T) {
 		t.Errorf("expected 0 error logs for 200, got %d", len(errs))
 	}
 }
-
-// ── logCall: transport error path ─────────────────────────────────────────────
 
 func TestLogCall_TransportError(t *testing.T) {
 	e := newTestEngine()
@@ -77,8 +69,6 @@ func TestLogCall_TransportError(t *testing.T) {
 	}
 }
 
-// ── logCall: 4xx routed to errorLogs ─────────────────────────────────────────
-
 func TestLogCall_4xxRoutedToErrorLog(t *testing.T) {
 	e := newTestEngine()
 	e.logCall(0, "GET", "http://example.com/notfound", http.StatusNotFound, 8*time.Millisecond, nil)
@@ -92,8 +82,6 @@ func TestLogCall_4xxRoutedToErrorLog(t *testing.T) {
 	}
 }
 
-// ── logCall: 5xx routed to errorLogs ─────────────────────────────────────────
-
 func TestLogCall_5xxRoutedToErrorLog(t *testing.T) {
 	e := newTestEngine()
 	e.logCall(0, "PUT", "http://example.com/err", http.StatusInternalServerError, 20*time.Millisecond, nil)
@@ -106,8 +94,6 @@ func TestLogCall_5xxRoutedToErrorLog(t *testing.T) {
 		t.Errorf("StatusCode: want 500, got %d", errs[0].StatusCode)
 	}
 }
-
-// ── buffer eviction cap ───────────────────────────────────────────────────────
 
 func TestLogCall_BufferEvictionCap(t *testing.T) {
 	e := newTestEngine() // maxLogs = 100
@@ -136,8 +122,6 @@ func TestLogCall_ErrorBufferEvictionCap(t *testing.T) {
 	}
 }
 
-// ── count clamping ────────────────────────────────────────────────────────────
-
 func TestGetRecentLogs_CountClamping(t *testing.T) {
 	e := newTestEngine()
 
@@ -165,8 +149,6 @@ func TestGetRecentLogs_ZeroCount(t *testing.T) {
 	}
 }
 
-// ── ordering — most recent entries are at the tail ────────────────────────────
-
 func TestGetRecentLogs_Ordering(t *testing.T) {
 	e := newTestEngine()
 
@@ -187,8 +169,6 @@ func TestGetRecentLogs_Ordering(t *testing.T) {
 	}
 }
 
-// ── LogCallForTest shim ───────────────────────────────────────────────────────
-
 func TestLogCallForTest_Shim(t *testing.T) {
 	e := newTestEngine()
 	e.LogCallForTest("DELETE", "http://example.com/res", http.StatusNoContent, 3*time.Millisecond, nil)
@@ -201,8 +181,6 @@ func TestLogCallForTest_Shim(t *testing.T) {
 		t.Errorf("Method: want DELETE, got %s", logs[0].Method)
 	}
 }
-
-// ── returned entries are value copies (mutations don't affect the buffer) ──────
 
 func TestGetRecentLogs_ReturnsCopies(t *testing.T) {
 	e := newTestEngine()
@@ -217,8 +195,6 @@ func TestGetRecentLogs_ReturnsCopies(t *testing.T) {
 		t.Errorf("buffer was mutated through returned value; got %s", logs2[0].Url)
 	}
 }
-
-// ── concurrent safety ─────────────────────────────────────────────────────────
 
 func TestLogCall_ConcurrentWritesAndReads(t *testing.T) {
 	e := newTestEngine()

@@ -59,8 +59,6 @@ type CallLog struct {
 // CallLog, etc. — avoids a separate package and keeps the dependency graph
 // simple: hive imports engine for types and interface; engine never imports hive.
 type Runner interface {
-	// ── Execution ────────────────────────────────────────────────────────────
-
 	// RunStages executes all configured stages sequentially.
 	// It blocks until all stages complete, the context is cancelled, or an
 	// unrecoverable error occurs.
@@ -69,8 +67,6 @@ type Runner interface {
 	// Run is the single-stage convenience wrapper kept for backward
 	// compatibility. Implementations should delegate to RunStages internally.
 	Run(ctx context.Context, targetRPS int, duration time.Duration, specs []httpreader.RequestSpec) error
-
-	// ── Lifecycle ────────────────────────────────────────────────────────────
 
 	// IsRunning reports whether RunStages is currently active.
 	IsRunning() bool
@@ -87,8 +83,6 @@ type Runner interface {
 	// RunStages call began. Returns 0 if the engine has not started yet.
 	GetElapsedTime() float64
 
-	// ── Observability ────────────────────────────────────────────────────────
-
 	// GetMetrics returns a point-in-time snapshot of all engine counters and
 	// latency percentiles. Safe to call from any goroutine at any time.
 	GetMetrics() *MetricsSnapshot
@@ -100,8 +94,6 @@ type Runner interface {
 	// GetRecentErrorLogs returns up to count of the most recent call log
 	// entries that resulted in an HTTP error or transport failure.
 	GetRecentErrorLogs(count int) []CallLog
-
-	// ── Director / bias controls ─────────────────────────────────────────────
 
 	// ApplyBias sends a cumulative RPS delta (e.g. +5 or -5) to the running
 	// stage. Non-blocking; safe to call from the TUI event loop.

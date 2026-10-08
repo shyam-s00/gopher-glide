@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// ── Options ───────────────────────────────────────────────────────────────────
-
 // PruneOptions controls which snapshots SelectForPrune marks as deletion
 // candidates. All active filters are OR-combined — a snapshot is a candidate
 // if it matches any one of them.
@@ -41,16 +39,12 @@ type PruneOptions struct {
 	Now time.Time
 }
 
-// ── Candidate ─────────────────────────────────────────────────────────────────
-
 // PruneCandidate pairs a SnapInfo with the human-readable reason it was
 // selected for deletion.
 type PruneCandidate struct {
 	SnapInfo
 	Reason string `json:"reason"`
 }
-
-// ── Report ────────────────────────────────────────────────────────────────────
 
 // PruneReport is the stable JSON contract emitted by `gg snap prune
 // --reporter json`. The JetBrains plugin parses this to:
@@ -110,8 +104,6 @@ func BuildPruneReport(dir string, candidates []PruneCandidate, dryRun bool, dele
 	}
 }
 
-// ── Core logic ────────────────────────────────────────────────────────────────
-
 // SelectForPrune evaluates infos against opts and returns a deduplicated,
 // oldest-first ordered slice of deletion candidates.
 //
@@ -138,7 +130,6 @@ func SelectForPrune(infos []SnapInfo, opts PruneOptions) []PruneCandidate {
 		}
 	}
 
-	// ── --ids ─────────────────────────────────────────────────────────────────
 	if len(opts.IDs) > 0 {
 		idSet := make(map[int]struct{}, len(opts.IDs))
 		for _, id := range opts.IDs {
@@ -151,7 +142,6 @@ func SelectForPrune(infos []SnapInfo, opts PruneOptions) []PruneCandidate {
 		}
 	}
 
-	// ── --tag ─────────────────────────────────────────────────────────────────
 	if opts.Tag != "" {
 		for _, info := range infos {
 			if info.Tag == opts.Tag {
@@ -160,7 +150,6 @@ func SelectForPrune(infos []SnapInfo, opts PruneOptions) []PruneCandidate {
 		}
 	}
 
-	// ── --older-than ──────────────────────────────────────────────────────────
 	if opts.OlderThan > 0 {
 		cutoff := now.Add(-opts.OlderThan)
 		for _, info := range infos {
@@ -170,7 +159,6 @@ func SelectForPrune(infos []SnapInfo, opts PruneOptions) []PruneCandidate {
 		}
 	}
 
-	// ── --keep-last ───────────────────────────────────────────────────────────
 	if opts.KeepLast > 0 && opts.KeepLast < len(infos) {
 		// infos are sorted oldest-first by List(); copy and sort newest-first.
 		// Tiebreaker: reverse-lexicographic FileName so that when two snapshots
@@ -221,8 +209,6 @@ func Delete(candidates []PruneCandidate) (deleted int, errs []error) {
 	}
 	return
 }
-
-// ── Parsers ───────────────────────────────────────────────────────────────────
 
 // ParseOlderThan parses a duration string for use with --older-than.
 // It extends Go's standard time.ParseDuration syntax with a "d" suffix for
@@ -278,8 +264,6 @@ func ParseIDs(s string) ([]int, error) {
 	}
 	return ids, nil
 }
-
-// ── internal helpers ──────────────────────────────────────────────────────────
 
 // fmtDuration produces a short human-readable duration string, preferring
 // "Nd" for multiples of 24 h so the log output mirrors what the user typed.

@@ -45,7 +45,6 @@ func Parse(content string) ([]RequestSpec, error) {
 		line := scanner.Text()
 		trimmed := strings.TrimSpace(line)
 
-		// ── JS-embed safety (state 3) ───────────────────────────────────────
 		// JetBrains wraps response scripts in  > {% … %}.
 		// Once we enter this block, ignore everything until the closing %}.
 		if state == 3 {
@@ -55,7 +54,6 @@ func Parse(content string) ([]RequestSpec, error) {
 			continue
 		}
 
-		// ── Request separator  ###  ─────────────────────────────────────────
 		if strings.HasPrefix(trimmed, "###") {
 			if currentRequest != nil {
 				currentRequest.Body = strings.TrimSpace(currentRequest.Body)
@@ -71,7 +69,6 @@ func Parse(content string) ([]RequestSpec, error) {
 			continue
 		}
 
-		// ── Before the first request ────────────────────────────────────────
 		if currentRequest == nil {
 			if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//") {
 				continue
@@ -83,7 +80,6 @@ func Parse(content string) ([]RequestSpec, error) {
 			state = 0
 		}
 
-		// ── @gg-export pragma ───────────────────────────────────────────────
 		// Recognised in states 1 and 2 (after headers or inside/after body).
 		// Must be checked before the general "skip comments" guard below.
 		if state == 1 || state == 2 {
@@ -93,7 +89,7 @@ func Parse(content string) ([]RequestSpec, error) {
 			}
 		}
 
-		// ── Skip plain comments outside the body ────────────────────────────
+		// In a body (state 2) "#" and "//" lines are content, not comments.
 		if state != 2 && (strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//")) {
 			continue
 		}

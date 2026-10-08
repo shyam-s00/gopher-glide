@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// ── zero state ────────────────────────────────────────────────────────────────
-
 func TestGetMetrics_InitialZeroState(t *testing.T) {
 	e := New()
 	m := e.GetMetrics()
@@ -51,8 +49,6 @@ func TestGetMetrics_InitialZeroState(t *testing.T) {
 	}
 }
 
-// ── counter field mapping ─────────────────────────────────────────────────────
-
 func TestGetMetrics_CounterFieldMapping(t *testing.T) {
 	e := New()
 
@@ -80,8 +76,6 @@ func TestGetMetrics_CounterFieldMapping(t *testing.T) {
 	}
 }
 
-// ── error-rate formula ────────────────────────────────────────────────────────
-
 func TestGetMetrics_ErrorRateFormula(t *testing.T) {
 	e := New()
 
@@ -105,8 +99,6 @@ func TestGetMetrics_ErrorRateFormula(t *testing.T) {
 	}
 }
 
-// ── average latency formula ───────────────────────────────────────────────────
-
 func TestGetMetrics_AvgLatency(t *testing.T) {
 	e := New()
 
@@ -121,13 +113,9 @@ func TestGetMetrics_AvgLatency(t *testing.T) {
 	}
 }
 
-// ── latency percentile round-trip ─────────────────────────────────────────────
-
 func TestGetMetrics_LatencyPercentiles(t *testing.T) {
 	t.Skip("latency write path not yet implemented")
 }
-
-// ── stage progress fields ─────────────────────────────────────────────────────
 
 func TestGetMetrics_StageProgress(t *testing.T) {
 	e := New()
@@ -143,8 +131,6 @@ func TestGetMetrics_StageProgress(t *testing.T) {
 	}
 }
 
-// ── director bias field ───────────────────────────────────────────────────────
-
 func TestGetMetrics_BiasField(t *testing.T) {
 	e := New()
 	e.rpsBias.Store(42)
@@ -154,8 +140,6 @@ func TestGetMetrics_BiasField(t *testing.T) {
 		t.Errorf("Bias: want 42, got %d", m.Bias)
 	}
 }
-
-// ── targetRPS and activeActors ────────────────────────────────────────────────
 
 func TestGetMetrics_TargetRPSAndActiveActors(t *testing.T) {
 	e := New()
@@ -170,8 +154,6 @@ func TestGetMetrics_TargetRPSAndActiveActors(t *testing.T) {
 		t.Errorf("ActiveVPUs: want 37, got %d", m.ActiveVPUs)
 	}
 }
-
-// ── throughput wired to rpsWin ────────────────────────────────────────────────
 
 func TestGetMetrics_ThroughputFromRpsWindow(t *testing.T) {
 	e := New()
@@ -188,8 +170,6 @@ func TestGetMetrics_ThroughputFromRpsWindow(t *testing.T) {
 	}
 }
 
-// ── zero total → no division-by-zero ─────────────────────────────────────────
-
 func TestGetMetrics_ZeroTotalNoDivisionByZero(t *testing.T) {
 	e := New()
 	// No requests recorded — this must not panic.
@@ -201,8 +181,6 @@ func TestGetMetrics_ZeroTotalNoDivisionByZero(t *testing.T) {
 		t.Errorf("ErrorRate with zero total: want 0, got %f", m.ErrorRate)
 	}
 }
-
-// ── logCall round-trip into GetMetrics call-log buffers ───────────────────────
 
 func TestGetMetrics_CallLogIntegration(t *testing.T) {
 	e := New()
@@ -218,8 +196,6 @@ func TestGetMetrics_CallLogIntegration(t *testing.T) {
 		t.Errorf("GetRecentErrorLogs: want 1, got %d", len(errs))
 	}
 }
-
-// ── concurrent reads during counter writes ────────────────────────────────────
 
 func TestGetMetrics_ConcurrentSafe(t *testing.T) {
 	e := New()

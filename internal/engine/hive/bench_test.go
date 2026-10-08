@@ -30,8 +30,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
 
-// ── helpers ────────────────────────────────────────────────────────────────────
-
 // drainActors spins until all in-flight actor goroutines have exited or the
 // deadline expires. Used between benchmark iterations to prevent goroutine
 // accumulation from skewing successive measurements.
@@ -50,8 +48,6 @@ func fastServer() *httptest.Server {
 		w.WriteHeader(http.StatusOK)
 	}))
 }
-
-// ── Pool / Transport construction ─────────────────────────────────────────────
 
 // BenchmarkPool_BuildTransport measures the construction cost of buildTransport
 // across the full RPS spectrum. This function is called at the start of every
@@ -94,8 +90,6 @@ func BenchmarkPool_ScalingSanity(b *testing.B) {
 		}
 	}
 }
-
-// ── Connection reuse (allocs/op) ───────────────────────────────────────────────
 
 // BenchmarkActor_ConnectionReuse shows that a warmed keep-alive pool reduces
 // per-request heap allocations. After the initial warm-up burst, each actor
@@ -154,8 +148,6 @@ func BenchmarkActor_Parallel(b *testing.B) {
 		}
 	})
 }
-
-// ── Actor with snap recorder ──────────────────────────────────────────────────
 
 // BenchmarkActor_WithRecorder measures the additional per-request overhead of
 // the --snap pipeline on the actor hot path: e.recorder.Record() plus, for
@@ -237,8 +229,6 @@ func BenchmarkEngine_MaxRPS_SingleCore(b *testing.B) {
 	}
 	b.ReportMetric(float64(b.N)/b.Elapsed().Seconds(), "RPS")
 }
-
-// ── Hatchery dispatcher throughput ────────────────────────────────────────────
 
 // BenchmarkDispatch_Throughput is the headline dispatcher benchmark.
 // It measures total wall time for a complete dispatch-and-drain cycle at 5
@@ -376,8 +366,6 @@ func BenchmarkDispatch_ManifestChannelRoundTrip(b *testing.B) {
 		drainActors(e, 2*time.Second)
 	}
 }
-
-// ── Sharded metrics hot-path ───────────────────────────────────────────────────
 
 // BenchmarkMetrics_ShardedWrite benchmarks the per-Actor counter hot-path
 // under GOMAXPROCS-level concurrency. With cache-line padding these atomics

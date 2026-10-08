@@ -7,8 +7,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
 
-// ── svFormatCount ─────────────────────────────────────────────────────────────
-
 func TestSvFormatCount(t *testing.T) {
 	cases := []struct {
 		n    int64
@@ -30,8 +28,6 @@ func TestSvFormatCount(t *testing.T) {
 		}
 	}
 }
-
-// ── snapViewModel ─────────────────────────────────────────────────────────────
 
 func newTestSnap() *snap.Snapshot {
 	return &snap.Snapshot{

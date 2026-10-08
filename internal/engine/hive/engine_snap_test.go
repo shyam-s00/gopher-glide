@@ -73,7 +73,6 @@ func TestHiveSnapRecorderEndToEnd(t *testing.T) {
 		t.Fatalf("Finalize: %v", err)
 	}
 
-	// ── assert snapshot has content ───────────────────────────────────────
 	if len(snapData.Endpoints) == 0 {
 		t.Fatal("expected at least one endpoint in snapshot, got none")
 	}

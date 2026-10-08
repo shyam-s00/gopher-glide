@@ -10,7 +10,6 @@ import "github.com/shyam-s00/gopher-glide/internal/engine"
 //
 // Safe to call from any goroutine at any time.
 func (e *Engine) GetMetrics() *engine.MetricsSnapshot {
-	// ── Counters (sum all 16 shards) ──────────────────────────────────────
 	// Read success and failure BEFORE total.
 	// Writers always call incTotalRequests before incSuccess/incFailure, so
 	// any success/failure visible at read-time has a corresponding total
@@ -21,7 +20,6 @@ func (e *Engine) GetMetrics() *engine.MetricsSnapshot {
 	total := e.counters.loadTotalRequests()
 	totalLatency := e.counters.loadTotalLatency()
 
-	// ── Derived scalars ───────────────────────────────────────────────────
 	var avgLatency float64
 	if total > 0 {
 		avgLatency = float64(totalLatency) / float64(total)
@@ -32,10 +30,8 @@ func (e *Engine) GetMetrics() *engine.MetricsSnapshot {
 		errorRate = float64(failed) / float64(total)
 	}
 
-	// ── Throughput (sliding-window RPS) ───────────────────────────────────
 	throughput := e.rpsWin.rate()
 
-	// ── Latency percentiles ───────────────────────────────────────────────
 	minL, maxL, p50, p95, p99 := e.computeLatency()
 
 	return &engine.MetricsSnapshot{
