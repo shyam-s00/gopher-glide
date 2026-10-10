@@ -10,10 +10,9 @@ import (
 	"time"
 )
 
-// seedLatBuf writes values directly into e.latBuf, simulating what
-// recordLatency() will do once the actor write path is live (1.4.1h).
-// Using the same atomic ring-buffer protocol: claim a slot via n.Add(1),
-// then store Float64bits at pos = (idx % cap).
+// seedLatBuf writes values directly into e.latBuf using recordLatency's ring
+// protocol (claim a slot via n.Add(1), store Float64bits at idx % cap), so
+// tests can set exact latencies without timing.
 func seedLatBuf(e *Engine, values ...float64) {
 	lb := e.latBuf.Load()
 	for _, v := range values {

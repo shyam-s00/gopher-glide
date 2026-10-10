@@ -151,8 +151,59 @@ func TestConcurrent_LogCall_ErrorBuffer_NeverExceedsMax(t *testing.T) {
 	}
 }
 
+// Writers wrap the default 1024-slot ring while readers poll computeLatency
+// and GetMetrics. Mid-run an unwritten slot may read as 0 (documented), so only
+// ordering and the upper bound are checked live; after the writers finish the
+// ring is full and the range is strict.
 func TestConcurrent_Latencies_ConcurrentAppends(t *testing.T) {
-	t.Skip("latency write path not yet implemented")
+	const writers, writesEach, readers = 8, 200, 4 // 1600 writes > 1024 slots
+	const lo, hi = 1, 50                           // ms
+
+	e := New()
+	stop := make(chan struct{})
+	var rwg, wwg sync.WaitGroup
+	for r := 0; r < readers; r++ {
+		rwg.Add(1)
+		go func() {
+			defer rwg.Done()
+			for {
+				minL, maxL, p50, p95, p99 := e.computeLatency()
+				if !(0 <= minL && minL <= p50 && p50 <= p95 && p95 <= p99 && p99 <= maxL && maxL <= hi) {
+					t.Errorf("bad snapshot: min=%v p50=%v p95=%v p99=%v max=%v", minL, p50, p95, p99, maxL)
+				}
+				if m := e.GetMetrics(); m.MaxLatency > hi {
+					t.Errorf("GetMetrics MaxLatency %v above %d ms", m.MaxLatency, hi)
+				}
+				select {
+				case <-stop:
+					return
+				default:
+					time.Sleep(100 * time.Microsecond)
+				}
+			}
+		}()
+	}
+	for w := 0; w < writers; w++ {
+		wwg.Add(1)
+		go func(id int) {
+			defer wwg.Done()
+			for i := 0; i < writesEach; i++ {
+				ms := lo + (id+i)%(hi-lo+1)
+				e.recordLatency(id%numShards, time.Duration(ms)*time.Millisecond)
+			}
+		}(w)
+	}
+	wwg.Wait()
+	close(stop)
+	rwg.Wait()
+
+	if got := e.latBuf.Load().n.Load(); got != writers*writesEach {
+		t.Errorf("writes recorded = %d, want %d", got, writers*writesEach)
+	}
+	minL, maxL, _, _, _ := e.computeLatency()
+	if minL < lo || maxL > hi {
+		t.Errorf("full ring out of range: min=%v max=%v, want within [%d, %d]", minL, maxL, lo, hi)
+	}
 }
 
 func TestConcurrent_GetMetrics_DuringRun(t *testing.T) {

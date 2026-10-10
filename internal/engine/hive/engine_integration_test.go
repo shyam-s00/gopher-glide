@@ -313,8 +313,41 @@ func TestRunStages_StageCountInMetrics(t *testing.T) {
 	}
 }
 
+// Every request records exactly one latency sample, and the server's delay is
+// a floor for every measured value.
 func TestRunStages_LatencyRecorded(t *testing.T) {
-	t.Skip("latency write path not yet implemented")
+	const delay = 20 * time.Millisecond
+	srv := slowHiveSrv(t, 200, delay)
+	e := New()
+
+	if err := e.RunStages(context.Background(), singleStageCfg(300*time.Millisecond, 20), specsFor(srv.URL)); err != nil {
+		t.Fatalf("RunStages: %v", err)
+	}
+	m := e.GetMetrics()
+	if m.TotalRequests == 0 {
+		t.Fatal("expected requests to be sent")
+	}
+	if got := e.latBuf.Load().n.Load(); got != m.TotalRequests {
+		t.Errorf("latency samples = %d, want one per request (%d)", got, m.TotalRequests)
+	}
+
+	floor := float64(delay) / float64(time.Millisecond)
+	for _, c := range []struct {
+		name string
+		v    float64
+	}{
+		{"AvgLatency", m.AvgLatency}, {"MinLatency", m.MinLatency}, {"P50Latency", m.P50Latency},
+		{"P95Latency", m.P95Latency}, {"P99Latency", m.P99Latency}, {"MaxLatency", m.MaxLatency},
+	} {
+		if c.v < floor-0.001 {
+			t.Errorf("%s = %.3f ms, below the server delay of %.0f ms", c.name, c.v, floor)
+		}
+	}
+	if !(m.MinLatency <= m.P50Latency && m.P50Latency <= m.P95Latency &&
+		m.P95Latency <= m.P99Latency && m.P99Latency <= m.MaxLatency) {
+		t.Errorf("percentiles out of order: min=%v p50=%v p95=%v p99=%v max=%v",
+			m.MinLatency, m.P50Latency, m.P95Latency, m.P99Latency, m.MaxLatency)
+	}
 }
 
 func TestRunStages_BiasApplied_ReflectedAfterRun(t *testing.T) {
@@ -407,8 +440,26 @@ func TestRunStages_StateReset_BetweenRuns(t *testing.T) {
 	}
 }
 
+// The second run gets a fresh latency buffer holding only its own samples.
 func TestRunStages_StateReset_LatenciesCleared(t *testing.T) {
-	t.Skip("latency write path not yet implemented")
+	srv, _ := newCountingServer(t, 200)
+	e := New()
+	cfg := singleStageCfg(200*time.Millisecond, 20)
+
+	_ = e.RunStages(context.Background(), cfg, specsFor(srv.URL))
+	first := e.latBuf.Load()
+	if first.n.Load() == 0 {
+		t.Fatal("first run: expected latency samples")
+	}
+
+	_ = e.RunStages(context.Background(), cfg, specsFor(srv.URL))
+	second := e.latBuf.Load()
+	if second == first {
+		t.Fatal("latency buffer was not replaced for the second run")
+	}
+	if got, want := second.n.Load(), e.GetMetrics().TotalRequests; got != want {
+		t.Errorf("second run holds %d latency samples for %d requests (leftovers from run 1?)", got, want)
+	}
 }
 
 func TestRunStages_MultipleSpecs_BothHit(t *testing.T) {

@@ -1,6 +1,7 @@
 package hive
 
 import (
+	"math"
 	"net/http"
 	"testing"
 	"time"
@@ -113,8 +114,32 @@ func TestGetMetrics_AvgLatency(t *testing.T) {
 	}
 }
 
+// Seeds a fixed permutation of 1..100 ms (37 is coprime to 100), so the values
+// are neither sorted nor reverse-sorted when read back. With linear
+// interpolation over n=100 sorted values, pXX = 1 + (XX/100)*99.
 func TestGetMetrics_LatencyPercentiles(t *testing.T) {
-	t.Skip("latency write path not yet implemented")
+	e := New()
+	vals := make([]float64, 100)
+	for i := range vals {
+		vals[i] = float64(i*37%100 + 1)
+	}
+	seedLatBuf(e, vals...)
+
+	m := e.GetMetrics()
+	for _, c := range []struct {
+		name      string
+		got, want float64
+	}{
+		{"MinLatency", m.MinLatency, 1},
+		{"MaxLatency", m.MaxLatency, 100},
+		{"P50Latency", m.P50Latency, 50.5},
+		{"P95Latency", m.P95Latency, 95.05},
+		{"P99Latency", m.P99Latency, 99.01},
+	} {
+		if math.Abs(c.got-c.want) > 1e-9 {
+			t.Errorf("%s: want %v, got %v", c.name, c.want, c.got)
+		}
+	}
 }
 
 func TestGetMetrics_StageProgress(t *testing.T) {
