@@ -237,15 +237,13 @@ func (r *HeadlessRenderer) Run(eng engine.Runner, cfg *config.Config, specs []ht
 	// inside the select loop. If false after the loop we must drain the channel
 	// so that no engine worker is still active when we finalize the snapshot.
 	engineFinished := false
-	// interrupted is set when the user/OS explicitly canceled the run via a
-	// signal. It changes how we treat a non-canceled error from the engine
-	// after the loop: on an explicit interrupt we log and still finalize
-	// (preserving partial data); on a natural stop we propagate the error.
+	// interrupted: the user/OS canceled via signal. A non-canceled engine error
+	// after the loop is then logged and the run still finalizes (keeping partial
+	// data); on a natural stop the error is returned.
 	interrupted := false
-	// stopRequested is set by a "stop" control command. Treated like
-	// interrupted for the post-loop error branch (log and still finalize,
-	// never fail the run) but produces a single "stopped" terminal event
-	// instead of "interrupted"+"finished".
+	// stopRequested is set by a "stop" command. Like interrupted it logs engine
+	// errors and still finalizes, but ends with a single "stopped" event instead of
+	// "interrupted" + "finished".
 	stopRequested := false
 
 loop:
@@ -343,10 +341,9 @@ loop:
 		}
 	}
 
-	// If the loop exited via the signal or ticker path (not engineDone), wait
-	// here until RunStages actually returns. This guarantees that no engine
-	// worker is still calling recorder.Record() when we call OnRunComplete /
-	// finalizeSnapResult below — preventing a recorder data-race on early quit.
+	// If the loop exited via signal/ticker, wait for RunStages to return so no
+	// engine worker is still calling recorder.Record() when OnRunComplete
+	// finalizes the snapshot.
 	if !engineFinished {
 		if err := <-engineDone; err != nil && !errors.Is(err, context.Canceled) {
 			if interrupted || stopRequested {
@@ -363,10 +360,9 @@ loop:
 		}
 	}
 
-	// Run complete — call the post-run hook (e.g., write snapshot) synchronously.
-	// In headless mode there is no alt-screen constraint, so printing is safe.
-	// "stopped" replaces "finished" as the terminal event for a stop-ended
-	// run — a single terminal event, not a second one alongside it.
+	// Run the post-run hook (e.g. write the snapshot) synchronously; printing is
+	// safe in headless mode. A stop-ended run emits a single "stopped" instead of
+	// "finished".
 	terminalEvent := "finished"
 	if stopRequested {
 		terminalEvent = "stopped"

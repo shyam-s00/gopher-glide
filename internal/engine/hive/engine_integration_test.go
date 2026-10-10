@@ -1,21 +1,7 @@
 package hive
 
-// engine_integration_test.go mirrors the full engine_test.go suite from the
-// legacy engine, verifying that hive.Engine satisfies the same behavioural
-// contract through the public Runner interface.
-//
-// Coverage:
-//   - Input validation (ErrNoRequests, ErrNoStages)
-//   - Lifecycle (IsRunning during / after run, GetStartTime, GetEndTime)
-//   - Context cancellation
-//   - Request dispatch (at least one request sent)
-//   - Counter correctness (success, failure, total, error rate)
-//   - Stage count reflected in GetMetrics
-//   - Latency recorded and percentiles populated
-//   - User-Agent header set on every request
-//   - Bias applied during a live run
-//   - Run() backward-compat wrapper
-//   - State reset across back-to-back RunStages calls
+// engine_integration_test.go checks that hive.Engine honours the Runner
+// contract through its public methods.
 
 import (
 	"context"

@@ -27,13 +27,11 @@ const (
 	minWidth    = 60
 
 	// defaultTickInterval is the redraw cadence used when no --tui-tick-ms
-	// override is supplied — ~24fps, matching the rate set in commit af96369.
+	// override is supplied (~24fps).
 	defaultTickInterval = 42 * time.Millisecond
 
-	// minTickInterval/maxTickInterval bound an explicit --tui-tick-ms
-	// override. Below ~16ms (60fps) a terminal can't render any faster
-	// anyway, so anything past that floor is wasted CPU; above 100ms the
-	// UI starts to feel unresponsive, so there's no reason to go slower.
+	// minTickInterval/maxTickInterval bound --tui-tick-ms: a terminal can't render
+	// faster than ~60fps, and past 100ms the UI feels unresponsive.
 	minTickInterval = 16 * time.Millisecond
 	maxTickInterval = 100 * time.Millisecond
 )
@@ -81,16 +79,14 @@ type model struct {
 
 	droppedBannerShown bool // tracks when the 'Server Saturated' banner appears to trigger a layout recompute
 
-	// onRunComplete is dispatched as a background tea.Cmd exactly once when
-	// the engine stops naturally. It must not write to stdout/stderr.
-	// Returns a short status string shown in the director bar.
-	// nil when no post-run work is needed.
+	// onRunComplete runs once as a background tea.Cmd when the engine stops
+	// naturally (contract: ui.RunOptions.OnRunComplete). nil when there is no
+	// post-run work.
 	onRunComplete func() string
 
-	// biasEventsOut is a pointer to the caller's (TUIRenderer's) slice, so
-	// arrow-key bias reaches main.go's onRunComplete closure while the model
-	// is still running — that closure has no other handle into a live model.
-	// nil in tests that build a model directly instead of via Start().
+	// biasEventsOut points at the caller's (TUIRenderer's) slice so arrow-key
+	// bias reaches main.go's onRunComplete closure, which can't reach a live
+	// model. nil in tests that build a model directly.
 	biasEventsOut *[]snap.BiasEvent
 }
 
@@ -156,11 +152,9 @@ type layout struct {
 	logWidth   int
 }
 
-// yAxisWidth returns the width reserved for the y-axis label column,
-// including its trailing space. The default (5) fits up to 4-digit RPS
-// values (e.g. " 9999 "); plans with a peak RPS of 10000 or more need an
-// extra column per additional digit, otherwise the axis labels overflow
-// their reserved column and the chart grid shifts out of alignment.
+// yAxisWidth returns the y-axis label column width including its trailing space.
+// The default (5) fits 4-digit RPS; each extra digit of peak RPS needs another
+// column or the chart grid shifts out of alignment.
 func (m model) yAxisWidth() int {
 	peak := 0
 	if m.config != nil {
@@ -197,27 +191,17 @@ func (m model) computeLayout() layout {
 	return m.computeLayoutForHeights(headerH, timelineH)
 }
 
-// computeLayoutForHeights derives the layout from the already-rendered
-// heights of the header and timeline sections, avoiding a redundant render
-// of those (expensive) sections purely for measurement purposes.
-//
-// When the model is fully initialised (engine + config present), the actual
-// rendered heights of the fixed sections are used so that logH fills the
-// remaining terminal rows exactly — regardless of journey-mode panel counts,
-// label wrapping, or any other rendering quirk.
-//
-// Bare/test models (ready=false, nil engine) fall back to the static
-// estimate so that geometry unit tests remain valid without a live engine.
+// computeLayoutForHeights derives the layout from the already-rendered header and
+// timeline heights (avoiding a second render just to measure). Bare/test models
+// (ready=false, nil engine) fall back to a static estimate.
 func (m model) computeLayoutForHeights(headerH, timelineH int) layout {
 	w := m.width
 	if w < minWidth {
 		w = minWidth
 	}
 	const fallbackUsed = 41 // header(22) + timeline(16) + hintBar(1) + logBorder(2)
-	// The "Server Saturated" banner (rendered in View when DroppedCount > 0)
-	// adds 3 lines (MarginTop + content + MarginBottom). Without subtracting
-	// it here, total rendered height exceeds the terminal height and the
-	// alt-screen scrolls the title bar off the top.
+	// The "Server Saturated" banner (shown when DroppedCount > 0) takes 3 lines;
+	// without subtracting it the alt-screen scrolls the title bar off the top.
 	bannerH := 0
 	if m.metrics != nil && m.metrics.DroppedCount > 0 {
 		bannerH = 3
@@ -478,10 +462,9 @@ func (m model) renderTimeline() string {
 		}
 	}
 
-	// Cursor — derived from elapsed time, always correct after resize.
-	// Stage durations from config are unscaled; wall-clock time runs faster
-	// when time_scale > 1. Scale each stage duration before accumulating so
-	// the cursor position is consistent with how fast the run actually moves.
+	// Cursor — derived from elapsed time, so it stays correct after a resize.
+	// Stage durations are unscaled while the run moves time_scale× faster, so scale
+	// them before accumulating.
 	timeScale := m.config.ConfigSection.TimeScale
 	if timeScale <= 0 {
 		timeScale = 1.0
@@ -1019,12 +1002,9 @@ func (m model) View() string {
 	headerH := lipgloss.Height(header)
 	timelineH := lipgloss.Height(timeline)
 
-	// The header, timeline, director bar, log box border, and a minimum
-	// 3-line log area are all fixed-height. If the terminal is shorter than
-	// their combined height, the alt-screen silently scrolls the overflow
-	// off the top — pushing the header (the first thing rendered) out of
-	// view. Bail out with a resize prompt instead, mirroring the width check
-	// above.
+	// If the terminal is shorter than the fixed-height sections plus a 3-line log
+	// area, the alt-screen scrolls the header off the top; show a resize prompt
+	// instead, like the width check above.
 	bannerH := 0
 	if m.metrics.DroppedCount > 0 {
 		bannerH = 3
@@ -1115,11 +1095,8 @@ func Start(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec
 	)
 	_, err := p.Run()
 
-	// Block until the engine goroutine has fully exited.
-	// This guarantees that when Start returns — whether because the run
-	// completed naturally or the user pressed [q] — no engine worker is
-	// still calling recorder.Record(), making it safe for the caller to
-	// invoke finalizeSnapResult immediately afterwards.
+	// Wait for the engine goroutine to exit, so no worker is still calling
+	// recorder.Record() when the caller finalizes the snapshot (also on [q]).
 	<-m.engineDone
 
 	return err

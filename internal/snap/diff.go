@@ -326,11 +326,8 @@ func diffSchema(base, curr *SchemaSnapshot, opts DiffOptions) []FieldChange {
 	return changes
 }
 
-// calcVerdict computes the overall DiffVerdict for a single endpoint diff.
-//
-// Escalation ladder (highest wins):
-//
-//	PASS → WARN → REGRESSION
+// calcVerdict computes the overall verdict for one endpoint diff; the highest
+// escalation wins (PASS → WARN → REGRESSION).
 func calcVerdict(d EndpointDiff, opts DiffOptions) DiffVerdict {
 	verdict := VerdictPass
 

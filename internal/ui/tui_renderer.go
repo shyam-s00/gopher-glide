@@ -11,10 +11,9 @@ import (
 // TUIRenderer is the default interactive presentation layer.
 // It delegates directly to the existing BubbleTea tui.Start implementation.
 type TUIRenderer struct {
-	// biasEvents is written into live by the TUI model as arrow-key bias
-	// commands happen (tui.Start takes its address) — main.go's
-	// onRunComplete closure has no other way to reach a running model, since
-	// it's built and invoked before/during Start, not after it returns.
+	// biasEvents is appended to live by the TUI model as arrow-key bias happens
+	// (tui.Start takes its address), because main.go's onRunComplete closure has no
+	// other way to reach a running model.
 	biasEvents []snap.BiasEvent
 }
 

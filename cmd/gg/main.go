@@ -504,11 +504,9 @@ func runSnapView(args []string) {
 	fs := flag.NewFlagSet("gg snap view", flag.ExitOnError)
 	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
 
-	// Go's flag package stops at the first non-flag argument, so
-	// `gg snap view 2 --snap-dir /tmp` would leave --snap-dir unparsed.
-	// Pull the positional target out first when it leads the arg list,
-	// then parse the remainder as flags. The fallback (flags first, then
-	// the target) is handled by fs.Args() after parsing.
+	// Go's flag package stops at the first non-flag argument, so a leading target
+	// (`gg snap view 2 --snap-dir /tmp`) is pulled out first and the rest parsed as
+	// flags; a trailing target is picked up from fs.Args().
 	var target string
 	var flagArgs []string
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {

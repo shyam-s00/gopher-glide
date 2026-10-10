@@ -106,14 +106,8 @@ func (m *metrics) loadTotalLatency() int64 {
 // 3 keeps the reading responsive to bursts without single-second oscillation.
 const rpsWindowSize = 3
 
-// rpsWindow is a fixed-size ring of per-second request counts used to compute
-// a smooth, responsive current-RPS without cumulative lag.
-//
-// Each slot in the ring owns one calendar second (unix timestamp).
-// When record() is called in a new second it resets the stale slot first,
-// so old data never bleeds forward.
-//
-// All fields use atomic.Int64 — no mutex is held on the hot request path.
+// rpsWindow is a lock-free ring of per-second request counts for a smooth current
+// RPS. Each slot owns one unix second and is reset on first use in a new second.
 type rpsWindow struct {
 	buckets [rpsWindowSize]atomic.Int64 // request count recorded in that second
 	seconds [rpsWindowSize]atomic.Int64 // unix second the corresponding bucket belongs to
@@ -149,14 +143,9 @@ func (w *rpsWindow) record(count int64) {
 	w.buckets[slot].Add(count)
 }
 
-// rate returns the average request rate over the past (rpsWindowSize-1)
-// fully-completed seconds. The current (still-accumulating) second is
-// excluded so the reading never oscillates at second boundaries.
-//
-// Each slot is read with two independent atomic loads (seconds then buckets).
-// A concurrent record() call may land between the two loads, causing the
-// bucket to be read before the second is updated, or vice-versa. The
-// resulting off-by-one is bounded to a single request.
+// rate returns the average requests/s over the last (rpsWindowSize-1) completed
+// seconds; the in-progress second is excluded so the reading doesn't oscillate.
+// The two atomic loads per slot can disagree by one request (see metrics).
 func (w *rpsWindow) rate() float64 {
 	now := time.Now().Unix()
 	var total int64

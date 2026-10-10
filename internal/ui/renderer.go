@@ -49,10 +49,8 @@ type Renderer interface {
 	Run(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec, opts RunOptions) error
 }
 
-// New returns the appropriate Renderer for the execution context.
-//
-//   - headless == false → TUIRenderer (interactive BubbleTea UI)
-//   - headless == true → HeadlessRenderer (plain structured log output)
+// New returns the TUIRenderer for an interactive run, or the HeadlessRenderer
+// (plain structured log output) when headless is true.
 func New(headless bool) Renderer {
 	if headless {
 		return &HeadlessRenderer{}

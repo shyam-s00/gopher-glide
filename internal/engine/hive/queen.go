@@ -65,10 +65,8 @@ func (q *queen) run(
 			continue
 		}
 
-		// Normal (timed) stage: proactive emit-then-sleep loop. The window
-		// boundaries are anchored to the fixed stageStart time, not
-		// to time.Now() after each sleep, so OS scheduler jitter never
-		// accumulates into drift across a long stage.
+		// Timed stage: window boundaries are anchored to stageStart (not time.Now() after
+		// each sleep), so scheduler jitter never accumulates into drift.
 		scaledDur := time.Duration(float64(stage.Duration) / timeScale)
 		q.e.currentStage.Store(int32(stageIdx))
 
@@ -129,10 +127,9 @@ func (q *queen) run(
 				// Hatchery is behind — drop this manifest silently.
 			}
 
-			// 4. Sleep for the window duration. Emit first so the Hatchery is
-			// already dispatching while the Queen waits; a timer + select
-			// (not time.Sleep) keeps cancellation responsive. Bias applied
-			// mid-sleep is picked up by the next window's LERP.
+			// 4. Emit first so the Hatchery dispatches while the Queen waits; a timer +
+			// select (not time.Sleep) keeps cancellation responsive. Mid-sleep bias
+			// lands in the next window.
 			timer := time.NewTimer(windowDur)
 			select {
 			case <-ctx.Done():

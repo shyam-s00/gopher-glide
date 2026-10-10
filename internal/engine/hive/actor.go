@@ -13,15 +13,9 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
 
-// executeJourney runs every spec in the journey sequentially using a single
-// shared ActorMemory. Variables extracted by a @gg-export directive on step N
-// are automatically injected into the URL, headers, and body of step N+1…M.
-//
-// The journey aborts on the first failed step (HTTP 4xx/5xx, transport error,
-// or variable-extraction failure); subsequent steps are not executed.
-//
-// shard is passed through to executeActor unchanged so that counter writes
-// are distributed across shards without rand overhead.
+// executeJourney runs the journey's specs in order with one shared ActorMemory,
+// so variables exported by step N are available to step N+1…M. It aborts on the
+// first failed step.
 func (e *Engine) executeJourney(ctx context.Context, specs []httpreader.RequestSpec, shard int) error {
 	mem := newActorMemory()
 	for _, spec := range specs {

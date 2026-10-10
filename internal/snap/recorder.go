@@ -360,18 +360,16 @@ func WithExtraHeaders(headers ...string) RecorderOption {
 	return func(r *DefaultRecorder) { r.sanitizer = NewSanitizerWithExtraHeaders(headers...) }
 }
 
-// WithMaxBodySamples sets the per-endpoint reservoir cap for body samples used
-// in schema inference. Reservoir sampling (Knuth Algorithm R) ensures the
-// stored set is statistically unbiased regardless of run length.
-// Values ≤ 0 fall back to DefaultMaxBodySamples (200).
+// WithMaxBodySamples sets the per-endpoint reservoir cap for schema-inference
+// body samples (Knuth Algorithm R keeps the set unbiased). Values ≤ 0 fall back
+// to DefaultMaxBodySamples.
 func WithMaxBodySamples(n int) RecorderOption {
 	return func(r *DefaultRecorder) { r.maxBodySamples = n }
 }
 
-// WithMaxBodyBytes sets the per-endpoint byte budget for stored body samples.
-// Once an endpoint's stored bytes reach this limit, no further bodies (or
-// reservoir replacements) are accepted for that endpoint.
-// 0 means no byte-based limit; the reservoir sample count is the primary guard.
+// WithMaxBodyBytes sets the per-endpoint byte budget for stored body samples;
+// once reached, no further bodies (or reservoir replacements) are accepted.
+// 0 means no byte limit.
 func WithMaxBodyBytes(n int64) RecorderOption {
 	return func(r *DefaultRecorder) { r.maxBodyBytes = n }
 }

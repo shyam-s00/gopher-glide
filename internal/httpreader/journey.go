@@ -87,10 +87,8 @@ func GroupJourneys(specs []RequestSpec) []Journey {
 	return journeys
 }
 
-// Flatten concatenates every Journey's Specs back into a single ordered
-// slice, preserving declaration order. It bridges callers that have not yet
-// been migrated to execute Journeys directly — they continue to see the same
-// flat, ordered request list that ParseFile returned before Smart Detection.
+// Flatten concatenates every Journey's Specs back into one ordered slice, for
+// callers not yet migrated to execute Journeys directly.
 func Flatten(journeys []Journey) []RequestSpec {
 	total := 0
 	for _, j := range journeys {

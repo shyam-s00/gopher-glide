@@ -48,16 +48,9 @@ type CallLog struct {
 	Error      string
 }
 
-// Runner is the shared contract that every engine implementation must satisfy.
-//
-// It covers the full capability surface used by the TUI, headless renderer,
-// and CLI: execution control, live observability, and director-mode bias.
-// Any new engine (e.g. internal/engine/hive) must implement this interface
-// before it can be plugged in as a drop-in replacement for *Engine.
-//
-// Placing the interface here — alongside the shared types MetricsSnapshot,
-// CallLog, etc. — avoids a separate package and keeps the dependency graph
-// simple: hive imports engine for types and interface; engine never imports hive.
+// Runner is the contract every engine implementation must satisfy: execution
+// control, live observability and director-mode bias. It lives here with the
+// shared types (MetricsSnapshot, CallLog) so hive imports engine, not vice versa.
 type Runner interface {
 	// RunStages executes all configured stages sequentially.
 	// It blocks until all stages complete, the context is cancelled, or an

@@ -10,11 +10,8 @@ import (
 	"time"
 )
 
-// PruneOptions controls which snapshots SelectForPrune marks as deletion
-// candidates. All active filters are OR-combined — a snapshot is a candidate
-// if it matches any one of them.
-//
-// At least one filter must be active; validation is left to the caller.
+// PruneOptions selects deletion candidates for SelectForPrune; active filters are
+// OR-combined. At least one must be active — validation is the caller's job.
 type PruneOptions struct {
 	// KeepLast retains the N most-recent snapshots and marks all older ones as
 	// candidates. Zero means this filter is inactive.
@@ -28,10 +25,8 @@ type PruneOptions struct {
 	// candidate. Empty string means this filter is inactive.
 	Tag string
 
-	// IDs is an explicit set of 1-based snapshot IDs to delete.
-	// Empty slice means this filter is inactive.
-	// This is the hook used by the JetBrains Snap Explorer tool window to
-	// pass the user's multi-selection directly to the CLI.
+	// IDs is an explicit set of 1-based snapshot IDs to delete (empty = filter
+	// inactive); the JetBrains Snap Explorer passes its multi-selection here.
 	IDs []int
 
 	// Now is the reference time used for OlderThan comparisons.

@@ -37,13 +37,8 @@ const (
 	latencySampleSize = 4_096
 )
 
-// latencyBuf is a pre-allocated lock-free ring buffer for recording per-request
-// latencies as float64 millisecond values.
-//
-// Writers atomically claim a slot via n.Add(1) and store the value as its
-// IEEE-754 bit representation in the corresponding atomic.Uint64 cell.
-// Reads snapshot the count once, then load each cell independently — no lock
-// is ever held. Wrapping at capacity bounds memory use regardless of run length.
+// latencyBuf is a pre-allocated lock-free ring of float64 ms latencies. Writers
+// claim a slot with n.Add(1); readers snapshot n once and load cells independently.
 type latencyBuf struct {
 	buf []atomic.Uint64 // ring of float64 values stored as Float64bits
 	n   atomic.Int64    // total writes; pos = (n-1) % len(buf)
@@ -111,11 +106,8 @@ func (e *Engine) computeLatency() (min, max, p50, p95, p99 float64) {
 	return
 }
 
-// percentile returns the p-th percentile value from a sorted slice using
-// linear interpolation between adjacent ranks.
-//
-// p must be in [0, 100]. data must be sorted in ascending order.
-// Returns 0 for an empty slice.
+// percentile returns the p-th percentile (p in [0,100]) of ascending-sorted data
+// by linear interpolation, or 0 for an empty slice.
 func percentile(data []float64, p float64) float64 {
 	if len(data) == 0 {
 		return 0

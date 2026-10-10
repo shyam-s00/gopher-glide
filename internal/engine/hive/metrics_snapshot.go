@@ -2,13 +2,9 @@ package hive
 
 import "github.com/shyam-s00/gopher-glide/internal/engine"
 
-// GetMetrics returns a point-in-time snapshot of all engine counters,
-// latency percentiles, stage progress, and director-mode bias.
-//
-// The sharded counters are not read atomically as a set, so success+failure
-// may transiently differ from totalRequests by 1 (see the metrics type).
-//
-// Safe to call from any goroutine at any time.
+// GetMetrics returns a point-in-time snapshot of counters, latency percentiles,
+// stage progress and director bias. The sharded counters aren't read atomically
+// as a set (see the metrics type). Safe to call from any goroutine.
 func (e *Engine) GetMetrics() *engine.MetricsSnapshot {
 	// Read success and failure BEFORE total.
 	// Writers always call incTotalRequests before incSuccess/incFailure, so

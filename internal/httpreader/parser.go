@@ -8,10 +8,9 @@ import (
 	"strings"
 )
 
-// ParseFile reads a .http file, parses it into an ordered list of
-// RequestSpecs, and applies Smart Detection (GroupJourneys) to group stateful
-// @gg-export → {{var}} chains into Journeys. Requests that neither export nor
-// consume a chained variable are returned as their own single-step Journey.
+// ParseFile reads a .http file and groups it into Journeys via GroupJourneys:
+// chained @gg-export → {{var}} requests form multi-step Journeys, the rest stay
+// single-step.
 func ParseFile(path string) ([]Journey, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {

@@ -40,10 +40,8 @@ func NewDefaultSanitizer() *DefaultSanitizer {
 	return NewSanitizerWithHeaders(DefaultSensitiveHeaders)
 }
 
-// NewSanitizerWithExtraHeaders returns a DefaultSanitizer that strips
-// DefaultSensitiveHeaders plus any additional headers the caller provides.
-// Use this when you want the built-in defaults and need to add project-specific
-// headers on top (e.g. "X-Internal-Token", "X-Debug").
+// NewSanitizerWithExtraHeaders strips DefaultSensitiveHeaders plus the given
+// project-specific headers (e.g. "X-Internal-Token").
 func NewSanitizerWithExtraHeaders(extra ...string) *DefaultSanitizer {
 	merged := make([]string, len(DefaultSensitiveHeaders)+len(extra))
 	copy(merged, DefaultSensitiveHeaders)
@@ -51,10 +49,8 @@ func NewSanitizerWithExtraHeaders(extra ...string) *DefaultSanitizer {
 	return NewSanitizerWithHeaders(merged)
 }
 
-// NewSanitizerWithHeaders returns a DefaultSanitizer that strips exactly the
-// provided header names, replacing the default list entirely.
-// Names are normalised to canonical form so callers can pass them in any case
-// ("authorization", "AUTHORIZATION", etc.).
+// NewSanitizerWithHeaders strips exactly the given headers, replacing the default
+// list. Names are canonicalised, so any case works.
 func NewSanitizerWithHeaders(headers []string) *DefaultSanitizer {
 	m := make(map[string]struct{}, len(headers))
 	for _, h := range headers {

@@ -7,8 +7,7 @@ package hive
 //	go test -race ./internal/engine/hive/... -run Concurrent
 //
 // Every test here is designed to surface data races, invariant violations, and
-// deadlocks that only manifest under concurrent access. The suite mirrors the
-// legacy engine's engine_concurrent_test.go and adds Hive-specific cases.
+// deadlocks that only manifest under concurrent access.
 //
 // Coverage:
 //   - rpsWindow concurrent record + rate

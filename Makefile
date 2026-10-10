@@ -7,6 +7,7 @@
 ##   make release              → build-all + package each into dist/
 ##   make clean                → remove dist/ and local binary
 ##   make run                  → build and run with config.yaml
+##   make lint-comments        → fail on divider banners / private-plan refs in Go comments
 ##   make version              → print version info
 ##
 ## GoReleaser wrappers (requires: brew install goreleaser):
@@ -33,7 +34,7 @@ LDFLAGS := -s -w \
 
 # ── Targets ───────────────────────────────────────────────────────────────────
 
-.PHONY: all build build-all release clean run version \
+.PHONY: all build build-all release clean run version lint-comments \
         build-linux-amd64 \
         build-darwin-arm64 \
         build-windows-amd64 \
@@ -47,6 +48,22 @@ build:
 	@echo "→ Building $(BINARY) ($(VERSION)) for current platform..."
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
 	@echo "✓ $(BINARY) ready"
+
+# Divider banners and references to private planning docs don't belong in
+# comments — see CONTRIBUTING.md. The patterns are anchored to comment lines so
+# string literals and ASCII-art examples are not flagged.
+BANNER_RE := ^[[:space:]]*//[[:space:]]*──
+REF_RE    := //.*§|^[[:space:]]*//.*ignore/
+
+## lint-comments: fail on divider banners and private-plan references in Go comments
+lint-comments:
+	@bad=$$( { grep -rnE --include='*.go' '$(BANNER_RE)' cmd internal; \
+	           grep -rnE --include='*.go' '$(REF_RE)' cmd internal; } ); \
+	if [ -n "$$bad" ]; then \
+		echo "$$bad"; \
+		echo "✗ comment lint failed — see CONTRIBUTING.md"; exit 1; \
+	fi; \
+	echo "✓ comment lint passed"
 
 # ── Per-platform targets — called directly by GHA matrix build step ───────────
 

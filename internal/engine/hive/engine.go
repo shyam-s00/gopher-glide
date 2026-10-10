@@ -73,12 +73,9 @@ type Engine struct {
 // EngineOption is a functional option for New().
 type EngineOption func(*Engine)
 
-// New creates a Hive Engine with a default HTTP client and sane defaults.
-// Functional options are applied last and can override any default.
-//
-// The initial transport is built with buildTransport(1000) as a conservative
-// baseline. RunStages will rebuild it to match the actual peak RPS of the
-// test plan before the first request is dispatched.
+// New creates an Engine with a default HTTP client; options are applied last and
+// can override any default. RunStages re-tunes the initial transport (sized for
+// 1000 RPS) to the plan's peak RPS.
 func New(opts ...EngineOption) *Engine {
 	e := &Engine{
 		client: &http.Client{
@@ -122,11 +119,8 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 		return ErrNoStages
 	}
 
-	// Smart Detection: group the flat, ordered spec list into Journeys up
-	// front. Requests linked by an @gg-export → {{var}} chain become a
-	// single multi-step Journey sharing one ActorMemory; every other
-	// request becomes its own independent single-step Journey — so a
-	// purely stateless plan dispatches exactly as it did before.
+	// Smart Detection: requests linked by an @gg-export → {{var}} chain become one
+	// multi-step Journey; every other request is its own single-step Journey.
 	journeys := httpreader.GroupJourneys(specs)
 
 	isJourneyMode := false
@@ -191,11 +185,8 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	// rpsBias is deliberately not reset: a bias command can arrive before this
 	// point (stdin is read concurrently with engine start-up) and must survive.
 
-	// Re-allocate the latency ring buffer sized for this run.
-	// cap = peakRPS × ⌈totalDurationSeconds⌉  +  10 % headroom, minimum 1024.
-	// atomic.Pointer swap makes the replacement race-free: any concurrent
-	// computeLatency() reader atomically loads either the old or the new pointer
-	// — it can never observe a torn slice header.
+	// Sized for this run (peakRPS × duration + 10 %, min 1024). Swapping the
+	// atomic.Pointer keeps concurrent computeLatency readers race-free.
 	newBuf := newLatencyBuf(bufCap)
 	e.latBuf.Store(&newBuf)
 
@@ -222,14 +213,8 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 		e.isRunning.Store(false)
 	}()
 
-	// Rebuild the transport before every run so pool sizes are always tuned
-	// to the current test plan's peak RPS.
-	//
-	// Detection: the engine-owned client always has an *http.Transport (set
-	// by New() via buildTransport). A caller that injected their own client
-	// via WithHTTPClient will typically supply a different RoundTripper type
-	// (e.g. httptest's internal transport), so the type-assertion fails and
-	// we leave the custom client untouched.
+	// Re-tune the pool to this plan's peak RPS. Only the engine's own
+	// *http.Transport is rebuilt; a custom client from WithHTTPClient is left alone.
 	if _, ok := e.client.Transport.(*http.Transport); ok {
 		e.client.Transport = buildTransport(peakRPS)
 	}
@@ -283,10 +268,8 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	return err
 }
 
-// Run is the single-stage backward-compatibility wrapper.
-//
-// It builds a single-stage Config from targetRPS and duration, then delegates
-// to RunStages. All existing callers that used Run() continue to work unchanged.
+// Run is the single-stage wrapper: it builds a one-stage Config from targetRPS
+// and duration and delegates to RunStages.
 func (e *Engine) Run(ctx context.Context, targetRPS int, duration time.Duration, specs []httpreader.RequestSpec) error {
 	cfg := &config.Config{
 		ConfigSection: config.Section{TimeScale: 1.0},
@@ -294,14 +277,6 @@ func (e *Engine) Run(ctx context.Context, targetRPS int, duration time.Duration,
 	}
 	return e.RunStages(ctx, cfg, specs)
 }
-
-// IsRunning, GetStartTime, GetEndTime, GetElapsedTime are implemented in lifecycle.go.
-
-// GetMetrics is implemented in metrics_snapshot.go.
-
-// GetRecentLogs and GetRecentErrorLogs are implemented in calllog.go.
-
-// ApplyBias, GetBias, SetTargetRPS are implemented in director.go.
 
 // Ensure *Engine satisfies engine.Runner at compile time.
 var _ engine.Runner = (*Engine)(nil)
