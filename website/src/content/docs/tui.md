@@ -35,3 +35,9 @@ The TUI is highly optimized to ensure it doesn't interfere with the load test it
 ## Director Mode
 
 While a run is in progress, use `↑` / `↓` to apply a live **RPS bias** on top of the configured stage target. The bias accumulates (e.g., three `↑` presses = +15 RPS) and is shown in the TUI and reflected in the live metrics. The bias is applied on top of the LERP'd value — the stage plan continues to run unaffected.
+
+- **Where to look:** a brief `▲ +5 RPS` / `▼ -5 RPS` flashes in the director bar when you press a key, and a `BIAS +N RPS` badge stays there while the total is non-zero.
+- **When it lands:** the rate changes at the next one-second window, and never drops below 1 RPS. The keys only act while the test is running, and only in the terminal that's running the TUI.
+- **It's recorded:** every press is saved in the snapshot's `bias_events` (see [Manual bias & marks](/snap#manual-bias--marks-in-the-raw-file)), so a later `gg snap diff` can tell a biased run from a clean one.
+
+Running headless — in CI, from a script, or from another process? The same bias, plus `mark` and `stop`, is available over stdin; see [Driving a Run Live](/live-control).

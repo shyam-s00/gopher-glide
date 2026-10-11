@@ -147,9 +147,9 @@ The **Snaps** tree view in the panel sidebar lets you:
 
 ## 🎛 Live Control Protocol
 
-Both plugins already talk to `gg` over its headless heartbeat stream. As of v1.3, that stream is two-way: `gg --headless` accepts commands over stdin — `bias`, `mark`, `stop` — and replies inline, without killing the process. See [Live Control Protocol](/control-protocol) for the full spec. Live bias/mark/stop controls in the run dashboard are on the roadmap for both plugins, built directly on top of it.
+Both plugins already talk to `gg` over its headless heartbeat stream. As of v1.3, that stream is two-way: `gg --headless` accepts commands over stdin — `bias`, `mark`, `stop` — and replies inline, without killing the process. See [Driving a Run Live](/live-control) to try it by hand and the [Live Control Protocol](/control-protocol) for the full spec. Live bias/mark/stop controls in the run dashboard are on the roadmap for both plugins, built directly on top of it.
 
-**A note for whoever wires that up (or builds their own tooling on the protocol):** it carries a generic signed `amount` for bias, not a fixed ±5 step — the widget is a UI decision, not a protocol one. Default to a **stepper (± buttons)** for parity with the TUI's `↑`/`↓` feel; a slider is a reasonable follow-up using the exact same command, just **debounce drag events** (throttle to a few per second) — the engine only drains bias about once a second, so flooding it one command per pixel of drag will feel unresponsive.
+**A note for whoever wires that up (or builds their own tooling on the protocol):** it carries a generic signed `amount` for bias, not a fixed ±5 step — the widget is a UI decision, not a protocol one. Default to a **stepper (± buttons)** for parity with the TUI's `↑`/`↓` feel; a slider is a reasonable follow-up using the exact same command, just **debounce drag events** (throttle to a few per second) — the request rate only changes once a second, so one command per pixel of drag adds noise without adding precision.
 
 ---
 

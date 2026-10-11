@@ -5,7 +5,7 @@ description: "Drive a running gg process from stdin — bias, mark, and stop a h
 
 Headless mode used to be a one-way radio: `gg --headless` gave you a live heartbeat stream, but the only way to touch it was `Ctrl+C`. The **Live Control Protocol (LCP)** turns that into a two-way conversation — send commands in over stdin, get replies interleaved with the heartbeats out.
 
-This is the foundation live bias/mark/stop controls in the [JetBrains and VS Code plugins](/plugin) will build on. It's also directly scriptable today, no IDE required: pipe a file of commands at a headless run for scripted game days.
+This is the foundation live bias/mark/stop controls in the [JetBrains and VS Code plugins](/plugin) will build on. It's also directly usable today, no IDE required — type commands into a headless run, or script them. **New to this? Start with [Driving a Run Live](/live-control)**, a hands-on guide with a copy-paste example, the multi-terminal and container recipes, and troubleshooting. This page is the reference.
 
 > **v1.3 scope:** `bias`, `mark`, `stop`. More commands (`pause`/`resume`, `set-rps`, chaos toggles) are coming in later releases — see [Roadmap](https://github.com/shyam-s00/gopher-glide) for what's next. The protocol is versioned so old and new binaries/plugins stay compatible as that grows (see [Versioning & capabilities](#versioning--capabilities) below).
 
@@ -19,7 +19,7 @@ The listener is on by default in headless mode:
 gg config.yaml --headless --reporter json
 ```
 
-Type (or pipe) a command as a single line of JSON and press enter. To disable the listener entirely — locked-down CI, or a shell that forwards stdin somewhere else — pass `--control none`:
+Type (or pipe) a command as a single line of JSON and press enter. Commands are read from **the standard input of the `gg` process itself** — the terminal or pipe it was started in — so a command typed in a different terminal tab doesn't reach it (see [Where do commands go?](/live-control#-where-do-commands-go)). If stdin closes, the run is not affected: end-of-input is not a `stop`. To disable the listener entirely — locked-down CI, or a shell that forwards stdin somewhere else — pass `--control none`:
 
 ```bash
 gg config.yaml --headless --control none
@@ -57,7 +57,9 @@ Applies a signed delta on top of the current stage's target RPS — the same mec
 {"id":"c1","command":"bias","amount":5}
 ```
 
-`amount` must be a non-zero integer (positive or negative). The bias is cumulative — three `+5` commands add up to `+15`, exactly like pressing `↑` three times.
+`amount` must be a non-zero integer (positive or negative). The bias is cumulative — three `+5` commands add up to `+15`, exactly like pressing `↑` three times — and it rides on top of whatever the load profile is doing at that moment. No upper or lower bound is enforced by the protocol, but the effective rate never drops below 1 RPS.
+
+The `ack` comes back immediately and already includes the new cumulative value. The request rate itself changes at the next one-second window, so the next heartbeat or two shows the effect.
 
 ### `mark`
 
@@ -71,7 +73,7 @@ Drops a labeled, timestamped annotation into the run — useful for narrating a 
 
 ### `stop`
 
-Ends the run cleanly and immediately — same finalize path as `Ctrl+C`, but without killing the process. If `--snap` is set, the snapshot is still written, including any marks and bias applied before the stop.
+Ends the run cleanly — the snapshot is finalized exactly as for a run that completed on its own, and the process exits with status `0`. (`Ctrl+C` is different: it ends a run with an `interrupted` event.) If `--snap` is set, the snapshot is still written, including any marks and bias applied before the stop.
 
 ```json
 {"id":"c4","command":"stop"}
@@ -93,7 +95,7 @@ Every command produces exactly one reply, interleaved with the regular heartbeat
 
 - **`bias`** → `ack` on success (carries the cumulative value in the `bias` field, not just in `message`), `error` on a bad `amount`.
 - **`mark`** → the `mark` event **is** the reply — there's no separate `ack`.
-- **`stop`** → an immediate `ack` confirming receipt, then the run's terminal event fires once finalize completes: `stopped` (replacing `finished`) rather than a second reply.
+- **`stop`** → an immediate `ack` confirming receipt, then the run's terminal event fires once finalize completes: `stopped` (replacing `finished`) rather than a second reply. Like `finished`, it carries the final run statistics — also when `--snap` is on, in which case its `message` is the snapshot status line.
 
 A malformed or unparseable line still gets a reply — with no `id`/`command`, since neither could be recovered:
 
@@ -115,7 +117,7 @@ In `--reporter text` mode the same replies print as a human-readable line instea
 
 ## 💓 Heartbeat additions
 
-The regular heartbeat stream gains one field: `bias` (the cumulative Director bias, same value the `bias` command's `ack` reports). Nothing existing is removed or renamed.
+The regular heartbeat stream gains one field: `bias` (the cumulative Director bias, `0` if nothing has been applied). The `bias` command's `ack` carries the same cumulative value; no other event does, so read the running total from `heartbeat`. Nothing existing is removed or renamed.
 
 ```json
 {"time":"…","event":"heartbeat","stage":1,"total_stages":2,"target_rps":15,"actual_rps":14.8,"bias":5, …}
@@ -145,16 +147,24 @@ A tool built against v1.3 that talks to a future `gg` with more capabilities kee
 
 The protocol carries a generic signed `amount` on purpose — the widget is a plugin decision, not a protocol one. Our recommendation for v1.3: build a **stepper (± buttons)**, matching the TUI's feel and giving users exact parity with what they already know from the terminal.
 
-A slider is a perfectly reasonable follow-up using the exact same `bias` command — just **debounce drag events**. The engine drains bias commands about once a second; flooding it with one command per pixel of drag will silently drop most of them and feel unresponsive. Emit on drag-end, or throttle to a few times a second.
+A slider is a perfectly reasonable follow-up using the exact same `bias` command — just **debounce drag events**. Every command is applied and none are dropped, but the request rate only changes once a second, so one command per pixel of drag adds noise (and a long reply stream) without adding precision. Emit on drag-end, or throttle to a few times a second.
 
 ---
 
 ## 🎬 Scripted game days
 
-Because the listener just reads NDJSON off stdin, you don't need a plugin at all to script a run:
+Because the listener just reads NDJSON off stdin, you don't need a plugin to script a run. One thing to know first: **a file piped with `<` is consumed immediately**, so every line is applied at the start of the run — the format has no timestamps.
 
 ```bash
-gg config.yaml --headless < gameday-script.jsonl
+gg config.yaml --headless < gameday-script.jsonl     # all commands at t=0
 ```
 
-Where `gameday-script.jsonl` is any file of one command per line — bias up before a load spike, mark the moment you flip a feature flag, `stop` when you're done. Combine it with `--snap` and the resulting snapshot carries every mark and bias event you sent, so a later `gg snap diff` can tell a real regression apart from a human leaning on the RPS slider.
+To space commands out over time, feed them from a subshell with `sleep`s:
+
+```bash
+(sleep 30; echo '{"command":"bias","amount":50}'
+ sleep 60; echo '{"command":"mark","label":"flag flipped"}'
+ sleep 60; echo '{"command":"stop"}') | gg config.yaml --headless --reporter json --snap
+```
+
+Combine it with `--snap` and the resulting snapshot carries every mark and bias event you sent, so a later `gg snap diff` can tell a real regression apart from a human leaning on the RPS slider. For the multi-terminal and container recipes, see [Driving a Run Live](/live-control).

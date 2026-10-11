@@ -83,7 +83,13 @@ If a run was manually nudged — a live RPS bias via `↑`/`↓` in the TUI, or 
 - `bias_events` — the full timeline of manual RPS nudges: each entry's `amount`, the `cumulative` value at that point, and `elapsed_s`.
 - `final_bias` — the cumulative bias in effect when the run ended (`0` if nobody touched it).
 
-All three are additive — only present when `--snap` was set for that run — and today they're written to the file but not yet rendered by `gg snap view` or `gg snap diff`. Until that lands, `jq '.meta.bias_events, .meta.final_bias' your.snap` is the way to check whether a run was manually biased.
+All three are additive — only present when `--snap` was set for that run — and today they're written to the file but not yet rendered by `gg snap view` or `gg snap diff`. Until that lands, `jq '.meta.bias_events, .meta.final_bias' your.snap` is the way to check whether a run was manually biased. A run that got `+30` at 8 s and `-20` at 19 s with a mark in between looks like:
+
+```json
+{"final_bias":10,"marks":[{"label":"deploy-v2","elapsed_s":14.0}],"bias_events":[{"amount":30,"cumulative":30,"elapsed_s":8.0},{"amount":-20,"cumulative":10,"elapsed_s":19.0}]}
+```
+
+See [Driving a Run Live](/live-control) for how to produce one.
 
 ---
 

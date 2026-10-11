@@ -1,0 +1,142 @@
+---
+// Bump `release` and edit `items` for each release.
+const release = 'v1.3';
+const tagline = 'Live Control — steer a load test while it is running.';
+
+const items = [
+  {
+    icon: '🎛',
+    title: 'Drive a run live',
+    desc: 'Bias the request rate up or down, drop labeled markers, and stop cleanly — with the arrow keys in the TUI, or as JSON commands over stdin in headless mode.',
+    href: '/live-control',
+    cta: 'Try it in two minutes',
+  },
+  {
+    icon: '📸',
+    title: 'Snapshots remember',
+    desc: 'Every bias nudge and mark is saved in the snapshot (final_bias, bias_events, marks), so you can tell a real regression from a human leaning on the throttle.',
+    href: '/snap#manual-bias--marks-in-the-raw-file',
+    cta: 'See what is recorded',
+  },
+  {
+    icon: '🤝',
+    title: 'A protocol for your tools',
+    desc: 'The Live Control Protocol is versioned NDJSON over stdin with a capability handshake — plugins and scripts can integrate without guessing versions.',
+    href: '/control-protocol',
+    cta: 'Read the reference',
+  },
+  {
+    icon: '🧩',
+    title: 'Small, compatible additions',
+    desc: 'A --control flag, a bias field on every heartbeat, and new ack, mark and stopped events. Existing tools keep working unchanged.',
+    href: '/cli-reference#headless-mode--tui-output',
+    cta: 'CLI reference',
+  },
+];
+---
+<section class="whats-new-section" aria-labelledby="whats-new-title">
+  <div class="whats-new-header">
+    <span class="whats-new-badge">New in {release}</span>
+    <h2 class="whats-new-title" id="whats-new-title">What's new</h2>
+    <p class="whats-new-subtitle">{tagline}</p>
+  </div>
+  <div class="whats-new-grid">
+    {items.map((item) => (
+      <a href={item.href} class="whats-new-card">
+        <div class="whats-new-icon" aria-hidden="true">{item.icon}</div>
+        <h3 class="whats-new-card-title">{item.title}</h3>
+        <p class="whats-new-card-desc">{item.desc}</p>
+        <span class="whats-new-cta">{item.cta} &rarr;</span>
+      </a>
+    ))}
+  </div>
+</section>
+
+<style>
+  .whats-new-section {
+    max-width: 900px;
+    margin: 0 auto 2.5rem auto;
+    padding: 0 1.5rem;
+  }
+  .whats-new-header {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+  .whats-new-badge {
+    display: inline-block;
+    padding: 0.2rem 0.75rem;
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--sl-color-accent);
+    border-radius: 999px;
+    background: var(--gg-glass-bg);
+    color: var(--sl-color-accent);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .whats-new-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--sl-color-text);
+    margin: 0 0 0.5rem 0;
+  }
+  .whats-new-subtitle {
+    color: var(--sl-color-gray-2);
+    font-size: 1rem;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+  .whats-new-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+  .whats-new-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 1.4rem 1.25rem;
+    background: var(--gg-glass-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--gg-glass-border);
+    border-radius: 14px;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    box-shadow: 0 4px 20px var(--gg-glass-shadow);
+  }
+  .whats-new-card:hover,
+  .whats-new-card:focus-visible {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 40px var(--gg-glass-shadow-hover);
+    border-color: var(--sl-color-accent);
+  }
+  .whats-new-icon {
+    font-size: 1.75rem;
+    line-height: 1;
+  }
+  .whats-new-card-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--sl-color-text);
+    margin: 0.25rem 0 0 0;
+  }
+  .whats-new-card-desc {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--sl-color-gray-2);
+    margin: 0 0 0.75rem 0;
+  }
+  .whats-new-cta {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--sl-color-accent);
+    margin-top: auto;
+  }
+  @media (max-width: 640px) {
+    .whats-new-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
