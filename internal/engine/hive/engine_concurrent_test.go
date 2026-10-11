@@ -7,8 +7,7 @@ package hive
 //	go test -race ./internal/engine/hive/... -run Concurrent
 //
 // Every test here is designed to surface data races, invariant violations, and
-// deadlocks that only manifest under concurrent access. The suite mirrors the
-// legacy engine's engine_concurrent_test.go and adds Hive-specific cases.
+// deadlocks that only manifest under concurrent access.
 //
 // Coverage:
 //   - rpsWindow concurrent record + rate
@@ -23,7 +22,7 @@ package hive
 //   - IsRunning clean transition
 //   - GetMetrics latency-snapshot consistency (p99 ≥ p50)
 //   - Multiple specs at high RPS — counter invariant holds
-//   - Context cancel racing with bias drain — no deadlock
+//   - Context cancel racing with bias updates — no deadlock
 
 import (
 	"context"
@@ -37,8 +36,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 )
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 // slowHiveSrv starts a test server that optionally delays before responding.
 func slowHiveSrv(t *testing.T, statusCode int, delay time.Duration) *httptest.Server {
@@ -70,8 +67,6 @@ func hiveStage(dur time.Duration, rps int) *config.Config {
 	}
 }
 
-// ── 1. rpsWindow: concurrent record + rate ────────────────────────────────────
-
 func TestConcurrent_RpsWindow_RecordAndRate(t *testing.T) {
 	var w rpsWindow
 	const goroutines = 50
@@ -98,8 +93,6 @@ func TestConcurrent_RpsWindow_RecordAndRate(t *testing.T) {
 	}
 	wg.Wait()
 }
-
-// ── 2. logCall: concurrent writes + reads ─────────────────────────────────────
 
 func TestConcurrent_LogCall_ConcurrentWritesAndReads(t *testing.T) {
 	e := New()
@@ -134,8 +127,6 @@ func TestConcurrent_LogCall_ConcurrentWritesAndReads(t *testing.T) {
 	}
 }
 
-// ── 3. logCall: error buffer never exceeds max ────────────────────────────────
-
 func TestConcurrent_LogCall_ErrorBuffer_NeverExceedsMax(t *testing.T) {
 	e := New()
 	e.maxLogs = 20
@@ -160,13 +151,60 @@ func TestConcurrent_LogCall_ErrorBuffer_NeverExceedsMax(t *testing.T) {
 	}
 }
 
-// ── 4. latencies slice: concurrent appends + computeLatency reads ─────────────
-
+// Writers wrap the default 1024-slot ring while readers poll computeLatency
+// and GetMetrics. Mid-run an unwritten slot may read as 0 (documented), so only
+// ordering and the upper bound are checked live; after the writers finish the
+// ring is full and the range is strict.
 func TestConcurrent_Latencies_ConcurrentAppends(t *testing.T) {
-	t.Skip("latency write path not yet implemented")
-}
+	const writers, writesEach, readers = 8, 200, 4 // 1600 writes > 1024 slots
+	const lo, hi = 1, 50                           // ms
 
-// ── 5. GetMetrics counter invariant during a live run ─────────────────────────
+	e := New()
+	stop := make(chan struct{})
+	var rwg, wwg sync.WaitGroup
+	for r := 0; r < readers; r++ {
+		rwg.Add(1)
+		go func() {
+			defer rwg.Done()
+			for {
+				minL, maxL, p50, p95, p99 := e.computeLatency()
+				if !(0 <= minL && minL <= p50 && p50 <= p95 && p95 <= p99 && p99 <= maxL && maxL <= hi) {
+					t.Errorf("bad snapshot: min=%v p50=%v p95=%v p99=%v max=%v", minL, p50, p95, p99, maxL)
+				}
+				if m := e.GetMetrics(); m.MaxLatency > hi {
+					t.Errorf("GetMetrics MaxLatency %v above %d ms", m.MaxLatency, hi)
+				}
+				select {
+				case <-stop:
+					return
+				default:
+					time.Sleep(100 * time.Microsecond)
+				}
+			}
+		}()
+	}
+	for w := 0; w < writers; w++ {
+		wwg.Add(1)
+		go func(id int) {
+			defer wwg.Done()
+			for i := 0; i < writesEach; i++ {
+				ms := lo + (id+i)%(hi-lo+1)
+				e.recordLatency(id%numShards, time.Duration(ms)*time.Millisecond)
+			}
+		}(w)
+	}
+	wwg.Wait()
+	close(stop)
+	rwg.Wait()
+
+	if got := e.latBuf.Load().n.Load(); got != writers*writesEach {
+		t.Errorf("writes recorded = %d, want %d", got, writers*writesEach)
+	}
+	minL, maxL, _, _, _ := e.computeLatency()
+	if minL < lo || maxL > hi {
+		t.Errorf("full ring out of range: min=%v max=%v, want within [%d, %d]", minL, maxL, lo, hi)
+	}
+}
 
 func TestConcurrent_GetMetrics_DuringRun(t *testing.T) {
 	srv := slowHiveSrv(t, 200, 0)
@@ -210,8 +248,6 @@ func TestConcurrent_GetMetrics_DuringRun(t *testing.T) {
 	wg.Wait()
 }
 
-// ── 6. Mixed-response counter invariant after run ─────────────────────────────
-
 func TestConcurrent_CounterInvariant_MixedResponses(t *testing.T) {
 	var reqCount atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -236,8 +272,6 @@ func TestConcurrent_CounterInvariant_MixedResponses(t *testing.T) {
 		t.Error("expected requests to be sent")
 	}
 }
-
-// ── 7. activeActors never exceeds spawned count ───────────────────────────────
 
 func TestConcurrent_ActiveActors_NeverExceedsSpawned(t *testing.T) {
 	// Slow server keeps actors alive long enough to observe concurrency.
@@ -290,19 +324,12 @@ func TestConcurrent_ActiveActors_NeverExceedsSpawned(t *testing.T) {
 	}
 }
 
-// ── 8. ApplyBias: many concurrent senders, all deltas absorbed ────────────────
-
 func TestConcurrent_ApplyBias_ManySenders(t *testing.T) {
 	srv := slowHiveSrv(t, 200, 0)
 	e := New()
-	// 2.5-second run: the Queen fires its 1s heartbeat at t≈1s and t≈2s,
-	// calling drainBias() each time. We send exactly 15 deltas total —
-	// safely below biasCh's capacity of 16 — so no sends are dropped and
-	// after the first drain all 15 are reflected in rpsBias.
 	cfg := hiveStage(2500*time.Millisecond, 5)
 
-	// 5 goroutines × 3 sends = 15 total (< biasCh cap 16).
-	// All sends complete within the first ~100ms, well before the 1s Queen tick.
+	// 5 goroutines × 3 sends = 15 total.
 	const biasSenders = 5
 	const biasEach = 3
 
@@ -326,16 +353,13 @@ func TestConcurrent_ApplyBias_ManySenders(t *testing.T) {
 	wg.Wait()
 	<-runDone
 
-	// All 15 deltas must be absorbed: they all fit in biasCh (cap=16) and
-	// the Queen drains the channel on its first 1-second heartbeat tick.
+	// All 15 deltas must be absorbed.
 	got := e.GetBias()
 	want := biasSenders * biasEach
 	if got != want {
-		t.Errorf("bias: want %d, got %d (some deltas dropped — check biasCh cap vs send count)", want, got)
+		t.Errorf("bias: want %d, got %d (some deltas lost)", want, got)
 	}
 }
-
-// ── 9. Round-robin: all specs receive requests under concurrency ──────────────
 
 func TestConcurrent_RoundRobin_AllSpecsReceiveRequests(t *testing.T) {
 	const numSpecs = 3
@@ -372,8 +396,6 @@ func TestConcurrent_RoundRobin_AllSpecsReceiveRequests(t *testing.T) {
 	}
 }
 
-// ── 10. Log buffer: no panic on concurrent eviction ──────────────────────────
-
 func TestConcurrent_LogBuffer_NoPanicOnEviction(t *testing.T) {
 	e := New()
 	e.maxLogs = 10 // tiny cap forces frequent eviction
@@ -397,8 +419,6 @@ func TestConcurrent_LogBuffer_NoPanicOnEviction(t *testing.T) {
 	}
 	wg.Wait()
 }
-
-// ── 11. IsRunning: clean false-after-done transition ─────────────────────────
 
 func TestConcurrent_IsRunning_CleanTransition(t *testing.T) {
 	srv := slowHiveSrv(t, 200, 0)
@@ -431,8 +451,6 @@ func TestConcurrent_IsRunning_CleanTransition(t *testing.T) {
 		t.Error("IsRunning() returned true after RunStages completed")
 	}
 }
-
-// ── 12. GetMetrics latency snapshot consistency ───────────────────────────────
 
 func TestConcurrent_GetMetrics_LatencySnapshot(t *testing.T) {
 	srv := slowHiveSrv(t, 200, 2*time.Millisecond)
@@ -470,8 +488,6 @@ func TestConcurrent_GetMetrics_LatencySnapshot(t *testing.T) {
 	wg.Wait()
 }
 
-// ── 13. Multiple specs at high RPS — counter invariant ───────────────────────
-
 func TestConcurrent_MultipleSpecs_HighRPS(t *testing.T) {
 	srv := slowHiveSrv(t, 200, 0)
 	e := New()
@@ -493,9 +509,7 @@ func TestConcurrent_MultipleSpecs_HighRPS(t *testing.T) {
 	}
 }
 
-// ── 14. Context cancel during bias drain — no deadlock ───────────────────────
-
-func TestConcurrent_CancelDuringBiasDrain_NoDeadlock(t *testing.T) {
+func TestConcurrent_CancelDuringBias_NoDeadlock(t *testing.T) {
 	srv := slowHiveSrv(t, 200, 0)
 	e := New()
 	cfg := hiveStage(10*time.Second, 20) // long stage so cancel fires mid-run

@@ -48,19 +48,10 @@ type CallLog struct {
 	Error      string
 }
 
-// Runner is the shared contract that every engine implementation must satisfy.
-//
-// It covers the full capability surface used by the TUI, headless renderer,
-// and CLI: execution control, live observability, and director-mode bias.
-// Any new engine (e.g. internal/engine/hive) must implement this interface
-// before it can be plugged in as a drop-in replacement for *Engine.
-//
-// Placing the interface here — alongside the shared types MetricsSnapshot,
-// CallLog, etc. — avoids a separate package and keeps the dependency graph
-// simple: hive imports engine for types and interface; engine never imports hive.
+// Runner is the contract every engine implementation must satisfy: execution
+// control, live observability and director-mode bias. It lives here with the
+// shared types (MetricsSnapshot, CallLog) so hive imports engine, not vice versa.
 type Runner interface {
-	// ── Execution ────────────────────────────────────────────────────────────
-
 	// RunStages executes all configured stages sequentially.
 	// It blocks until all stages complete, the context is cancelled, or an
 	// unrecoverable error occurs.
@@ -69,8 +60,6 @@ type Runner interface {
 	// Run is the single-stage convenience wrapper kept for backward
 	// compatibility. Implementations should delegate to RunStages internally.
 	Run(ctx context.Context, targetRPS int, duration time.Duration, specs []httpreader.RequestSpec) error
-
-	// ── Lifecycle ────────────────────────────────────────────────────────────
 
 	// IsRunning reports whether RunStages is currently active.
 	IsRunning() bool
@@ -87,8 +76,6 @@ type Runner interface {
 	// RunStages call began. Returns 0 if the engine has not started yet.
 	GetElapsedTime() float64
 
-	// ── Observability ────────────────────────────────────────────────────────
-
 	// GetMetrics returns a point-in-time snapshot of all engine counters and
 	// latency percentiles. Safe to call from any goroutine at any time.
 	GetMetrics() *MetricsSnapshot
@@ -100,8 +87,6 @@ type Runner interface {
 	// GetRecentErrorLogs returns up to count of the most recent call log
 	// entries that resulted in an HTTP error or transport failure.
 	GetRecentErrorLogs(count int) []CallLog
-
-	// ── Director / bias controls ─────────────────────────────────────────────
 
 	// ApplyBias sends a cumulative RPS delta (e.g. +5 or -5) to the running
 	// stage. Non-blocking; safe to call from the TUI event loop.

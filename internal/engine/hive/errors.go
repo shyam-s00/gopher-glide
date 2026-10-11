@@ -3,9 +3,6 @@ package hive
 import "errors"
 
 var (
-	// ErrNotImplemented is returned by methods that are not yet wired up.
-	ErrNotImplemented = errors.New("hive: not implemented")
-
 	// ErrNoRequests is returned by RunStages when the spec list is empty.
 	ErrNoRequests = errors.New("hive: no request specs provided")
 

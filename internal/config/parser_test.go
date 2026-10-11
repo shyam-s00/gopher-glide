@@ -17,8 +17,6 @@ func writeTemp(t *testing.T, dir, name, content string) string {
 	return path
 }
 
-// ── Load ──────────────────────────────────────────────────────────────────────
-
 func TestLoad_ValidConfig(t *testing.T) {
 	dir := t.TempDir()
 	yaml := `
@@ -159,8 +157,6 @@ func TestLoad_InvalidYAML(t *testing.T) {
 	}
 }
 
-// ── Validate — Section fields ─────────────────────────────────────────────────
-
 func TestValidate_MissingHTTPFile(t *testing.T) {
 	cfg := &Config{
 		ConfigSection: Section{BreakerPct: 10},
@@ -255,8 +251,6 @@ func TestValidate_TimeScaleZeroIsValid(t *testing.T) {
 		t.Errorf("expected no error for time_scale=0, got %v", err)
 	}
 }
-
-// ── Validate — Stages ─────────────────────────────────────────────────────────
 
 func TestValidate_NoStages(t *testing.T) {
 	cfg := &Config{
@@ -360,8 +354,6 @@ func TestValidate_FullMultiStageConfig(t *testing.T) {
 	}
 }
 
-// ── Stage.Label ───────────────────────────────────────────────────────────────
-
 func TestStageLabel_UsesNameWhenSet(t *testing.T) {
 	s := Stage{Name: "My Custom Stage", Duration: 30 * time.Second, TargetRPS: 50}
 	if got := s.Label(0); got != "My Custom Stage" {
@@ -403,8 +395,6 @@ func TestStageLabel_InferRampDownPartial(t *testing.T) {
 		t.Errorf("expected Ramp Down for decreasing target, got %q", got)
 	}
 }
-
-// ── Config helpers ─────────────────────────────────────────────────────────────
 
 func TestTotalDuration_RealTime(t *testing.T) {
 	cfg := &Config{

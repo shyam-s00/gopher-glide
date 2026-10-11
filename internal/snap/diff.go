@@ -2,8 +2,6 @@ package snap
 
 import "sort"
 
-// ── Public types ──────────────────────────────────────────────────────────────
-
 // DiffResult is the complete behavioral comparison between two snapshots.
 // Endpoints are sorted deterministically by ID so output is stable across runs.
 type DiffResult struct {
@@ -137,8 +135,6 @@ func DefaultDiffOptions() DiffOptions {
 	}
 }
 
-// ── Engine ────────────────────────────────────────────────────────────────────
-
 // Diff compares baseline and current snapshots using opts as regression
 // thresholds. The returned DiffResult contains one EndpointDiff per unique
 // endpoint ID across both snapshots, sorted alphabetically by ID.
@@ -183,8 +179,6 @@ func Diff(baseline, current *Snapshot, opts DiffOptions) DiffResult {
 
 	return result
 }
-
-// ── Internal helpers ──────────────────────────────────────────────────────────
 
 func indexEndpoints(eps []EndpointSnap) map[string]EndpointSnap {
 	m := make(map[string]EndpointSnap, len(eps))
@@ -332,11 +326,8 @@ func diffSchema(base, curr *SchemaSnapshot, opts DiffOptions) []FieldChange {
 	return changes
 }
 
-// calcVerdict computes the overall DiffVerdict for a single endpoint diff.
-//
-// Escalation ladder (highest wins):
-//
-//	PASS → WARN → REGRESSION
+// calcVerdict computes the overall verdict for one endpoint diff; the highest
+// escalation wins (PASS → WARN → REGRESSION).
 func calcVerdict(d EndpointDiff, opts DiffOptions) DiffVerdict {
 	verdict := VerdictPass
 

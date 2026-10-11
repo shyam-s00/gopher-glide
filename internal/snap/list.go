@@ -9,10 +9,9 @@ type SnapSummary struct {
 	EndpointCount int
 }
 
-// ListAll enumerates every .snap file in dir (via List) and deserialises each
-// one to populate the richer SnapSummary fields.
-// Files that cannot be deserialised are still included with zero numeric
-// fields so a single corrupt file does not break the whole listing.
+// ListAll deserialises every .snap in dir to fill SnapSummary. Files that fail to
+// deserialise are still listed (zero numeric fields) so one corrupt file doesn't
+// break the listing.
 func ListAll(dir string) ([]SnapSummary, error) {
 	infos, err := List(dir)
 	if err != nil {

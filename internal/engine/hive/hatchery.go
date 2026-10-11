@@ -8,8 +8,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 )
 
-// ── Hatchery constants ────────────────────────────────────────────────────────
-
 // hatcheryTick is the micro-batch dispatch interval.
 //
 // Using a fixed 10 ms tick rather than per-Actor sleep sidesteps the OS
@@ -40,8 +38,6 @@ const maxActiveActors = 10_000
 // value is reused between recomputations.
 const backpressureCheckInterval = 100 * time.Millisecond
 
-// ── hatchery ─────────────────────────────────────────────────────────────────
-
 // hatchery is the Smooth Dispatcher. It reads SpawnManifests from the Queen
 // and spreads the requested number of Actor goroutines evenly across the
 // manifest's Duration window using micro-batch ticks.
@@ -66,10 +62,8 @@ type hatchery struct {
 	cachedP50Ms      float64
 }
 
-// run reads SpawnManifests from manifestCh and dispatches Actors for each.
-//
-// It blocks until ctx is cancelled or manifestCh is closed. It is launched
-// as a goroutine by RunStages and must return promptly on context cancellation.
+// run dispatches Actors for each manifest from manifestCh. It returns promptly
+// when ctx is cancelled or manifestCh is closed.
 func (h *hatchery) run(
 	ctx context.Context,
 	manifestCh <-chan SpawnManifest,
@@ -146,15 +140,9 @@ func (h *hatchery) dispatch(
 			batch++
 		}
 
-		// Evaluate Little's Law Backpressure (Layer 1).
-		// Expected concurrency = TargetRPS * p50_latency_seconds
-		//
-		// p50 is recomputed at most once per backpressureCheckInterval —
-		// see its doc comment for why per-tick recomputation is wasteful.
-		//
-		// tripMu serializes the cache update and trip-state machine: dispatch
-		// is normally single-goroutine, but tripMu also makes concurrent
-		// dispatch (e.g. from tests) race-free.
+		// Little's Law backpressure: expected concurrency = TargetRPS × p50 latency.
+		// p50 is cached for backpressureCheckInterval; tripMu guards the cache and trip
+		// state so concurrent dispatch (tests) stays race-free.
 		h.tripMu.Lock()
 		now := time.Now()
 		if now.Sub(h.lastLatencyCheck) >= backpressureCheckInterval {
@@ -205,10 +193,9 @@ func (h *hatchery) dispatch(
 		h.tripMu.Unlock()
 
 		for i := 0; i < batch && spawned < count; i++ {
-			// MaxActors safeguard: if the host is already saturated with
-			// parked/in-flight Actors, skip this spawn rather than pile on
-			// more goroutines. Loop counters still advance so the Hatchery
-			// keeps pace with the manifest instead of stalling on a full tick.
+			// MaxActors safeguard: when the host is saturated, drop this spawn (counted as
+			// dropped) but still advance the loop counters so the Hatchery keeps pace with
+			// the manifest.
 			if int(h.e.activeActors.Load()) >= effectiveCeiling {
 				shard := *spawnIdx % numShards
 				h.e.counters.incDropped(shard)
@@ -219,13 +206,8 @@ func (h *hatchery) dispatch(
 
 			shard := *spawnIdx % numShards
 
-			// Round-robin across Journeys using the monotonic spawn counter:
-			// Actor 0 gets journeys[0], Actor 1 gets journeys[1], etc.,
-			// wrapping back to journeys[0] once every Journey has been
-			// assigned once. Each Actor then executes its entire Journey
-			// (all specs in order) with its own private ActorMemory —
-			// variables extracted from step N are injected into step N+1.
-			// A single-step Journey is behaviourally identical to the old
+			// Round-robin Journeys by spawn counter; each Actor runs its whole Journey
+			// with its own ActorMemory. A single-step Journey behaves like the old
 			// stateless single-request model.
 			journeyIdx := *spawnIdx % len(journeys)
 			steps := journeys[journeyIdx].Specs

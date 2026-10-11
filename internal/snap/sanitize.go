@@ -2,8 +2,6 @@ package snap
 
 import "net/http"
 
-// ── Sanitizer interface ───────────────────────────────────────────────────────
-
 // Sanitizer cleans a RecordEntry before it is accumulated by the recorder.
 // Implementations must be safe for concurrent use (called from the drain
 // goroutine, but only one goroutine ever calls it).
@@ -11,16 +9,12 @@ type Sanitizer interface {
 	Sanitize(entry RecordEntry) RecordEntry
 }
 
-// ── NoopSanitizer ─────────────────────────────────────────────────────────────
-
 // NoopSanitizer passes entries through unchanged.
 // Use it in tests when sanitization is not the concern, or to explicitly
 // disable scrubbing.
 type NoopSanitizer struct{}
 
 func (NoopSanitizer) Sanitize(entry RecordEntry) RecordEntry { return entry }
-
-// ── DefaultSanitizer ─────────────────────────────────────────────────────────
 
 // DefaultSensitiveHeaders is the out-of-the-box set of headers that are
 // stripped from every RecordEntry before it is accumulated.
@@ -46,10 +40,8 @@ func NewDefaultSanitizer() *DefaultSanitizer {
 	return NewSanitizerWithHeaders(DefaultSensitiveHeaders)
 }
 
-// NewSanitizerWithExtraHeaders returns a DefaultSanitizer that strips
-// DefaultSensitiveHeaders plus any additional headers the caller provides.
-// Use this when you want the built-in defaults and need to add project-specific
-// headers on top (e.g. "X-Internal-Token", "X-Debug").
+// NewSanitizerWithExtraHeaders strips DefaultSensitiveHeaders plus the given
+// project-specific headers (e.g. "X-Internal-Token").
 func NewSanitizerWithExtraHeaders(extra ...string) *DefaultSanitizer {
 	merged := make([]string, len(DefaultSensitiveHeaders)+len(extra))
 	copy(merged, DefaultSensitiveHeaders)
@@ -57,10 +49,8 @@ func NewSanitizerWithExtraHeaders(extra ...string) *DefaultSanitizer {
 	return NewSanitizerWithHeaders(merged)
 }
 
-// NewSanitizerWithHeaders returns a DefaultSanitizer that strips exactly the
-// provided header names, replacing the default list entirely.
-// Names are normalised to canonical form so callers can pass them in any case
-// ("authorization", "AUTHORIZATION", etc.).
+// NewSanitizerWithHeaders strips exactly the given headers, replacing the default
+// list. Names are canonicalised, so any case works.
 func NewSanitizerWithHeaders(headers []string) *DefaultSanitizer {
 	m := make(map[string]struct{}, len(headers))
 	for _, h := range headers {

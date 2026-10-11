@@ -9,8 +9,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/profile"
 )
 
-// ── RenderASCIIChart ──────────────────────────────────────────────────────────
-
 func TestRenderASCIIChart_EmptyStages(t *testing.T) {
 	got := profile.RenderASCIIChart(nil)
 	if got != "" {

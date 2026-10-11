@@ -28,28 +28,20 @@ type Section struct {
 	ProfileScale float64 `yaml:"-"`
 }
 
-// SnapSection holds test-plan-level snap settings that control memory usage
-// and schema inference quality.
-//
-// All fields are optional — omitting the snap: block from config.yaml causes
-// the application defaults to apply. CLI flags always take precedence over
-// values set here, which in turn take precedence over the hard defaults.
+// SnapSection holds the optional snap: settings (memory use and schema-inference
+// quality). Precedence: CLI flags, then these values, then the hard defaults.
 type SnapSection struct {
 	// SampleRate is the fraction of responses whose body is retained for
 	// schema inference. Valid range: 0.0–1.0.
 	// 0 means "not set" — the application default (0.05) will be used.
 	SampleRate float64 `yaml:"sample_rate"`
 
-	// MaxSamples is the per-endpoint reservoir cap for body samples used in
-	// schema inference. Reservoir sampling ensures the set is statistically
-	// unbiased regardless of when during the run bodies were collected.
-	// 0 means "not set" — the application default (200) will be used.
+	// MaxSamples is the per-endpoint reservoir cap for schema-inference body samples
+	// (reservoir sampling keeps the set unbiased). 0 means unset: use the default.
 	MaxSamples int `yaml:"max_samples"`
 
-	// MaxBodyKB is the per-endpoint byte budget for stored body samples, in
-	// kilobytes. Once the budget is reached no further bodies are stored for
-	// that endpoint. 0 means no byte-based limit (MaxSamples is the primary
-	// guard). Default: 0.
+	// MaxBodyKB is the per-endpoint byte budget for stored body samples, in KB; once
+	// reached no more bodies are stored. 0 means no byte limit (MaxSamples guards).
 	MaxBodyKB int `yaml:"max_body_kb"`
 }
 

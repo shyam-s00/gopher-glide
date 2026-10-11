@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-
 func specGET(url string) RequestSpec {
 	return RequestSpec{Method: http.MethodGet, URL: url, Headers: make(http.Header)}
 }
@@ -19,8 +17,6 @@ func specWithExport(url, varName, pattern string) RequestSpec {
 		Exports: []ExportDirective{{VarName: varName, Engine: ExportEngineJSONPath, Pattern: pattern}},
 	}
 }
-
-// ── GroupJourneys ─────────────────────────────────────────────────────────────
 
 func TestGroupJourneys_AllIndependent_FormOwnSingleStepJourneys(t *testing.T) {
 	specs := []RequestSpec{
@@ -154,8 +150,6 @@ func TestGroupJourneys_EmptyInput_ReturnsEmpty(t *testing.T) {
 	}
 }
 
-// ── Flatten ───────────────────────────────────────────────────────────────────
-
 func TestFlatten_RoundTripsToOriginalOrder(t *testing.T) {
 	specs := []RequestSpec{
 		specGET("https://api.example.com/a"),
@@ -183,8 +177,6 @@ func TestFlatten_EmptyJourneys_ReturnsEmpty(t *testing.T) {
 		t.Fatalf("expected empty slice, got %d entries", len(flat))
 	}
 }
-
-// ── ParseFile + Smart Detection (integration) ────────────────────────────────
 
 func TestParseFile_AppliesSmartDetection_MixedFile(t *testing.T) {
 	content := `### Health

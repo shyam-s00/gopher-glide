@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// ── ToHTTPRequest — basic method & URL ───────────────────────────────────────
-
 func TestToHTTPRequest_GETNoBody(t *testing.T) {
 	spec := &RequestSpec{
 		Method:  "GET",
@@ -50,8 +48,6 @@ func TestToHTTPRequest_POSTWithBody(t *testing.T) {
 	}
 }
 
-// ── ToHTTPRequest — headers are copied ───────────────────────────────────────
-
 func TestToHTTPRequest_HeadersCopied(t *testing.T) {
 	spec := &RequestSpec{
 		Method:  "GET",
@@ -72,8 +68,6 @@ func TestToHTTPRequest_HeadersCopied(t *testing.T) {
 		t.Errorf("expected X-Request-ID=gg-001, got %s", req.Header.Get("X-Request-ID"))
 	}
 }
-
-// ── ToHTTPRequest — variable substitution in URL ─────────────────────────────
 
 func TestToHTTPRequest_VarSubstitutionInURL(t *testing.T) {
 	spec := &RequestSpec{
@@ -197,8 +191,6 @@ func TestToHTTPRequest_EmptyVarsMap(t *testing.T) {
 	}
 }
 
-// ── ToHTTPRequest — invalid URL ───────────────────────────────────────────────
-
 func TestToHTTPRequest_InvalidURL(t *testing.T) {
 	spec := &RequestSpec{
 		Method:  "GET",
@@ -210,8 +202,6 @@ func TestToHTTPRequest_InvalidURL(t *testing.T) {
 		t.Fatal("expected error for invalid URL, got nil")
 	}
 }
-
-// ── Round-trip: Parse → ToHTTPRequest ────────────────────────────────────────
 
 func TestRoundTrip_ParseThenToHTTPRequest(t *testing.T) {
 	content := `### Create Post
@@ -281,8 +271,6 @@ X-Trace-ID: {{traceId}}
 		t.Errorf("expected X-Trace-ID=trace-abc, got %s", req.Header.Get("X-Trace-ID"))
 	}
 }
-
-// ── Dynamic placeholders ──────────────────────────────────────────────────────
 
 var uuidRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 var uuidFindRE = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}`)

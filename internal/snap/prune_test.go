@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 // days returns a UTC time that is n days before a fixed reference point.
 // Using a fixed reference makes test assertions deterministic.
 var refNow = time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
@@ -35,8 +33,6 @@ func candidatePaths(cs []PruneCandidate) []string {
 	}
 	return ps
 }
-
-// ── SelectForPrune tests ──────────────────────────────────────────────────────
 
 func TestSelectForPrune_Empty(t *testing.T) {
 	result := SelectForPrune(nil, PruneOptions{KeepLast: 3})
@@ -191,8 +187,6 @@ func TestSelectForPrune_CandidatesSortedOldestFirst(t *testing.T) {
 	}
 }
 
-// ── ParseOlderThan tests ──────────────────────────────────────────────────────
-
 func TestParseOlderThan(t *testing.T) {
 	tests := []struct {
 		input   string
@@ -221,8 +215,6 @@ func TestParseOlderThan(t *testing.T) {
 		})
 	}
 }
-
-// ── ParseIDs tests ─────────────────────────────────────────────────────────────
 
 func TestParseIDs(t *testing.T) {
 	tests := []struct {
@@ -258,8 +250,6 @@ func TestParseIDs(t *testing.T) {
 		})
 	}
 }
-
-// ── BuildPruneReport tests ────────────────────────────────────────────────────
 
 func TestBuildPruneReport_DryRun(t *testing.T) {
 	candidates := []PruneCandidate{

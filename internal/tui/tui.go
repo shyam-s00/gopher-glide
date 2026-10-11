@@ -9,14 +9,13 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
+	"github.com/shyam-s00/gopher-glide/internal/snap"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
-
-// ── constants ─────────────────────────────────────────────────────────────────
 
 const (
 	// historyInterval is the time resolution of the RPS history.
@@ -28,18 +27,14 @@ const (
 	minWidth    = 60
 
 	// defaultTickInterval is the redraw cadence used when no --tui-tick-ms
-	// override is supplied — ~24fps, matching the rate set in commit af96369.
+	// override is supplied (~24fps).
 	defaultTickInterval = 42 * time.Millisecond
 
-	// minTickInterval/maxTickInterval bound an explicit --tui-tick-ms
-	// override. Below ~16ms (60fps) a terminal can't render any faster
-	// anyway, so anything past that floor is wasted CPU; above 100ms the
-	// UI starts to feel unresponsive, so there's no reason to go slower.
+	// minTickInterval/maxTickInterval bound --tui-tick-ms: a terminal can't render
+	// faster than ~60fps, and past 100ms the UI feels unresponsive.
 	minTickInterval = 16 * time.Millisecond
 	maxTickInterval = 100 * time.Millisecond
 )
-
-// ── model ─────────────────────────────────────────────────────────────────────
 
 type model struct {
 	engine     engine.Runner
@@ -84,11 +79,15 @@ type model struct {
 
 	droppedBannerShown bool // tracks when the 'Server Saturated' banner appears to trigger a layout recompute
 
-	// onRunComplete is dispatched as a background tea.Cmd exactly once when
-	// the engine stops naturally. It must not write to stdout/stderr.
-	// Returns a short status string shown in the director bar.
-	// nil when no post-run work is needed.
+	// onRunComplete runs once as a background tea.Cmd when the engine stops
+	// naturally (contract: ui.RunOptions.OnRunComplete). nil when there is no
+	// post-run work.
 	onRunComplete func() string
+
+	// biasEventsOut points at the caller's (TUIRenderer's) slice so arrow-key
+	// bias reaches main.go's onRunComplete closure, which can't reach a live
+	// model. nil in tests that build a model directly.
+	biasEventsOut *[]snap.BiasEvent
 }
 
 type tickMsg time.Time
@@ -96,8 +95,6 @@ type tickMsg time.Time
 // snapFinalizedMsg is sent back into the model once the post-run callback
 // completes in its background goroutine.
 type snapFinalizedMsg struct{ status string }
-
-// ── init ──────────────────────────────────────────────────────────────────────
 
 func initialModel(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec) model {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -149,19 +146,15 @@ func (m model) tickCmd() tea.Cmd {
 	})
 }
 
-// ── layout ────────────────────────────────────────────────────────────────────
-
 type layout struct {
 	chartWidth int
 	logHeight  int
 	logWidth   int
 }
 
-// yAxisWidth returns the width reserved for the y-axis label column,
-// including its trailing space. The default (5) fits up to 4-digit RPS
-// values (e.g. " 9999 "); plans with a peak RPS of 10000 or more need an
-// extra column per additional digit, otherwise the axis labels overflow
-// their reserved column and the chart grid shifts out of alignment.
+// yAxisWidth returns the y-axis label column width including its trailing space.
+// The default (5) fits 4-digit RPS; each extra digit of peak RPS needs another
+// column or the chart grid shifts out of alignment.
 func (m model) yAxisWidth() int {
 	peak := 0
 	if m.config != nil {
@@ -198,27 +191,17 @@ func (m model) computeLayout() layout {
 	return m.computeLayoutForHeights(headerH, timelineH)
 }
 
-// computeLayoutForHeights derives the layout from the already-rendered
-// heights of the header and timeline sections, avoiding a redundant render
-// of those (expensive) sections purely for measurement purposes.
-//
-// When the model is fully initialised (engine + config present), the actual
-// rendered heights of the fixed sections are used so that logH fills the
-// remaining terminal rows exactly — regardless of journey-mode panel counts,
-// label wrapping, or any other rendering quirk.
-//
-// Bare/test models (ready=false, nil engine) fall back to the static
-// estimate so that geometry unit tests remain valid without a live engine.
+// computeLayoutForHeights derives the layout from the already-rendered header and
+// timeline heights (avoiding a second render just to measure). Bare/test models
+// (ready=false, nil engine) fall back to a static estimate.
 func (m model) computeLayoutForHeights(headerH, timelineH int) layout {
 	w := m.width
 	if w < minWidth {
 		w = minWidth
 	}
 	const fallbackUsed = 41 // header(22) + timeline(16) + hintBar(1) + logBorder(2)
-	// The "Server Saturated" banner (rendered in View when DroppedCount > 0)
-	// adds 3 lines (MarginTop + content + MarginBottom). Without subtracting
-	// it here, total rendered height exceeds the terminal height and the
-	// alt-screen scrolls the title bar off the top.
+	// The "Server Saturated" banner (shown when DroppedCount > 0) takes 3 lines;
+	// without subtracting it the alt-screen scrolls the title bar off the top.
 	bannerH := 0
 	if m.metrics != nil && m.metrics.DroppedCount > 0 {
 		bannerH = 3
@@ -238,8 +221,6 @@ func (m model) computeLayoutForHeights(headerH, timelineH int) layout {
 		logWidth:   w - 4,
 	}
 }
-
-// ── time ↔ column helpers ─────────────────────────────────────────────────────
 
 func timeToCol(t, total time.Duration, chartWidth int) int {
 	if total <= 0 || chartWidth <= 0 {
@@ -265,8 +246,6 @@ func slotToCol(slot, totalSlots, chartWidth int) int {
 	}
 	return c
 }
-
-// ── renderHeader ──────────────────────────────────────────────────────────────
 
 func (m model) renderHeader() string {
 	elapsed := m.engine.GetElapsedTime()
@@ -417,8 +396,6 @@ func (m model) renderHeader() string {
 	)
 }
 
-// ── renderTimeline ────────────────────────────────────────────────────────────
-
 func (m model) renderTimeline() string {
 	stages := m.config.Stages
 	if len(stages) == 0 {
@@ -441,7 +418,7 @@ func (m model) renderTimeline() string {
 		peakRPS = 1
 	}
 
-	// ── rpsAt: step function — plan shape matches config intent ──────────
+	// rpsAt is a step function matching the plan's shape to config intent.
 	rpsAt := func(t time.Duration) float64 {
 		acc := time.Duration(0)
 		prev := 0.0
@@ -485,10 +462,9 @@ func (m model) renderTimeline() string {
 		}
 	}
 
-	// Cursor — derived from elapsed time, always correct after resize.
-	// Stage durations from config are unscaled; wall-clock time runs faster
-	// when time_scale > 1. Scale each stage duration before accumulating so
-	// the cursor position is consistent with how fast the run actually moves.
+	// Cursor — derived from elapsed time, so it stays correct after a resize.
+	// Stage durations are unscaled while the run moves time_scale× faster, so scale
+	// them before accumulating.
 	timeScale := m.config.ConfigSection.TimeScale
 	if timeScale <= 0 {
 		timeScale = 1.0
@@ -504,11 +480,9 @@ func (m model) renderTimeline() string {
 	totalElapsed += m.stageElapsed
 	cursorX := timeToCol(totalElapsed, scaledTotalDur, chartWidth)
 
-	// ── Project time-slot history onto columns ────────────────────────────
 	// totalSlots must be based on the wall-clock duration of the run, not the
-	// unscaled plan duration. cfg.TotalDuration() applies TimeScale so that
-	// e.g. time_scale:2 halves the wall-clock duration and the history slots
-	// span the full chart width correctly.
+	// unscaled plan duration — TotalDuration() applies TimeScale so e.g.
+	// time_scale:2 halves it and the history still spans the full chart.
 	wallDur := m.config.TotalDuration()
 	if wallDur == 0 {
 		wallDur = 1
@@ -755,8 +729,6 @@ func (m model) renderTimeline() string {
 	return styles.PanelBase.Width(m.width - 4).Render(sb.String())
 }
 
-// ── formatDuration ────────────────────────────────────────────────────────────
-
 func formatDuration(d time.Duration) string {
 	if d <= 0 {
 		return "0s"
@@ -770,13 +742,9 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%ds", secs)
 }
 
-// ── renderKeycap ─────────────────────────────────────────────────────────────
-
 func renderKeycap(key string) string {
 	return styles.Keycap.Render(key)
 }
-
-// ── renderMethodBadge / renderStatusBadge ────────────────────────────────────
 
 func renderMethodBadge(method string) string {
 	switch method {
@@ -825,8 +793,6 @@ func truncatePath(s string, maxLen int) string {
 	}
 	return string(runes[:maxLen-1]) + "…"
 }
-
-// ── renderLogContent ──────────────────────────────────────────────────────────
 
 // Column widths (visual chars):
 //
@@ -880,8 +846,6 @@ func (m model) renderLogContent() string {
 	return strings.Join(lines, "\n")
 }
 
-// ── Update ────────────────────────────────────────────────────────────────────
-
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		cmd  tea.Cmd
@@ -899,12 +863,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up":
 			if m.running {
 				m.engine.ApplyBias(5)
+				m.recordBiasEvent(5)
 				m.directorMsg = "▲  +5 RPS"
 				m.directorMsgTime = time.Now()
 			}
 		case "down":
 			if m.running {
 				m.engine.ApplyBias(-5)
+				m.recordBiasEvent(-5)
 				m.directorMsg = "▼  -5 RPS"
 				m.directorMsgTime = time.Now()
 			}
@@ -999,7 +965,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// ── View ──────────────────────────────────────────────────────────────────────
+// recordBiasEvent appends one bias command to the shared BiasEvents sink.
+// No-op when biasEventsOut is nil (e.g. tests that build a model
+// directly instead of via Start()).
+func (m model) recordBiasEvent(amount int) {
+	if m.biasEventsOut == nil {
+		return
+	}
+	*m.biasEventsOut = append(*m.biasEventsOut, snap.BiasEvent{
+		Amount:     amount,
+		Cumulative: m.engine.GetBias(),
+		ElapsedS:   elapsedSince(m.engine.GetStartTime()),
+	})
+}
+
+// elapsedSince returns seconds since start, or 0 if start is the zero time —
+// time.Since would otherwise saturate. Duplicated from internal/ui's own
+// helper: that package imports internal/tui, so the reverse isn't available.
+func elapsedSince(start time.Time) float64 {
+	if start.IsZero() {
+		return 0
+	}
+	return time.Since(start).Seconds()
+}
 
 func (m model) View() string {
 	if !m.ready {
@@ -1014,12 +1002,9 @@ func (m model) View() string {
 	headerH := lipgloss.Height(header)
 	timelineH := lipgloss.Height(timeline)
 
-	// The header, timeline, director bar, log box border, and a minimum
-	// 3-line log area are all fixed-height. If the terminal is shorter than
-	// their combined height, the alt-screen silently scrolls the overflow
-	// off the top — pushing the header (the first thing rendered) out of
-	// view. Bail out with a resize prompt instead, mirroring the width check
-	// above.
+	// If the terminal is shorter than the fixed-height sections plus a 3-line log
+	// area, the alt-screen scrolls the header off the top; show a resize prompt
+	// instead, like the width check above.
 	bannerH := 0
 	if m.metrics.DroppedCount > 0 {
 		bannerH = 3
@@ -1032,7 +1017,6 @@ func (m model) View() string {
 
 	l := m.computeLayoutForHeights(headerH, timelineH)
 
-	// ── director / hint bar ───────────────────────────────────────────────
 	biasStr := ""
 	if bias := m.metrics.Bias; bias != 0 {
 		bs := styles.SuccessBold
@@ -1089,19 +1073,21 @@ func (m model) View() string {
 	)
 }
 
-// ── Start ─────────────────────────────────────────────────────────────────────
-
 // Start launches the Bubble Tea TUI.
 //   - snapping / snapDir  → drives the 📸 indicator
 //   - onRunComplete       → called in a background goroutine once the engine
 //     finishes all stages; must not write to stdout/stderr. The returned
 //     string is shown in the director bar. nil is safe (no-op).
-func Start(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec, snapping bool, snapDir string, onRunComplete func() string, tickInterval time.Duration) error {
+//   - biasEvents           → arrow-key bias nudges are appended here as they
+//     happen, so the caller's onRunComplete (already running by the time the
+//     model would otherwise report them) sees them live. nil is safe (no-op).
+func Start(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec, snapping bool, snapDir string, onRunComplete func() string, tickInterval time.Duration, biasEvents *[]snap.BiasEvent) error {
 	m := initialModel(eng, cfg, specs)
 	m.snapping = snapping
 	m.snapDir = snapDir
 	m.onRunComplete = onRunComplete
 	m.tickInterval = tickInterval
+	m.biasEventsOut = biasEvents
 	p := tea.NewProgram(
 		m,
 		tea.WithAltScreen(),
@@ -1109,11 +1095,8 @@ func Start(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec
 	)
 	_, err := p.Run()
 
-	// Block until the engine goroutine has fully exited.
-	// This guarantees that when Start returns — whether because the run
-	// completed naturally or the user pressed [q] — no engine worker is
-	// still calling recorder.Record(), making it safe for the caller to
-	// invoke finalizeSnapResult immediately afterwards.
+	// Wait for the engine goroutine to exit, so no worker is still calling
+	// recorder.Record() when the caller finalizes the snapshot (also on [q]).
 	<-m.engineDone
 
 	return err

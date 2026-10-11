@@ -1,12 +1,11 @@
 package hive
 
 import (
+	"math"
 	"net/http"
 	"testing"
 	"time"
 )
-
-// ── zero state ────────────────────────────────────────────────────────────────
 
 func TestGetMetrics_InitialZeroState(t *testing.T) {
 	e := New()
@@ -51,8 +50,6 @@ func TestGetMetrics_InitialZeroState(t *testing.T) {
 	}
 }
 
-// ── counter field mapping ─────────────────────────────────────────────────────
-
 func TestGetMetrics_CounterFieldMapping(t *testing.T) {
 	e := New()
 
@@ -80,8 +77,6 @@ func TestGetMetrics_CounterFieldMapping(t *testing.T) {
 	}
 }
 
-// ── error-rate formula ────────────────────────────────────────────────────────
-
 func TestGetMetrics_ErrorRateFormula(t *testing.T) {
 	e := New()
 
@@ -105,8 +100,6 @@ func TestGetMetrics_ErrorRateFormula(t *testing.T) {
 	}
 }
 
-// ── average latency formula ───────────────────────────────────────────────────
-
 func TestGetMetrics_AvgLatency(t *testing.T) {
 	e := New()
 
@@ -121,13 +114,33 @@ func TestGetMetrics_AvgLatency(t *testing.T) {
 	}
 }
 
-// ── latency percentile round-trip ─────────────────────────────────────────────
-
+// Seeds a fixed permutation of 1..100 ms (37 is coprime to 100), so the values
+// are neither sorted nor reverse-sorted when read back. With linear
+// interpolation over n=100 sorted values, pXX = 1 + (XX/100)*99.
 func TestGetMetrics_LatencyPercentiles(t *testing.T) {
-	t.Skip("latency write path not yet implemented")
-}
+	e := New()
+	vals := make([]float64, 100)
+	for i := range vals {
+		vals[i] = float64(i*37%100 + 1)
+	}
+	seedLatBuf(e, vals...)
 
-// ── stage progress fields ─────────────────────────────────────────────────────
+	m := e.GetMetrics()
+	for _, c := range []struct {
+		name      string
+		got, want float64
+	}{
+		{"MinLatency", m.MinLatency, 1},
+		{"MaxLatency", m.MaxLatency, 100},
+		{"P50Latency", m.P50Latency, 50.5},
+		{"P95Latency", m.P95Latency, 95.05},
+		{"P99Latency", m.P99Latency, 99.01},
+	} {
+		if math.Abs(c.got-c.want) > 1e-9 {
+			t.Errorf("%s: want %v, got %v", c.name, c.want, c.got)
+		}
+	}
+}
 
 func TestGetMetrics_StageProgress(t *testing.T) {
 	e := New()
@@ -143,8 +156,6 @@ func TestGetMetrics_StageProgress(t *testing.T) {
 	}
 }
 
-// ── director bias field ───────────────────────────────────────────────────────
-
 func TestGetMetrics_BiasField(t *testing.T) {
 	e := New()
 	e.rpsBias.Store(42)
@@ -154,8 +165,6 @@ func TestGetMetrics_BiasField(t *testing.T) {
 		t.Errorf("Bias: want 42, got %d", m.Bias)
 	}
 }
-
-// ── targetRPS and activeActors ────────────────────────────────────────────────
 
 func TestGetMetrics_TargetRPSAndActiveActors(t *testing.T) {
 	e := New()
@@ -170,8 +179,6 @@ func TestGetMetrics_TargetRPSAndActiveActors(t *testing.T) {
 		t.Errorf("ActiveVPUs: want 37, got %d", m.ActiveVPUs)
 	}
 }
-
-// ── throughput wired to rpsWin ────────────────────────────────────────────────
 
 func TestGetMetrics_ThroughputFromRpsWindow(t *testing.T) {
 	e := New()
@@ -188,8 +195,6 @@ func TestGetMetrics_ThroughputFromRpsWindow(t *testing.T) {
 	}
 }
 
-// ── zero total → no division-by-zero ─────────────────────────────────────────
-
 func TestGetMetrics_ZeroTotalNoDivisionByZero(t *testing.T) {
 	e := New()
 	// No requests recorded — this must not panic.
@@ -201,8 +206,6 @@ func TestGetMetrics_ZeroTotalNoDivisionByZero(t *testing.T) {
 		t.Errorf("ErrorRate with zero total: want 0, got %f", m.ErrorRate)
 	}
 }
-
-// ── logCall round-trip into GetMetrics call-log buffers ───────────────────────
 
 func TestGetMetrics_CallLogIntegration(t *testing.T) {
 	e := New()
@@ -218,8 +221,6 @@ func TestGetMetrics_CallLogIntegration(t *testing.T) {
 		t.Errorf("GetRecentErrorLogs: want 1, got %d", len(errs))
 	}
 }
-
-// ── concurrent reads during counter writes ────────────────────────────────────
 
 func TestGetMetrics_ConcurrentSafe(t *testing.T) {
 	e := New()

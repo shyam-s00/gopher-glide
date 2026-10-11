@@ -30,8 +30,6 @@ func Extract(body []byte, d httpreader.ExportDirective) (string, error) {
 	}
 }
 
-// ── JSONPath ──────────────────────────────────────────────────────────────────
-
 // extractJSONPath unmarshals body as JSON and traverses path.
 // path may optionally begin with "$" followed by a "." separator
 // (e.g. "$.data.token", "$token", "$.items[0].id", "data.token").
@@ -162,8 +160,6 @@ func valueToString(v interface{}) (string, error) {
 		return string(b), nil
 	}
 }
-
-// ── Regex ─────────────────────────────────────────────────────────────────────
 
 // extractRegex executes the pre-compiled regex and returns the first capture group of the
 // first match found in body. If the pattern contains no capture groups the

@@ -13,10 +13,9 @@ const (
 	DefaultPrometheusPort = 9090
 )
 
-// DefaultConfig returns a minimal in-memory Config used when no config file is
-// provided. It defines a simple smoke-test shape (gentle ramp → hold → cool-down).
-// HTTPFile is intentionally left empty; callers must populate it (e.g. via
-// --http-file) before the config is considered fully valid.
+// DefaultConfig returns the in-memory smoke-test Config (gentle ramp → hold →
+// cool-down) used when no config file is given. HTTPFile is left empty; callers
+// must set it (e.g. via --http-file).
 func DefaultConfig() *Config {
 	return &Config{
 		ConfigSection: Section{

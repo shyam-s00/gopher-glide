@@ -17,6 +17,9 @@ jobs:
         with:
           fetch-depth: 0   # full history required by Codecov for accurate diff coverage
 
+      - name: Comment lint
+        run: make lint-comments
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:

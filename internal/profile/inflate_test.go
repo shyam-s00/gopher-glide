@@ -7,8 +7,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/profile"
 )
 
-// ── InflateSegments: step ─────────────────────────────────────────────────────
-
 func TestInflate_Step_InstantJumpAndHold(t *testing.T) {
 	prof := profileWith([]profile.Segment{
 		{Type: profile.SegmentStep, DurationPct: 1.0, RPSMultiplier: 1.0},
@@ -54,8 +52,6 @@ func TestInflate_Step_ZeroDuration_PureInstant(t *testing.T) {
 	}
 }
 
-// ── InflateSegments: flat ─────────────────────────────────────────────────────
-
 func TestInflate_Flat_SnapAndHold_WhenPrevDiffers(t *testing.T) {
 	// Starting from 0, a flat segment at 100% peak should snap first then hold.
 	prof := profileWith([]profile.Segment{
@@ -89,8 +85,6 @@ func TestInflate_Flat_NoSnap_WhenPrevSameLevel(t *testing.T) {
 	}
 }
 
-// ── InflateSegments: linear ───────────────────────────────────────────────────
-
 func TestInflate_Linear_SingleStage(t *testing.T) {
 	prof := profileWith([]profile.Segment{
 		{Type: profile.SegmentLinear, DurationPct: 0.25, RPSMultiplier: 1.0},
@@ -113,8 +107,6 @@ func TestInflate_Linear_SingleStage(t *testing.T) {
 		t.Errorf("ramp down TargetRPS = %d, want 0", stages[2].TargetRPS)
 	}
 }
-
-// ── InflateSegments: exponential ─────────────────────────────────────────────
 
 func TestInflate_Exponential_ProducesMultipleSubStages(t *testing.T) {
 	prof := profileWith([]profile.Segment{
@@ -154,8 +146,6 @@ func TestInflate_Exponential_EqualSubDurations(t *testing.T) {
 	}
 }
 
-// ── InflateSegments: flash-sale integration ───────────────────────────────────
-
 func TestInflate_FlashSaleProfile(t *testing.T) {
 	prof, err := profile.Load("flash-sale")
 	if err != nil {
@@ -182,8 +172,6 @@ func TestInflate_FlashSaleProfile(t *testing.T) {
 		t.Errorf("last stage TargetRPS = %d, want 0", last.TargetRPS)
 	}
 }
-
-// ── InflateSegments: scale to custom peak / duration ─────────────────────────
 
 func TestInflate_CustomPeakAndDuration(t *testing.T) {
 	prof, err := profile.Load("load")
@@ -216,8 +204,6 @@ func TestInflate_CustomPeakAndDuration(t *testing.T) {
 		t.Errorf("inflated total duration = %v, want %v", totalDur, customDur)
 	}
 }
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 // profileWith builds a minimal *Profile for use in inflate tests, without
 // going through the YAML loader.

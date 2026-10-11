@@ -2,11 +2,9 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
-// Theme defines the semantic color palette for the TUI. Styles reference
-// these tokens by purpose (e.g. theme.Success, theme.TextMuted) rather than
-// raw hex values, so the whole dashboard can be re-themed from one place.
-//
-// The palette is inspired by Catppuccin Macchiato.
+// Theme is the TUI's semantic color palette (Catppuccin Macchiato-inspired).
+// Styles use these tokens (theme.Success, theme.TextMuted) rather than raw hex,
+// so the dashboard can be re-themed from one place.
 type Theme struct {
 	// Surface — panel borders, card chrome, and structural/dimmed fills.
 	Surface      lipgloss.Color
@@ -55,8 +53,6 @@ var macchiato = Theme{
 func theme() Theme {
 	return macchiato
 }
-
-// ── Pre-compiled styles ───────────────────────────────────────────────────────
 
 // uiStyles holds the complete set of pre-compiled lipgloss.Style values used
 // across the dashboard. All View()-path rendering draws from here instead of

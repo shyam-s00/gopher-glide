@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// ── format.go ─────────────────────────────────────────────────────────────────
-
 func TestWrite_Read_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.snap")
@@ -133,8 +131,6 @@ func TestFileName_NoTag(t *testing.T) {
 		t.Errorf("FileName = %q, want %q", got, want)
 	}
 }
-
-// ── store.go ──────────────────────────────────────────────────────────────────
 
 func TestResolveSnapDir_Override(t *testing.T) {
 	got, err := ResolveSnapDir("/tmp/custom-snaps")

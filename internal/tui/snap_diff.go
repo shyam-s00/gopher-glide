@@ -11,8 +11,7 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
 
-// ── styles (module-level so renderDiffXxx helpers can share them) ─────────────
-
+// Module-level so the renderDiffXxx helpers can share these styles.
 var (
 	diffSectionStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
 	diffLabelStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
@@ -22,8 +21,6 @@ var (
 	diffRegrStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87")).Bold(true)
 	diffDimStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
-
-// ── model ─────────────────────────────────────────────────────────────────────
 
 type snapDiffModel struct {
 	result   snap.DiffResult
@@ -38,8 +35,6 @@ type snapDiffModel struct {
 func newSnapDiffModel(result snap.DiffResult, baseInfo, currInfo snap.SnapInfo) snapDiffModel {
 	return snapDiffModel{result: result, baseInfo: baseInfo, currInfo: currInfo}
 }
-
-// ── Bubble Tea interface ──────────────────────────────────────────────────────
 
 func (m snapDiffModel) Init() tea.Cmd {
 	return tea.EnterAltScreen
@@ -91,8 +86,6 @@ func (m snapDiffModel) View() string {
 		hints,
 	)
 }
-
-// ── header ────────────────────────────────────────────────────────────────────
 
 func (m snapDiffModel) renderHeader() string {
 	titleStyle := lipgloss.NewStyle().
@@ -181,8 +174,6 @@ func (m snapDiffModel) renderHeader() string {
 	)
 }
 
-// ── endpoint diff panels ──────────────────────────────────────────────────────
-
 func (m snapDiffModel) renderEndpoints() string {
 	if len(m.result.Endpoints) == 0 {
 		return diffDimStyle.Render("  No endpoints to compare.")
@@ -202,13 +193,11 @@ func (m snapDiffModel) renderEndpoints() string {
 func renderDiffPanel(d snap.EndpointDiff, width int) string {
 	var body strings.Builder
 
-	// ── title + verdict badge ─────────────────────────────────────────────
 	verdictBadge, verdictBorderColor := verdictStyle(d.Verdict)
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#CCBBFF")).Render(d.ID)
 	body.WriteString(lipgloss.JoinHorizontal(lipgloss.Center, title, "  ", verdictBadge))
 	body.WriteString("\n\n")
 
-	// ── only-in-one-snapshot shortcut ─────────────────────────────────────
 	if d.BaselineOnly {
 		body.WriteString(diffWarnStyle.Render("⬅  Only in baseline — endpoint may have been removed or renamed"))
 		return panelBox(body.String(), width, verdictBorderColor)
@@ -218,7 +207,6 @@ func renderDiffPanel(d snap.EndpointDiff, width int) string {
 		return panelBox(body.String(), width, verdictBorderColor)
 	}
 
-	// ── delta sections ────────────────────────────────────────────────────
 	colW := (width - 10) / 3
 	if colW < 22 {
 		colW = 22
@@ -234,7 +222,6 @@ func renderDiffPanel(d snap.EndpointDiff, width int) string {
 		lipgloss.NewStyle().Width(colW).Render(errBlock),
 	))
 
-	// ── schema changes ────────────────────────────────────────────────────
 	if len(d.SchemaChanges) > 0 {
 		body.WriteString("\n\n")
 		body.WriteString(renderSchemaChanges(d.SchemaChanges))
@@ -242,8 +229,6 @@ func renderDiffPanel(d snap.EndpointDiff, width int) string {
 
 	return panelBox(body.String(), width, verdictBorderColor)
 }
-
-// ── latency delta section ─────────────────────────────────────────────────────
 
 func renderLatencyDeltaBlock(d snap.LatencyDelta) string {
 	return lipgloss.JoinVertical(lipgloss.Left,
@@ -254,8 +239,6 @@ func renderLatencyDeltaBlock(d snap.LatencyDelta) string {
 		diffRow("Max:", renderPerfDelta(d.MaxPctChange)),
 	)
 }
-
-// ── payload size delta section ────────────────────────────────────────────────
 
 func renderPayloadDeltaBlock(d snap.PayloadSizeDelta) string {
 	if d.AvgPctChange == 0 && d.P95PctChange == 0 && d.MaxPctChange == 0 {
@@ -271,8 +254,6 @@ func renderPayloadDeltaBlock(d snap.PayloadSizeDelta) string {
 		diffRow("Max:", renderSizeDelta(d.MaxPctChange)),
 	)
 }
-
-// ── error rate + status delta section ────────────────────────────────────────
 
 func renderErrorDeltaBlock(errDelta float64, statusDelta map[string]float64) string {
 	lines := []string{diffSectionStyle.Render("Error & Status")}
@@ -299,8 +280,6 @@ func renderErrorDeltaBlock(errDelta float64, statusDelta map[string]float64) str
 
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
-
-// ── schema changes section ────────────────────────────────────────────────────
 
 func renderSchemaChanges(changes []snap.FieldChange) string {
 	var sb strings.Builder
@@ -362,8 +341,6 @@ func schemaChangeDetail(c snap.FieldChange) string {
 	}
 	return ""
 }
-
-// ── delta rendering helpers ───────────────────────────────────────────────────
 
 // renderPerfDelta colours a performance % change where positive = regression.
 //
@@ -480,8 +457,6 @@ func diffRow(label, value string) string {
 		value,
 	)
 }
-
-// ── entry point ───────────────────────────────────────────────────────────────
 
 // StartSnapDiff launches the Bubble Tea snapshot diff TUI.
 func StartSnapDiff(result snap.DiffResult, baseInfo, currInfo snap.SnapInfo) error {

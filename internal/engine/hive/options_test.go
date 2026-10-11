@@ -6,8 +6,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
 
-// ── stub recorder ─────────────────────────────────────────────────────────────
-
 // stubRecorder is a minimal snap.Recorder for testing that just counts calls.
 type stubRecorder struct {
 	calls int
@@ -15,8 +13,6 @@ type stubRecorder struct {
 
 func (r *stubRecorder) Record(_ snap.RecordEntry)                       { r.calls++ }
 func (r *stubRecorder) Finalize(_ snap.RunMeta) (*snap.Snapshot, error) { return nil, nil }
-
-// ── WithRecorder ──────────────────────────────────────────────────────────────
 
 func TestWithRecorder_AttachesRecorder(t *testing.T) {
 	rec := &stubRecorder{}
@@ -52,8 +48,6 @@ func TestWithRecorder_OverridesPreviousOption(t *testing.T) {
 		t.Fatal("last WithRecorder option must win")
 	}
 }
-
-// ── WithSampleRate ────────────────────────────────────────────────────────────
 
 func TestWithSampleRate_Default_Is5Percent(t *testing.T) {
 	e := New() // no option → default 5 %
@@ -127,8 +121,6 @@ func TestWithSampleRate_Rounding_NotTruncation(t *testing.T) {
 		t.Fatalf("expected sampleEvery=3 (math.Round), got %d (truncation would give 2)", e.sampleEvery)
 	}
 }
-
-// ── shouldSample ──────────────────────────────────────────────────────────────
 
 func TestShouldSample_DisabledWhenSampleEveryZero(t *testing.T) {
 	e := New(WithSampleRate(0))

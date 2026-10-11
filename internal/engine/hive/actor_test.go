@@ -288,8 +288,6 @@ func TestSpawnManifest_ZeroValue(t *testing.T) {
 	}
 }
 
-// ── executeActor: variable injection via ActorMemory ─────────────────────────
-
 func TestExecuteActor_Memory_InjectsVarIntoURL(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -365,8 +363,6 @@ func TestExecuteActor_Memory_InjectsVarIntoBody(t *testing.T) {
 		t.Errorf("unexpected body: %q", gotBody)
 	}
 }
-
-// ── executeActor: @gg-export extraction and storage ──────────────────────────
 
 func TestExecuteActor_Export_JSONPath_StoresInMemory(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -518,8 +514,6 @@ func TestExecuteActor_Export_NilMemory_ExportsIgnored(t *testing.T) {
 		t.Fatalf("unexpected error with nil memory: %v", err)
 	}
 }
-
-// ── executeJourney: sequential execution ──────────────────────────────────────
 
 func TestExecuteJourney_SingleSpec_WorksLikeExecuteActor(t *testing.T) {
 	var served atomic.Int32

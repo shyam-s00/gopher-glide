@@ -8,10 +8,9 @@ import (
 	"strings"
 )
 
-// ParseFile reads a .http file, parses it into an ordered list of
-// RequestSpecs, and applies Smart Detection (GroupJourneys) to group stateful
-// @gg-export → {{var}} chains into Journeys. Requests that neither export nor
-// consume a chained variable are returned as their own single-step Journey.
+// ParseFile reads a .http file and groups it into Journeys via GroupJourneys:
+// chained @gg-export → {{var}} requests form multi-step Journeys, the rest stay
+// single-step.
 func ParseFile(path string) ([]Journey, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -45,7 +44,6 @@ func Parse(content string) ([]RequestSpec, error) {
 		line := scanner.Text()
 		trimmed := strings.TrimSpace(line)
 
-		// ── JS-embed safety (state 3) ───────────────────────────────────────
 		// JetBrains wraps response scripts in  > {% … %}.
 		// Once we enter this block, ignore everything until the closing %}.
 		if state == 3 {
@@ -55,7 +53,6 @@ func Parse(content string) ([]RequestSpec, error) {
 			continue
 		}
 
-		// ── Request separator  ###  ─────────────────────────────────────────
 		if strings.HasPrefix(trimmed, "###") {
 			if currentRequest != nil {
 				currentRequest.Body = strings.TrimSpace(currentRequest.Body)
@@ -71,7 +68,6 @@ func Parse(content string) ([]RequestSpec, error) {
 			continue
 		}
 
-		// ── Before the first request ────────────────────────────────────────
 		if currentRequest == nil {
 			if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//") {
 				continue
@@ -83,7 +79,6 @@ func Parse(content string) ([]RequestSpec, error) {
 			state = 0
 		}
 
-		// ── @gg-export pragma ───────────────────────────────────────────────
 		// Recognised in states 1 and 2 (after headers or inside/after body).
 		// Must be checked before the general "skip comments" guard below.
 		if state == 1 || state == 2 {
@@ -93,7 +88,7 @@ func Parse(content string) ([]RequestSpec, error) {
 			}
 		}
 
-		// ── Skip plain comments outside the body ────────────────────────────
+		// In a body (state 2) "#" and "//" lines are content, not comments.
 		if state != 2 && (strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//")) {
 			continue
 		}

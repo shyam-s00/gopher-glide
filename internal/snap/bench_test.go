@@ -27,8 +27,6 @@ func newBenchAcc(maxSamples int) *endpointAcc {
 	}
 }
 
-// ── Sanitizer ──────────────────────────────────────────────────────────────────
-
 // BenchmarkSanitize_DefaultSanitizer measures the per-entry cost of stripping
 // sensitive headers. This runs on the single drain goroutine for every
 // recorded entry, so it must stay cheap relative to channel throughput.
@@ -79,8 +77,6 @@ func BenchmarkSanitize_Noop(b *testing.B) {
 	}
 }
 
-// ── endpointAcc.record / recordBody ───────────────────────────────────────────
-
 // BenchmarkEndpointAcc_Record covers the three regimes recordBody can be in:
 //   - no body sample at all (most requests, when sample-rate doesn't trigger)
 //   - reservoir still filling (append path)
@@ -129,8 +125,6 @@ func BenchmarkEndpointAcc_Record(b *testing.B) {
 	})
 }
 
-// ── endpointAcc.toEndpointSnap ─────────────────────────────────────────────────
-
 // BenchmarkEndpointAcc_ToEndpointSnap measures the once-per-run aggregation
 // cost (sorting latencies/payload sizes + percentile computation) across a
 // range of run sizes. This runs once per endpoint inside Finalize.
@@ -155,8 +149,6 @@ func BenchmarkEndpointAcc_ToEndpointSnap(b *testing.B) {
 	}
 }
 
-// ── InferSchema ────────────────────────────────────────────────────────────────
-
 // BenchmarkInferSchema measures JSON schema inference cost over the body
 // sample reservoir, run once per endpoint (with stored samples) in Finalize.
 func BenchmarkInferSchema(b *testing.B) {
@@ -176,8 +168,6 @@ func BenchmarkInferSchema(b *testing.B) {
 		})
 	}
 }
-
-// ── DefaultRecorder.Record (hot path) ─────────────────────────────────────────
 
 // BenchmarkRecorder_Record measures the cost of the non-blocking channel send
 // from concurrent actor goroutines — the only part of the snap pipeline that
@@ -202,8 +192,6 @@ func BenchmarkRecorder_Record(b *testing.B) {
 	b.StopTimer()
 	_, _ = r.Finalize(RunMeta{})
 }
-
-// ── DefaultRecorder.Finalize (end-to-end) ─────────────────────────────────────
 
 // BenchmarkRecorder_Finalize measures the full pipeline — Record, drain,
 // sanitize, accumulate, and Finalize — across a range of endpoint counts and

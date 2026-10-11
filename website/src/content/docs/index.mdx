@@ -11,10 +11,13 @@ import ContentWrapper from '../../components/ContentWrapper.astro';
 import ComparisonTable from '../../components/ComparisonTable.astro';
 import FaqSection from '../../components/FaqSection.astro';
 import IDEPlugins from '../../components/IDEPlugins.astro';
+import WhatsNew from '../../components/WhatsNew.astro';
 
 <Hero />
 
 <ContentWrapper>
+
+<WhatsNew />
 
 <IDEPlugins />
 
@@ -68,7 +71,7 @@ import IDEPlugins from '../../components/IDEPlugins.astro';
 <GlassFeatureRow title="Interactive Chaos TUI">
   <div slot="text">
     <p>Watch your backend burn in high-definition. The premium interactive TUI runs at a buttery-smooth <strong>~24 FPS</strong>, giving you real-time observability.</p>
-    <p>Play chaos engineer: use your arrow keys to aggressively bias RPS up or down in real-time, and watch how your system reacts without ever touching a config file.</p>
+    <p>Play chaos engineer: use your arrow keys to aggressively bias RPS up or down in real-time, and watch how your system reacts without ever touching a config file. Running headless or in CI? The <a href="/live-control">Live Control Protocol</a> gives you the same bias, plus markers and a clean stop, over stdin.</p>
   </div>
   <div slot="visual">
     <CodeCompare filename="gg --profile ddos">

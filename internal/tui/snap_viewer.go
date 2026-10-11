@@ -11,8 +11,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
 
-// ── model ─────────────────────────────────────────────────────────────────────
-
 type snapViewModel struct {
 	snap     *snap.Snapshot
 	info     snap.SnapInfo
@@ -25,8 +23,6 @@ type snapViewModel struct {
 func newSnapViewModel(s *snap.Snapshot, info snap.SnapInfo) snapViewModel {
 	return snapViewModel{snap: s, info: info}
 }
-
-// ── Bubble Tea interface ──────────────────────────────────────────────────────
 
 func (m snapViewModel) Init() tea.Cmd {
 	return tea.EnterAltScreen
@@ -78,8 +74,6 @@ func (m snapViewModel) View() string {
 		hints,
 	)
 }
-
-// ── header ────────────────────────────────────────────────────────────────────
 
 func (m snapViewModel) renderHeader() string {
 	s := m.snap
@@ -155,8 +149,6 @@ func (m snapViewModel) renderHeader() string {
 		),
 	)
 }
-
-// ── endpoint panels ───────────────────────────────────────────────────────────
 
 func (m snapViewModel) renderEndpoints() string {
 	if len(m.snap.Endpoints) == 0 {
@@ -287,8 +279,6 @@ func renderEndpointPanel(ep snap.EndpointSnap, width int) string {
 		Render(body.String())
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 // formatProfile renders a snap's profile name/scale for display, e.g.
 // "flash-sale (1.5x)". Returns "(none)" when no profile was used.
 func formatProfile(name string, scale float64) string {
@@ -311,8 +301,6 @@ func svFormatCount(n int64) string {
 		return fmt.Sprintf("%d", n)
 	}
 }
-
-// ── entry point ───────────────────────────────────────────────────────────────
 
 // StartSnapViewer launches the Bubble Tea snapshot viewer TUI.
 func StartSnapViewer(s *snap.Snapshot, info snap.SnapInfo) error {

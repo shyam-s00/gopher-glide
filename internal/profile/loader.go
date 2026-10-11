@@ -18,12 +18,11 @@ import (
 //     Built-in names are reserved: if the file exists but the slug matches a
 //     built-in profile, Load returns ErrBuiltInProfileConflict instead of
 //     silently overriding the canonical definition.
-//  3. Embedded binary     — the 21 profiles baked into the binary at build time.
+//  3. Embedded binary     — the profiles baked into the binary at build time.
 //
 // name should be the profile slug (e.g. "flash-sale") without the .yaml suffix,
 // or a full file path for custom profiles outside the standard directories.
 func Load(name string) (*Profile, error) {
-	// ── 1. Exact path ──────────────────────────────────────────────────────
 	if isFilePath(name) {
 		return loadFile(name)
 	}
@@ -31,7 +30,6 @@ func Load(name string) (*Profile, error) {
 	slug := strings.TrimSuffix(name, ".yaml")
 	filename := slug + ".yaml"
 
-	// ── 2. Global ~/.config/gg/profiles/ ──────────────────────────────────
 	if home, err := os.UserHomeDir(); err == nil {
 		globalPath := filepath.Join(home, ".config", "gg", "profiles", filename)
 		if _, err := os.Stat(globalPath); err == nil {
@@ -48,12 +46,11 @@ func Load(name string) (*Profile, error) {
 		}
 	}
 
-	// ── 3. Embedded fallback ───────────────────────────────────────────────
 	return loadEmbedded(slug)
 }
 
 // ListNames returns the names of all profiles available from the embedded
-// binary (i.e. the 21 shipped profiles). Names are returned without the
+// binary (i.e. the shipped profiles). Names are returned without the
 // .yaml suffix, sorted alphabetically.
 func ListNames() []string {
 	entries, err := fs.ReadDir(embeddedProfiles, "data")
@@ -69,7 +66,7 @@ func ListNames() []string {
 	return names
 }
 
-// IsBuiltIn reports whether name matches one of the 21 shipped built-in
+// IsBuiltIn reports whether name matches one of the shipped built-in
 // profiles. The .yaml extension is stripped before comparison.
 func IsBuiltIn(name string) bool {
 	slug := strings.TrimSuffix(name, ".yaml")
@@ -81,10 +78,9 @@ func IsBuiltIn(name string) bool {
 	return false
 }
 
-// ListCustomNames returns the names of all profile YAML files found in
-// ~/.config/gg/profiles/ (without the .yaml extension). Names are returned
-// in directory order. Names that collide with built-in profiles are included;
-// callers can use IsBuiltIn to detect and surface conflicts.
+// ListCustomNames returns the profile names (no .yaml) in ~/.config/gg/profiles/,
+// in directory order. Names colliding with built-ins are included; use IsBuiltIn
+// to detect them.
 func ListCustomNames() []string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -104,14 +100,9 @@ func ListCustomNames() []string {
 	return names
 }
 
-// ExportEmbedded copies the embedded YAML for the named built-in profile to
-// ~/.config/gg/profiles/<name>.yaml and returns the destination path.
-// The directory is created if it does not already exist.
-//
-// Because built-in names are reserved, the exported file cannot be used
-// with --profile until the user renames it to a custom name.
-// If a file already exists at the destination, ErrExportConflict is returned
-// so the caller can surface a clear message without silently overwriting edits.
+// ExportEmbedded copies a built-in profile to ~/.config/gg/profiles/<name>.yaml
+// and returns the path. Rename it before use (built-in names are reserved); an
+// existing file returns ErrExportConflict instead of being overwritten.
 func ExportEmbedded(name string) (string, error) {
 	slug := strings.TrimSuffix(name, ".yaml")
 	if !IsBuiltIn(slug) {
@@ -144,10 +135,9 @@ func ExportEmbedded(name string) (string, error) {
 	return dest, nil
 }
 
-// LoadBuiltIn loads a profile exclusively from the embedded binary, bypassing
-// the resolution hierarchy and collision guard. It is intended for tooling that
-// always needs the canonical built-in definition (e.g. `gg profile list`,
-// `gg profile view`). Use Load for the normal --profile flag path.
+// LoadBuiltIn loads a profile only from the embedded set, bypassing the lookup
+// order and collision guard, for tooling (`gg profile list/view`) that needs
+// the canonical definition. Use Load for --profile.
 func LoadBuiltIn(name string) (*Profile, error) {
 	slug := strings.TrimSuffix(name, ".yaml")
 	return loadEmbedded(slug)
@@ -231,10 +221,8 @@ func validate(p *Profile, src string) error {
 		}
 	}
 
-	// Ensure the sum of all duration_pct values is close enough to 1.0 that
-	// InflateSegments will produce a total duration matching the requested run
-	// duration. Step segments with duration_pct == 0 contribute nothing to the
-	// sum and are intentionally included in the total (they add 0).
+	// The duration_pct values must sum to ~1.0 so InflateSegments hits the requested
+	// duration; step segments (duration_pct == 0) add nothing to the sum.
 	if sum := p.TotalNonZeroPct(); sum < 1.0-durationPctTolerance || sum > 1.0+durationPctTolerance {
 		return fmt.Errorf("%w: %q: sum of segment duration_pct values is %.4f, must be within %.2f of 1.0", ErrInvalidProfile, src, sum, durationPctTolerance)
 	}

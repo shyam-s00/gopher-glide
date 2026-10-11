@@ -16,8 +16,6 @@ import (
 	"testing"
 )
 
-// ── resolveDynamic ─────────────────────────────────────────────────────────────
-
 // BenchmarkResolveDynamic_NoPlaceholder measures the short-circuit path taken
 // when a string contains no "{{$" — the common case for static specs.
 func BenchmarkResolveDynamic_NoPlaceholder(b *testing.B) {
@@ -49,8 +47,6 @@ func BenchmarkResolveDynamic_Placeholders(b *testing.B) {
 		})
 	}
 }
-
-// ── ToHTTPRequest ────────────────────────────────────────────────────────────
 
 // BenchmarkToHTTPRequest_StaticFastPath measures the Compile()'d fast path:
 // PreparsedURL + PrebuiltHeaders, no variables, no dynamic placeholders.

@@ -41,10 +41,8 @@ const (
 //	The /10 divisor adds a ×10 safety margin to absorb latency spikes and
 //	bursty dispatch without forcing TCP connection churn.
 func buildTransport(peakRPS int) *http.Transport {
-	// fdBudget() is implemented per-platform (pool_unix.go / pool_windows.go);
-	// returns 0 only when the limit cannot be queried — caller treats as
-	// uncapped. A known limit (however small) always yields budget > 0, so a
-	// tight ulimit always results in the pool being clamped down below.
+	// fdBudget is per-platform: 0 means the limit couldn't be queried (treated as
+	// uncapped), while any known limit yields a positive budget.
 	return buildTransportWithBudget(peakRPS, fdBudget())
 }
 

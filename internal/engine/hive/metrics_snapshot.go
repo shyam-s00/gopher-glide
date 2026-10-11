@@ -2,17 +2,10 @@ package hive
 
 import "github.com/shyam-s00/gopher-glide/internal/engine"
 
-// GetMetrics returns a point-in-time snapshot of all engine counters,
-// latency percentiles, stage progress, and director-mode bias.
-//
-// Reading across the 16 sharded counter arrays is not collectively atomic.
-// A snapshot taken during a live run may transiently show success+failure off
-// by 1 vs. totalRequests — this is mathematically acceptable for a ~10 Hz TUI
-// and correct over any observation window longer than a few microseconds.
-//
-// Safe to call from any goroutine at any time.
+// GetMetrics returns a point-in-time snapshot of counters, latency percentiles,
+// stage progress and director bias. The sharded counters aren't read atomically
+// as a set (see the metrics type). Safe to call from any goroutine.
 func (e *Engine) GetMetrics() *engine.MetricsSnapshot {
-	// ── Counters (sum all 16 shards) ──────────────────────────────────────
 	// Read success and failure BEFORE total.
 	// Writers always call incTotalRequests before incSuccess/incFailure, so
 	// any success/failure visible at read-time has a corresponding total
@@ -23,7 +16,6 @@ func (e *Engine) GetMetrics() *engine.MetricsSnapshot {
 	total := e.counters.loadTotalRequests()
 	totalLatency := e.counters.loadTotalLatency()
 
-	// ── Derived scalars ───────────────────────────────────────────────────
 	var avgLatency float64
 	if total > 0 {
 		avgLatency = float64(totalLatency) / float64(total)
@@ -34,10 +26,8 @@ func (e *Engine) GetMetrics() *engine.MetricsSnapshot {
 		errorRate = float64(failed) / float64(total)
 	}
 
-	// ── Throughput (sliding-window RPS) ───────────────────────────────────
 	throughput := e.rpsWin.rate()
 
-	// ── Latency percentiles ───────────────────────────────────────────────
 	minL, maxL, p50, p95, p99 := e.computeLatency()
 
 	return &engine.MetricsSnapshot{

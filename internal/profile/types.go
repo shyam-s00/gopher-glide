@@ -32,10 +32,9 @@ type Segment struct {
 	// Type controls the shape of this segment.
 	Type SegmentType `yaml:"type"`
 
-	// DurationPct is the fraction of the total run time allocated to this
-	// segment. Values must be in [0, 1]. The sum of all non-zero DurationPct
-	// values in a profile should equal 1.0. A value of 0 is valid for SegmentStep
-	// and represents a pure instant transition with no hold time.
+	// DurationPct is this segment's fraction of the total run time, in [0, 1].
+	// Non-zero values should sum to 1.0; 0 is valid for SegmentStep (an instant
+	// transition).
 	DurationPct float64 `yaml:"duration_pct"`
 
 	// RPSMultiplier is the target RPS for this segment expressed as a fraction

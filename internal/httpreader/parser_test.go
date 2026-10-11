@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-
 func writeHTTPFile(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -18,8 +16,6 @@ func writeHTTPFile(t *testing.T, content string) string {
 	}
 	return path
 }
-
-// ── ParseFile ─────────────────────────────────────────────────────────────────
 
 func TestParseFile_ValidFile(t *testing.T) {
 	content := `### Simple GET
@@ -42,8 +38,6 @@ func TestParseFile_NotFound(t *testing.T) {
 		t.Fatal("expected error for missing file, got nil")
 	}
 }
-
-// ── Parse — single request ────────────────────────────────────────────────────
 
 func TestParse_SingleGET(t *testing.T) {
 	content := `### Get Users
@@ -107,8 +101,6 @@ Accept: application/json
 		t.Errorf("unexpected body: %q", r.Body)
 	}
 }
-
-// ── Parse — multiple requests ─────────────────────────────────────────────────
 
 func TestParse_MultipleRequests(t *testing.T) {
 	content := `### Get Users
@@ -199,8 +191,6 @@ X-Client-Name: gg/1.0
 	}
 }
 
-// ── Parse — HTTP methods ──────────────────────────────────────────────────────
-
 func TestParse_AllHTTPMethods(t *testing.T) {
 	methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
 
@@ -230,8 +220,6 @@ func TestParse_LowercaseMethodNormalisedToUpper(t *testing.T) {
 	}
 }
 
-// ── Parse — implicit first request (no ### separator) ─────────────────────────
-
 func TestParse_ImplicitFirstRequest(t *testing.T) {
 	content := `GET https://example.com/implicit
 Accept: text/plain
@@ -247,8 +235,6 @@ Accept: text/plain
 		t.Errorf("unexpected spec: %+v", specs[0])
 	}
 }
-
-// ── Parse — comments & whitespace ─────────────────────────────────────────────
 
 func TestParse_HashCommentsIgnored(t *testing.T) {
 	content := `# This is a top-level comment
@@ -311,8 +297,6 @@ func TestParse_OnlyWhitespaceAndComments(t *testing.T) {
 	}
 }
 
-// ── Parse — body trimming ─────────────────────────────────────────────────────
-
 func TestParse_BodyIsTrimmed(t *testing.T) {
 	content := `### Body trim test
 POST https://example.com
@@ -352,8 +336,6 @@ Content-Type: application/json
 	}
 }
 
-// ── Parse — separator / name extraction ──────────────────────────────────────
-
 func TestParse_SeparatorWithNoName(t *testing.T) {
 	content := `###
 GET https://example.com
@@ -382,8 +364,6 @@ GET https://example.com
 		t.Errorf("expected trimmed name=%q, got %q", "Padded Name", specs[0].Name)
 	}
 }
-
-// ── Parse — header edge cases ────────────────────────────────────────────────
 
 func TestParse_HeaderWithColonInValue(t *testing.T) {
 	content := `### Header colon value
@@ -414,8 +394,6 @@ X-Custom: value2
 		t.Fatalf("expected 2 values for X-Custom, got %d", len(vals))
 	}
 }
-
-// ── Parse — @gg-export directives ────────────────────────────────────────────
 
 func TestParse_ExportDirective_JSONPath_AfterBody(t *testing.T) {
 	content := `### Login
@@ -605,8 +583,6 @@ Content-Type: application/json
 		t.Errorf("unexpected body: %q", body)
 	}
 }
-
-// ── Parse — JS embed safety ───────────────────────────────────────────────────
 
 func TestParse_JSEmbed_IsIgnored(t *testing.T) {
 	content := `### Request with JS handler

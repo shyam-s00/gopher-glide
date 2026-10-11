@@ -1,21 +1,7 @@
 package hive
 
-// engine_integration_test.go mirrors the full engine_test.go suite from the
-// legacy engine, verifying that hive.Engine satisfies the same behavioural
-// contract through the public Runner interface.
-//
-// Coverage:
-//   - Input validation (ErrNoRequests, ErrNoStages)
-//   - Lifecycle (IsRunning during / after run, GetStartTime, GetEndTime)
-//   - Context cancellation
-//   - Request dispatch (at least one request sent)
-//   - Counter correctness (success, failure, total, error rate)
-//   - Stage count reflected in GetMetrics
-//   - Latency recorded and percentiles populated
-//   - User-Agent header set on every request
-//   - Bias applied during a live run
-//   - Run() backward-compat wrapper
-//   - State reset across back-to-back RunStages calls
+// engine_integration_test.go checks that hive.Engine honours the Runner
+// contract through its public methods.
 
 import (
 	"context"
@@ -31,8 +17,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 )
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 func newCountingServer(t *testing.T, status int) (*httptest.Server, *atomic.Int64) {
 	t.Helper()
@@ -55,8 +39,6 @@ func singleStageCfg(dur time.Duration, rps int) *config.Config {
 func specsFor(url string) []httpreader.RequestSpec {
 	return []httpreader.RequestSpec{{Method: http.MethodGet, URL: url}}
 }
-
-// ── Input validation ──────────────────────────────────────────────────────────
 
 func TestRunStages_NoSpecs_ReturnsErrNoRequests(t *testing.T) {
 	e := New()
@@ -81,8 +63,6 @@ func TestRunStages_NilConfig_ReturnsErrNoStages(t *testing.T) {
 		t.Fatalf("want ErrNoStages for nil cfg, got %v", err)
 	}
 }
-
-// ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 func TestRunStages_IsRunning_DuringRun(t *testing.T) {
 	srv, _ := newCountingServer(t, 200)
@@ -177,8 +157,6 @@ func TestGetElapsedTime_Integration_LiveDuringRun(t *testing.T) {
 	<-done
 }
 
-// ── Context cancellation ──────────────────────────────────────────────────────
-
 func TestRunStages_ContextCancel_ReturnsNil(t *testing.T) {
 	srv, _ := newCountingServer(t, 200)
 	e := New()
@@ -218,8 +196,6 @@ func TestRunStages_ContextCancel_IsRunning_False(t *testing.T) {
 	}
 }
 
-// ── Request dispatch ──────────────────────────────────────────────────────────
-
 func TestRunStages_RequestsAreSent(t *testing.T) {
 	srv, hits := newCountingServer(t, 200)
 	e := New()
@@ -251,8 +227,6 @@ func TestRunStages_UserAgentSet(t *testing.T) {
 		t.Errorf("User-Agent: want %q, got %q", userAgent, capturedUA)
 	}
 }
-
-// ── Counter correctness ───────────────────────────────────────────────────────
 
 func TestRunStages_SuccessCountsRecorded(t *testing.T) {
 	srv, _ := newCountingServer(t, 200)
@@ -321,8 +295,6 @@ func TestRunStages_TotalMatchesSuccessPlusFailure(t *testing.T) {
 	}
 }
 
-// ── Stage count in metrics ────────────────────────────────────────────────────
-
 func TestRunStages_StageCountInMetrics(t *testing.T) {
 	srv, _ := newCountingServer(t, 200)
 	e := New()
@@ -341,13 +313,42 @@ func TestRunStages_StageCountInMetrics(t *testing.T) {
 	}
 }
 
-// ── Latency recorded ─────────────────────────────────────────────────────────
-
+// Every request records exactly one latency sample, and the server's delay is
+// a floor for every measured value.
 func TestRunStages_LatencyRecorded(t *testing.T) {
-	t.Skip("latency write path not yet implemented")
-}
+	const delay = 20 * time.Millisecond
+	srv := slowHiveSrv(t, 200, delay)
+	e := New()
 
-// ── Bias applied during run ───────────────────────────────────────────────────
+	if err := e.RunStages(context.Background(), singleStageCfg(300*time.Millisecond, 20), specsFor(srv.URL)); err != nil {
+		t.Fatalf("RunStages: %v", err)
+	}
+	m := e.GetMetrics()
+	if m.TotalRequests == 0 {
+		t.Fatal("expected requests to be sent")
+	}
+	if got := e.latBuf.Load().n.Load(); got != m.TotalRequests {
+		t.Errorf("latency samples = %d, want one per request (%d)", got, m.TotalRequests)
+	}
+
+	floor := float64(delay) / float64(time.Millisecond)
+	for _, c := range []struct {
+		name string
+		v    float64
+	}{
+		{"AvgLatency", m.AvgLatency}, {"MinLatency", m.MinLatency}, {"P50Latency", m.P50Latency},
+		{"P95Latency", m.P95Latency}, {"P99Latency", m.P99Latency}, {"MaxLatency", m.MaxLatency},
+	} {
+		if c.v < floor-0.001 {
+			t.Errorf("%s = %.3f ms, below the server delay of %.0f ms", c.name, c.v, floor)
+		}
+	}
+	if !(m.MinLatency <= m.P50Latency && m.P50Latency <= m.P95Latency &&
+		m.P95Latency <= m.P99Latency && m.P99Latency <= m.MaxLatency) {
+		t.Errorf("percentiles out of order: min=%v p50=%v p95=%v p99=%v max=%v",
+			m.MinLatency, m.P50Latency, m.P95Latency, m.P99Latency, m.MaxLatency)
+	}
+}
 
 func TestRunStages_BiasApplied_ReflectedAfterRun(t *testing.T) {
 	srv, _ := newCountingServer(t, 200)
@@ -364,8 +365,6 @@ func TestRunStages_BiasApplied_ReflectedAfterRun(t *testing.T) {
 		t.Errorf("want bias 5 after run, got %d", e.GetBias())
 	}
 }
-
-// ── Run() backward compat ─────────────────────────────────────────────────────
 
 func TestRun_BackwardCompat_RequestsSent(t *testing.T) {
 	srv, hits := newCountingServer(t, 200)
@@ -397,8 +396,6 @@ func TestRun_BackwardCompat_NoSpecs_ReturnsErrNoRequests(t *testing.T) {
 	}
 }
 
-// ── TimeScale compression ─────────────────────────────────────────────────────
-
 func TestRunStages_TimeScale_CompressesDuration(t *testing.T) {
 	srv, hits := newCountingServer(t, 200)
 	e := New()
@@ -418,8 +415,6 @@ func TestRunStages_TimeScale_CompressesDuration(t *testing.T) {
 		t.Error("expected at least one request with compressed stage")
 	}
 }
-
-// ── State reset across back-to-back runs ─────────────────────────────────────
 
 func TestRunStages_StateReset_BetweenRuns(t *testing.T) {
 	// First run: all failures. Second run: all successes.
@@ -445,11 +440,27 @@ func TestRunStages_StateReset_BetweenRuns(t *testing.T) {
 	}
 }
 
+// The second run gets a fresh latency buffer holding only its own samples.
 func TestRunStages_StateReset_LatenciesCleared(t *testing.T) {
-	t.Skip("latency write path not yet implemented")
-}
+	srv, _ := newCountingServer(t, 200)
+	e := New()
+	cfg := singleStageCfg(200*time.Millisecond, 20)
 
-// ── Multiple specs round-robin ────────────────────────────────────────────────
+	_ = e.RunStages(context.Background(), cfg, specsFor(srv.URL))
+	first := e.latBuf.Load()
+	if first.n.Load() == 0 {
+		t.Fatal("first run: expected latency samples")
+	}
+
+	_ = e.RunStages(context.Background(), cfg, specsFor(srv.URL))
+	second := e.latBuf.Load()
+	if second == first {
+		t.Fatal("latency buffer was not replaced for the second run")
+	}
+	if got, want := second.n.Load(), e.GetMetrics().TotalRequests; got != want {
+		t.Errorf("second run holds %d latency samples for %d requests (leftovers from run 1?)", got, want)
+	}
+}
 
 func TestRunStages_MultipleSpecs_BothHit(t *testing.T) {
 	var hit0, hit1 atomic.Int64
@@ -476,8 +487,6 @@ func TestRunStages_MultipleSpecs_BothHit(t *testing.T) {
 	}
 }
 
-// ── Metrics: initial zero state ───────────────────────────────────────────────
-
 func TestEngine_InitialState_MetricsAreZero(t *testing.T) {
 	e := New()
 	m := e.GetMetrics()
@@ -491,8 +500,6 @@ func TestEngine_InitialState_MetricsAreZero(t *testing.T) {
 		t.Errorf("fresh engine: Bias should be 0, got %d", m.Bias)
 	}
 }
-
-// ── Zero-duration stage (spike) ───────────────────────────────────────────────
 
 func TestRunStages_ZeroDurationStage_Spike(t *testing.T) {
 	srv, hits := newCountingServer(t, 200)

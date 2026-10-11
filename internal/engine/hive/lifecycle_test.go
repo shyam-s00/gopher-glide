@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 // setTimes directly sets startTime and endTime under the timeMu lock,
 // simulating what RunStages would do without needing a live HTTP server.
 func setTimes(e *Engine, start, end time.Time) {
@@ -15,8 +13,6 @@ func setTimes(e *Engine, start, end time.Time) {
 	e.endTime = end
 	e.timeMu.Unlock()
 }
-
-// ── IsRunning ─────────────────────────────────────────────────────────────────
 
 func TestIsRunning_FalseBeforeStart(t *testing.T) {
 	e := New()
@@ -41,8 +37,6 @@ func TestIsRunning_FalseAfterEnd(t *testing.T) {
 		t.Fatal("expected IsRunning=false after run ends")
 	}
 }
-
-// ── GetStartTime ──────────────────────────────────────────────────────────────
 
 func TestGetStartTime_ZeroBeforeStart(t *testing.T) {
 	e := New()
@@ -70,8 +64,6 @@ func TestGetStartTime_StableAfterEnd(t *testing.T) {
 		t.Fatal("start time must not change after run ends")
 	}
 }
-
-// ── GetEndTime ────────────────────────────────────────────────────────────────
 
 func TestGetEndTime_ReturnsNowBeforeStart(t *testing.T) {
 	e := New()
@@ -107,8 +99,6 @@ func TestGetEndTime_ReturnsRecordedTimeAfterEnd(t *testing.T) {
 		t.Fatalf("expected end=%v, got %v", end, got)
 	}
 }
-
-// ── GetElapsedTime ────────────────────────────────────────────────────────────
 
 func TestGetElapsedTime_ZeroBeforeStart(t *testing.T) {
 	e := New()
@@ -153,8 +143,6 @@ func TestGetElapsedTime_DoesNotGrowAfterEnd(t *testing.T) {
 		t.Fatalf("elapsed time must be fixed after end: first=%.6f second=%.6f", first, second)
 	}
 }
-
-// ── Combined state machine ────────────────────────────────────────────────────
 
 func TestLifecycle_FullStateMachine(t *testing.T) {
 	e := New()

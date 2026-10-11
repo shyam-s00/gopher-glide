@@ -7,21 +7,15 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
 
-// WithHTTPClient replaces the default shared HTTP client with the provided one.
-//
-// Primarily useful in tests to inject an httptest.Server-backed client without
-// going through the network stack. Production callers should prefer the default
-// client built by New(), whose transport is automatically re-tuned to the
-// run's peak RPS at the start of each RunStages call.
+// WithHTTPClient replaces the default shared HTTP client, mainly to inject an
+// httptest-backed client in tests. The default client's transport is re-tuned to
+// peak RPS on each RunStages; a custom client's is not.
 func WithHTTPClient(c *http.Client) EngineOption {
 	return func(e *Engine) { e.client = c }
 }
 
-// WithRecorder attaches a snap.Recorder to the engine.
-//
-// When set, every HTTP response is passed to recorder.Record() after the
-// body is drained. The hot-path is a single nil-check — zero overhead when
-// snapping is off (the default).
+// WithRecorder attaches a snap.Recorder; each response is passed to Record after
+// its body is drained. When unset (the default) the hot path is one nil check.
 func WithRecorder(r snap.Recorder) EngineOption {
 	return func(e *Engine) { e.recorder = r }
 }
@@ -54,10 +48,8 @@ func WithSampleRate(rate float64) EngineOption {
 	}
 }
 
-// shouldSample returns true for 1-in-sampleEvery requests.
-//
-// Uses an atomic counter so it is safe to call from many Actor goroutines
-// concurrently without any locking. sampleEvery == 0 disables body capture.
+// shouldSample returns true for 1-in-sampleEvery requests via a lock-free atomic
+// counter; sampleEvery == 0 disables body capture.
 func (e *Engine) shouldSample() bool {
 	if e.sampleEvery == 0 {
 		return false

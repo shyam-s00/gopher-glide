@@ -8,8 +8,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/config"
 )
 
-// ── queen ─────────────────────────────────────────────────────────────────────
-
 // queen is the Simulation Scheduler. It operates on a proactive emit-then-sleep
 // loop rather than a reactive ticker:
 //
@@ -27,7 +25,7 @@ import (
 //   - RC3 Full-count burst: Count is always scaled to windowDur / 1 s, so a
 //     10 ms fractional window never receives a full second's worth of actors.
 type queen struct {
-	e *Engine // back-pointer to shared atomics and channels
+	e *Engine // back-pointer to the shared engine state
 }
 
 // run is the Queen's main loop. It is launched as a goroutine by RunStages and
@@ -45,7 +43,7 @@ func (q *queen) run(
 	prevRPS := 0 // RPS at the end of the previous stage (starts at 0)
 
 	for stageIdx, stage := range stages {
-		// ── Zero-duration stage: instant step, no sleep ────────────────────
+		// Zero-duration stage: instant step, no window loop.
 		if stage.Duration == 0 {
 			prevRPS = stage.TargetRPS
 			q.e.currentStage.Store(int32(stageIdx))
@@ -54,7 +52,6 @@ func (q *queen) run(
 			if rps < 1 {
 				rps = 1
 			}
-			q.drainBias()
 			biasedRPS := rps + int(q.e.rpsBias.Load())
 			if biasedRPS < 1 {
 				biasedRPS = 1
@@ -68,11 +65,8 @@ func (q *queen) run(
 			continue
 		}
 
-		// ── Normal (timed) stage: proactive emit-then-sleep loop ───────────
-		//
-		// The window boundaries are anchored to the fixed stageStart time, not
-		// to time.Now() after each sleep, so OS scheduler jitter never
-		// accumulates into drift across a long stage.
+		// Timed stage: window boundaries are anchored to stageStart (not time.Now() after
+		// each sleep), so scheduler jitter never accumulates into drift.
 		scaledDur := time.Duration(float64(stage.Duration) / timeScale)
 		q.e.currentStage.Store(int32(stageIdx))
 
@@ -85,7 +79,7 @@ func (q *queen) run(
 		windowStart := stageStart
 
 		for windowStart.Before(stageEnd) {
-			// ── 1. Compute the window ──────────────────────────────────────
+			// 1. Compute the window.
 			windowEnd := windowStart.Add(time.Second)
 			if windowEnd.After(stageEnd) {
 				windowEnd = stageEnd
@@ -98,10 +92,9 @@ func (q *queen) run(
 				break
 			}
 
-			// ── 2. LERP + bias + proportional count (1.5.2) ───────────────
-			//
-			// Evaluate the LERP at windowEnd (the end of the upcoming window)
-			// so the ramp progresses smoothly over the stage.
+			// 2. LERP + bias + proportional count. Evaluate the LERP at
+			// windowEnd (the end of the upcoming window) so the ramp
+			// progresses smoothly over the stage.
 			elapsed := windowEnd.Sub(stageStart)
 			pct := float64(elapsed) / float64(scaledDur)
 			if pct > 1 {
@@ -110,7 +103,6 @@ func (q *queen) run(
 				pct = 0
 			}
 
-			q.drainBias()
 			currentRPS := startRPS + (endRPS-startRPS)*pct
 			biasedRPS := currentRPS + float64(q.e.rpsBias.Load())
 			if biasedRPS < 1 {
@@ -128,29 +120,22 @@ func (q *queen) run(
 
 			q.e.targetRPS.Store(int64(fullSecondRPS))
 
-			// ── 3. Emit manifest for the upcoming window ───────────────────
+			// 3. Emit manifest for the upcoming window.
 			select {
 			case manifestCh <- SpawnManifest{Count: count, Duration: windowDur}:
 			default:
 				// Hatchery is behind — drop this manifest silently.
 			}
 
-			// ── 4. Sleep for the window duration (1.5.3) ──────────────────
-			//
-			// Emit first, then sleep. The Hatchery begins dispatching
-			// immediately; the Queen wakes up just as dispatching finishes.
-			// Using a timer + select ensures context cancellation is honoured
-			// without delaying the shutdown by up to one full window.
-			// After the timer fires, drain biasCh so any bias that arrived
-			// during the sleep is reflected in rpsBias (visible via GetBias())
-			// and will be factored into the very next window's LERP.
+			// 4. Emit first so the Hatchery dispatches while the Queen waits; a timer +
+			// select (not time.Sleep) keeps cancellation responsive. Mid-sleep bias
+			// lands in the next window.
 			timer := time.NewTimer(windowDur)
 			select {
 			case <-ctx.Done():
 				timer.Stop()
 				return nil
 			case <-timer.C:
-				q.drainBias()
 			}
 
 			// Advance to the next window using the computed boundary (not
@@ -161,18 +146,4 @@ func (q *queen) run(
 		prevRPS = stage.TargetRPS
 	}
 	return nil
-}
-
-// drainBias reads all pending deltas from biasCh and accumulates them into the
-// rpsBias atomic. Non-blocking — returns immediately when the channel is empty.
-func (q *queen) drainBias() {
-drainLoop:
-	for {
-		select {
-		case delta := <-q.e.biasCh:
-			q.e.rpsBias.Add(int64(delta))
-		default:
-			break drainLoop
-		}
-	}
 }

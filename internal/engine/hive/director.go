@@ -1,20 +1,14 @@
 package hive
 
-// ApplyBias sends a cumulative RPS delta to the Queen via the buffered biasCh.
-//
-// The send is non-blocking: if the channel buffer (capacity 16) is full the
-// delta is silently dropped. In practice the Queen drains biasCh on every
-// 1-second heartbeat tick, so the buffer never fills under normal TUI usage.
-// Negative deltas are accepted and reduce the effective RPS.
+// ApplyBias adds a signed RPS delta to the cumulative bias. The new value is
+// visible to GetBias immediately; the Queen folds it into the target rate at
+// the start of its next 1-second window. Never blocks or drops a delta.
 func (e *Engine) ApplyBias(delta int) {
-	select {
-	case e.biasCh <- delta:
-	default: // drop silently — buffer full
-	}
+	e.rpsBias.Add(int64(delta))
 }
 
-// GetBias returns the current cumulative manual RPS bias as set by prior
-// ApplyBias calls and drained by the Queen. A positive value means the live
+// GetBias returns the current cumulative manual RPS bias from all prior
+// ApplyBias calls. A positive value means the live
 // RPS has been nudged up; negative means it has been nudged down.
 func (e *Engine) GetBias() int {
 	return int(e.rpsBias.Load())

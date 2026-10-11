@@ -8,8 +8,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/config"
 )
 
-// ── WithMaxBodySamples / WithMaxBodyBytes options ─────────────────────────────
-
 func TestWithMaxBodySamples_Applied(t *testing.T) {
 	r := NewDefaultRecorder(64, WithMaxBodySamples(5))
 	if r.maxBodySamples != 5 {
@@ -35,8 +33,6 @@ func TestWithMaxBodyBytes_Applied(t *testing.T) {
 	_, _ = r.Finalize(RunMeta{StartTime: time.Now(), EndTime: time.Now()})
 }
 
-// ── Record after close ────────────────────────────────────────────────────────
-
 func TestRecord_AfterFinalize_IsDropped(t *testing.T) {
 	r := NewDefaultRecorder(64)
 	_, err := r.Finalize(RunMeta{StartTime: time.Now(), EndTime: time.Now()})
@@ -46,8 +42,6 @@ func TestRecord_AfterFinalize_IsDropped(t *testing.T) {
 	// Recording after close must not panic.
 	r.Record(RecordEntry{Method: "GET", URL: "/dropped", StatusCode: 200})
 }
-
-// ── resolveMaxSamples ─────────────────────────────────────────────────────────
 
 func TestResolveMaxSamples_Zero(t *testing.T) {
 	if got := resolveMaxSamples(0); got != DefaultMaxBodySamples {
@@ -66,8 +60,6 @@ func TestResolveMaxSamples_Positive(t *testing.T) {
 		t.Errorf("resolveMaxSamples(50) = %d, want 50", got)
 	}
 }
-
-// ── recordBody reservoir mechanics ───────────────────────────────────────────
 
 func TestRecordBody_FillsReservoir(t *testing.T) {
 	acc := &endpointAcc{
@@ -134,8 +126,6 @@ func TestRecordBody_ByteBudgetFreezesReservoir(t *testing.T) {
 	}
 }
 
-// ── configHash ────────────────────────────────────────────────────────────────
-
 func TestConfigHash_NilReturnsEmpty(t *testing.T) {
 	if got := configHash(nil); got != "" {
 		t.Errorf("configHash(nil) = %q, want empty string", got)
@@ -161,8 +151,6 @@ func TestConfigHash_DifferentConfigsProduceDifferentHashes(t *testing.T) {
 		t.Error("different configs should produce different hashes")
 	}
 }
-
-// ── BodySamples edge-cases ────────────────────────────────────────────────────
 
 func TestBodySamples_UnknownEndpoint(t *testing.T) {
 	r := NewDefaultRecorder(64)
@@ -193,8 +181,6 @@ func TestBodySamples_EndpointWithNoBody(t *testing.T) {
 	}
 }
 
-// ── percentile edge-cases ─────────────────────────────────────────────────────
-
 func TestPercentile_EmptySlice(t *testing.T) {
 	if got := percentile([]float64{}, 50); got != 0 {
 		t.Errorf("percentile of empty slice should be 0, got %f", got)
@@ -206,8 +192,6 @@ func TestPercentile_SingleElement(t *testing.T) {
 		t.Errorf("percentile of single element should be 42.0, got %f", got)
 	}
 }
-
-// ── Finalize: snap settings are recorded ─────────────────────────────────────
 
 func TestFinalize_SnapSettingsRecorded(t *testing.T) {
 	r := NewDefaultRecorder(64, WithMaxBodySamples(10))
@@ -231,8 +215,6 @@ func TestFinalize_SnapSettingsRecorded(t *testing.T) {
 		t.Errorf("MaxBodyKB: want 512, got %d", snap.Meta.SnapSettings.MaxBodyKB)
 	}
 }
-
-// ── Dropped counter ───────────────────────────────────────────────────────────
 
 func TestDropped_NoneWhenBufferSufficient(t *testing.T) {
 	r := NewDefaultRecorder(256)

@@ -6,8 +6,6 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
 )
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 func jsonDir(varName, pattern string) httpreader.ExportDirective {
 	return httpreader.ExportDirective{VarName: varName, Engine: httpreader.ExportEngineJSONPath, Pattern: pattern}
 }
@@ -15,8 +13,6 @@ func jsonDir(varName, pattern string) httpreader.ExportDirective {
 func reDir(varName, pattern string) httpreader.ExportDirective {
 	return httpreader.ExportDirective{VarName: varName, Engine: httpreader.ExportEngineRegex, Pattern: pattern}
 }
-
-// ── Extract – JSONPath happy paths ────────────────────────────────────────────
 
 func TestExtract_JSONPath_TopLevelString(t *testing.T) {
 	body := []byte(`{"token": "abc123"}`)
@@ -139,8 +135,6 @@ func TestExtract_JSONPath_ObjectLeafSerialised(t *testing.T) {
 	}
 }
 
-// ── Extract – JSONPath error paths ────────────────────────────────────────────
-
 func TestExtract_JSONPath_KeyNotFound(t *testing.T) {
 	body := []byte(`{"data": {"token": "abc"}}`)
 	_, err := Extract(body, jsonDir("x", "$.data.missing"))
@@ -186,8 +180,6 @@ func TestExtract_JSONPath_EmptyBody(t *testing.T) {
 	}
 }
 
-// ── Extract – Regex happy paths ───────────────────────────────────────────────
-
 func TestExtract_Regex_CaptureGroup(t *testing.T) {
 	body := []byte("session_id=abc123xyz")
 	got, err := Extract(body, reDir("s", "session_id=([a-zA-Z0-9]+)"))
@@ -232,8 +224,6 @@ func TestExtract_Regex_FirstMatchReturned(t *testing.T) {
 	}
 }
 
-// ── Extract – Regex error paths ───────────────────────────────────────────────
-
 func TestExtract_Regex_NoMatch(t *testing.T) {
 	_, err := Extract([]byte(`{"response": "ok"}`), reDir("s", "session_id=([a-zA-Z0-9]+)"))
 	if err == nil {
@@ -248,8 +238,6 @@ func TestExtract_Regex_InvalidPattern(t *testing.T) {
 	}
 }
 
-// ── Extract – unknown engine ──────────────────────────────────────────────────
-
 func TestExtract_UnknownEngine(t *testing.T) {
 	d := httpreader.ExportDirective{VarName: "t", Engine: "xpath", Pattern: "//token"}
 	_, err := Extract([]byte(`{"token":"abc"}`), d)
@@ -257,8 +245,6 @@ func TestExtract_UnknownEngine(t *testing.T) {
 		t.Fatal("expected error for unknown engine, got nil")
 	}
 }
-
-// ── Internal path helpers ─────────────────────────────────────────────────────
 
 func TestSplitPath(t *testing.T) {
 	cases := []struct {

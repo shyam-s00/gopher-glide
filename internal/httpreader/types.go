@@ -18,10 +18,9 @@ const (
 	ExportEngineRegex    ExportEngine = "regex"
 )
 
-// ExportDirective represents a single `# @gg-export` pragma attached to a
-// RequestSpec.  After the request is executed the engine will evaluate
-// Pattern against the response body using Engine and store the result in
-// VarName for use by subsequent requests in the same journey.
+// ExportDirective is one `# @gg-export` pragma: after the request runs, Pattern
+// is evaluated against the response body using Engine and stored in VarName for
+// later requests in the same journey.
 type ExportDirective struct {
 	VarName       string
 	Engine        ExportEngine
@@ -86,13 +85,9 @@ func (r *RequestSpec) Compile() {
 	}
 }
 
-// Journey is an ordered, contiguous run of RequestSpecs that an Actor
-// executes sequentially as a single stateful unit, sharing one ActorMemory.
-//
-// Smart Detection (see GroupJourneys) produces these automatically: requests
-// linked by a `# @gg-export` → `{{var}}` chain are grouped into a multi-step
-// Journey, while every other request becomes its own independent single-step
-// Journey — so a purely stateless `.http` file behaves exactly as before.
+// Journey is an ordered run of RequestSpecs that an Actor executes sequentially,
+// sharing one ActorMemory. GroupJourneys builds them; a stateless request is a
+// single-step Journey.
 type Journey struct {
 	Specs []RequestSpec
 }

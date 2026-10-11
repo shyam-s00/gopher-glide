@@ -10,10 +10,9 @@ import (
 	"time"
 )
 
-// seedLatBuf writes values directly into e.latBuf, simulating what
-// recordLatency() will do once the actor write path is live (1.4.1h).
-// Using the same atomic ring-buffer protocol: claim a slot via n.Add(1),
-// then store Float64bits at pos = (idx % cap).
+// seedLatBuf writes values directly into e.latBuf using recordLatency's ring
+// protocol (claim a slot via n.Add(1), store Float64bits at idx % cap), so
+// tests can set exact latencies without timing.
 func seedLatBuf(e *Engine, values ...float64) {
 	lb := e.latBuf.Load()
 	for _, v := range values {
@@ -22,8 +21,6 @@ func seedLatBuf(e *Engine, values ...float64) {
 		lb.buf[pos].Store(math.Float64bits(v))
 	}
 }
-
-// ── percentile ────────────────────────────────────────────────────────────────
 
 func TestPercentile_Empty(t *testing.T) {
 	if got := percentile(nil, 50); got != 0 {
@@ -89,8 +86,6 @@ func TestPercentile_Interpolation(t *testing.T) {
 		}
 	}
 }
-
-// ── computeLatency ────────────────────────────────────────────────────────────
 
 func TestComputeLatency_Empty(t *testing.T) {
 	e := New()
@@ -187,8 +182,6 @@ func TestComputeLatency_P99GeP95GeP50(t *testing.T) {
 		t.Errorf("p95 (%f) should be >= p50 (%f)", p95, p50)
 	}
 }
-
-// ── 1.4.1i — lock-free latencyBuf integration tests ──────────────────────────
 
 // TestLatencyBuf_RecordAndSnapshot verifies that a value written via the real
 // recordLatency() hot-path is visible in computeLatency().
@@ -324,8 +317,6 @@ func TestLatencyBuf_LiveEngine_Consistency(t *testing.T) {
 		}
 	}
 }
-
-// ── latencySampleSize cap ─────────────────────────────────────────────────────
 
 // TestComputeLatency_LargeBuf_OnlyRecentSampled verifies that computeLatency()
 // reads at most latencySampleSize entries even when the ring holds far more,

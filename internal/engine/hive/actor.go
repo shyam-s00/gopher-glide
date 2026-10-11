@@ -13,15 +13,9 @@ import (
 	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
 
-// executeJourney runs every spec in the journey sequentially using a single
-// shared ActorMemory. Variables extracted by a @gg-export directive on step N
-// are automatically injected into the URL, headers, and body of step N+1…M.
-//
-// The journey aborts on the first failed step (HTTP 4xx/5xx, transport error,
-// or variable-extraction failure); subsequent steps are not executed.
-//
-// shard is passed through to executeActor unchanged so that counter writes
-// are distributed across shards without rand overhead.
+// executeJourney runs the journey's specs in order with one shared ActorMemory,
+// so variables exported by step N are available to step N+1…M. It aborts on the
+// first failed step.
 func (e *Engine) executeJourney(ctx context.Context, specs []httpreader.RequestSpec, shard int) error {
 	mem := newActorMemory()
 	for _, spec := range specs {
@@ -62,11 +56,9 @@ var bufferPool = sync.Pool{
 func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, shard int, mem *ActorMemory) error {
 	start := time.Now()
 
-	// ── 1. Record request count and RPS window tick ───────────────────────
 	e.counters.incTotalRequests(shard)
 	e.rpsWin.record(1)
 
-	// ── 2. Build request (inject variables from actor memory) ────────────
 	var vars map[string]string
 	if mem != nil {
 		vars = mem.ToMap()
@@ -89,7 +81,6 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		return err
 	}
 
-	// ── 3. Attach context + User-Agent ───────────────────────────────────
 	req = req.WithContext(ctx)
 	// Static specs get User-Agent baked into PrebuiltHeaders by Compile(),
 	// avoiding a per-request map write (and potential rehash).
@@ -104,7 +95,6 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		resolvedURL = req.URL.String()
 	}
 
-	// ── 4. Execute ───────────────────────────────────────────────────────
 	resp, err := e.client.Do(req)
 	duration := time.Since(start)
 
@@ -125,7 +115,6 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	// ── 5. Drain or capture body ─────────────────────────────────────────
 	// The body must be read (not discarded) when either:
 	//   a) the snap recorder is active and this request is within the sample
 	//      window (schema inference), or
@@ -160,10 +149,8 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		bodySize = int64(len(respBody))
 	}
 
-	// ── 6. Record latency ─────────────────────────────────────────────────
 	e.recordLatency(shard, duration)
 
-	// ── 7. HTTP error gate ────────────────────────────────────────────────
 	// Log, count, snap, and abort — extraction is never attempted on a
 	// failed HTTP response.
 	if resp.StatusCode >= 400 {
@@ -190,7 +177,6 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		return ErrHttpError
 	}
 
-	// ── 8. @gg-export variable extraction (2xx only) ─────────────────────
 	// Each directive is evaluated in declaration order. The first extraction
 	// failure aborts the journey: the variable would be empty/wrong, making
 	// every downstream step invalid.
@@ -225,11 +211,9 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 		}
 	}
 
-	// ── 9. Log + count success ────────────────────────────────────────────
 	e.logCall(shard, spec.Method, resolvedURL, resp.StatusCode, duration, nil)
 	e.counters.incSuccess(shard)
 
-	// ── 10. Snap record ───────────────────────────────────────────────────
 	if e.recorder != nil {
 		var snapBody []byte
 		if doSample {
@@ -260,8 +244,8 @@ func (e *Engine) executeActor(ctx context.Context, spec httpreader.RequestSpec, 
 //  3. Store the IEEE-754 bit representation of the ms value.
 //
 // Wrapping at capacity (pos = idx % cap) prevents unbounded growth. A slot
-// overwritten mid-flight by a subsequent writer produces at most one slightly
-// stale percentile sample — acceptable for a display-only metric.
+// overwritten mid-flight by a subsequent writer yields at most one slightly
+// stale percentile sample (see the metrics type for why that's fine).
 //
 // Sub-millisecond durations are rounded up to 1 ms for the sharded counter so
 // that the counter is always non-zero after any real request. The float64 ring

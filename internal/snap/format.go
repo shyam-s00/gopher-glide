@@ -10,10 +10,9 @@ import (
 // SnapFileExt is the file extension used for all snapshot files.
 const SnapFileExt = ".snap"
 
-// Write serialises snap as indented JSON and atomically writes it to path.
-// The file is written to a sibling temp file first, then renamed so a partial
-// write never leaves a corrupt .snap on disk.
-// The parent directory must already exist; use EnsureSnapDir to create it.
+// Write serialises snap as indented JSON via a sibling temp file and a rename, so
+// a partial write never leaves a corrupt .snap. The parent directory must exist
+// (see EnsureSnapDir).
 func Write(snap *Snapshot, path string) (err error) {
 	// Write to a temp file in the same directory, so the final rename is atomic
 	// on all platforms (same filesystem).

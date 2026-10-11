@@ -30,6 +30,7 @@ docker run --rm \
 Two things fall out of "distroless + nonroot" that matter for CI:
 
 - **No shell.** You can't `docker exec` into it or chain commands with `&&` inside the container — pass flags directly as the `docker run` command.
+- **stdin is off by default.** To send [live commands](/live-control) (`bias`, `mark`, `stop`) into a containerized run, add `-i` to `docker run` and pipe them in; without it `gg` sees end-of-input and the run is read-only. See [Driving a Run Live → In a container](/live-control#-in-a-container).
 - **Runs as UID `65532`, not root.** If `gg` needs to write anything back to a mounted volume (snapshot files, `--out` reports), that directory must be writable by that UID. On most CI runners the checked-out workspace is owned by the runner's own user, so `gg` running as `65532` won't have write access to it by default. The simplest fix is a world-writable output directory and an explicit `--snap-dir`, rather than relying on the container's default config dir:
 
   ```bash
