@@ -279,10 +279,9 @@ together as the protocol grows:
    simply never sees a `capabilities` field, never sends any commands, and the run behaves
    exactly as it always did.
 
-**Reserved capability namespaces:** capability strings are namespaced by area — `control.*` for
-run-control commands like the ones in this document. Future areas (for example, a `chaos.*`
-namespace for failure-injection commands) may be introduced the same way, as additive
-capabilities, without requiring a protocol version bump.
+**Capability namespaces:** capability strings are namespaced by area — `control.*` for
+run-control commands like the ones in this document. Any new capability is additive and does
+not require a protocol version bump.
 
 **Practical guidance for high-frequency use cases:** commands are processed in the order they're
 received. A UI element that can generate commands very rapidly (a slider, for example, as

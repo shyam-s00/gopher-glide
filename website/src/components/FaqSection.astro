@@ -1,12 +1,16 @@
 ---
 const faqs = [
   {
+    q: 'Is Gopher-Glide only for Go projects?',
+    a: 'No. gg is language-agnostic. It sends plain HTTP requests, so the service under test can be written in Node.js, Python, Java, Kotlin, .NET, Ruby, PHP, Rust, Go or anything else that answers HTTP. Nothing is installed in your app, and you do not need Go installed to run gg. It is written in Go, which is why it ships as a single static binary.',
+  },
+  {
     q: 'Is Gopher-Glide a k6 or JMeter alternative?',
     a: 'Yes. If you are looking for a modern, open-source alternative to k6, JMeter, or Locust, Gopher-Glide offers a zero-code approach. Instead of writing complex JavaScript or Python scripts, you reuse your existing .http REST Client files directly from your IDE.',
   },
   {
     q: 'How much load can a single instance generate?',
-    a: 'Thanks to the pure-Go lock-free Hive Engine, a single Gopher-Glide instance can comfortably push over 30,000 RPS (Requests Per Second) on modern hardware without exhausting system memory or triggering garbage collection pauses.',
+    a: 'Thanks to the lock-free Hive Engine, a single Gopher-Glide instance can comfortably push over 30,000 RPS (Requests Per Second) on modern hardware without exhausting system memory or triggering garbage collection pauses.',
   },
   {
     q: 'Can I run this in my CI/CD pipeline?',

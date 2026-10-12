@@ -16,7 +16,7 @@ export default defineConfig({
 		sitemap(),
 		starlight({
 			title: 'Gopher Glide',
-			description: 'High-fidelity API traffic simulation from your IDE. Build, test, and break APIs with zero boilerplate.',
+			description: 'HTTP traffic and regression simulator for any backend: Node, Python, Java, .NET, Rust, Go and more. Reuse your .http files, run from your IDE or CI.',
 			logo: {
 				light: './public/assets/ggToolIcon.svg',
 				dark: './public/assets/ggToolIcon_dark.svg',
@@ -48,6 +48,7 @@ export default defineConfig({
 			sidebar: [
 				{ label: 'Home', slug: 'index' },
 				{ label: 'Getting Started', slug: 'getting-started' },
+				{ label: 'Works With Any Backend', slug: 'any-backend' },
 				{ label: 'Load Profiles', slug: 'profiles' },
 				{ label: 'Benchmarks', slug: 'benchmarks' },
 				{ label: 'The TUI', slug: 'tui' },

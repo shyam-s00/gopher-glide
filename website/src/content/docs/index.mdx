@@ -1,6 +1,6 @@
 ---
-title: High-Fidelity API Traffic Simulation
-description: Gopher-Glide (gg) is an open-source, high-fidelity API traffic simulator. Move beyond brute-force load testing with native IDE integration and an interactive TUI.
+title: HTTP Traffic & Regression Simulator for Any Backend
+description: Gopher-Glide (gg) is an open-source HTTP traffic and regression simulator for any API, whether it is built with Node, Python, Java, .NET, Rails, Rust or Go. Reuse your .http files, run from your IDE or CI.
 template: splash
 ---
 import Hero from '../../components/Hero.astro';
@@ -12,10 +12,13 @@ import ComparisonTable from '../../components/ComparisonTable.astro';
 import FaqSection from '../../components/FaqSection.astro';
 import IDEPlugins from '../../components/IDEPlugins.astro';
 import WhatsNew from '../../components/WhatsNew.astro';
+import AnyStack from '../../components/AnyStack.astro';
 
 <Hero />
 
 <ContentWrapper>
+
+<AnyStack />
 
 <WhatsNew />
 
@@ -23,8 +26,8 @@ import WhatsNew from '../../components/WhatsNew.astro';
 
 <GlassFeatureRow title="Unleash The Hive. Destroy your servers, not your RAM.">
   <div slot="text">
-    <p><strong>A modern architecture built for massive scale.</strong> Legacy tools rely on heavy OS threads that choke your machine before they choke your API. The new Hive Engine uses a pure-Go lock-free Actor Model.</p>
-    <p>By isolating connections into ultra-lightweight Goroutines, a single instance effortlessly generates <strong>over 30,000 RPS</strong> with zero-garbage (<code>0 allocs/op</code>) overhead.</p>
+    <p><strong>A modern architecture built for massive scale.</strong> Legacy tools rely on heavy OS threads that choke your machine before they choke your API. The Hive Engine uses a lock-free Actor Model.</p>
+    <p>By isolating connections into ultra-lightweight workers, a single instance effortlessly generates <strong>over 30,000 RPS</strong> with zero-garbage (<code>0 allocs/op</code>) overhead. It happens to be written in Go, which is why <code>gg</code> is one static binary with no runtime to install. The API you test can be written in anything.</p>
 
     > **⚔️ Benchmark:** At 30,000 RPS target load, `gg` consumes **40% less memory** (1.42 GB vs 2.38 GB) and delivers **3x more successful requests** than `k6`. [Read the full breakdown &rarr;](/benchmarks)
   </div>
@@ -32,8 +35,8 @@ import WhatsNew from '../../components/WhatsNew.astro';
     ```mermaid
     graph TD
         Queen[👑 The Queen] -->|Micro-batches| Hatchery[🥚 The Hatchery]
-        Hatchery --> Actor1[🐝 Actor Goroutine]
-        Hatchery --> Actor2[🐝 Actor Goroutine]
+        Hatchery --> Actor1[🐝 Actor]
+        Hatchery --> Actor2[🐝 Actor]
         Actor1 -. API Request .-> API
         Actor2 -. API Request .-> API
     ```
@@ -43,7 +46,7 @@ import WhatsNew from '../../components/WhatsNew.astro';
 <GlassFeatureRow title="Zero Scripting Required" reverse={true}>
   <div slot="text">
     <p>Stop rewriting your API calls in JavaScript or Python just to run a quick load test. <strong>Reuse your existing <code>.http</code> REST Client files directly.</strong></p>
-    <p>Point <code>gg</code> at your IDE scratch files and go. Chain requests into a stateful journey instantly by exporting values with <code>@gg-export</code> and referencing them natively as <code>\{\{token\}\}</code>.</p>
+    <p>Point <code>gg</code> at your IDE scratch files and go. Your API can be written in anything; <code>gg</code> only needs its URL. Chain requests into a stateful journey instantly by exporting values with <code>@gg-export</code> and referencing them natively as <code>\{\{token\}\}</code>.</p>
   </div>
   <div slot="visual">
     <CodeCompare filename="checkout.http">
@@ -82,7 +85,7 @@ import WhatsNew from '../../components/WhatsNew.astro';
 
 <GlassFeatureRow title="Run From Your IDE, Not a Terminal" reverse={true}>
   <div slot="text">
-    <p><strong>Official plugins for <a href="https://plugins.jetbrains.com/plugin/30983-gopher-glide">JetBrains</a> and <a href="https://marketplace.visualstudio.com/items?itemName=gopherglide.gg-plugin">VS Code</a> bring the entire workflow into IntelliJ, GoLand, WebStorm, VS Code, and more.</strong> Click a gutter icon on any <code>.http</code> file, pick a built-in load profile, and watch live RPS, error rate, and latency percentiles update in a native run dashboard.</p>
+    <p><strong>Official plugins for <a href="https://plugins.jetbrains.com/plugin/30983-gopher-glide">JetBrains</a> and <a href="https://marketplace.visualstudio.com/items?itemName=gopherglide.gg-plugin">VS Code</a> bring the entire workflow into IntelliJ IDEA, PyCharm, WebStorm, Rider, GoLand, VS Code, and more.</strong> Click a gutter icon on any <code>.http</code> file, pick a built-in load profile, and watch live RPS, error rate, and latency percentiles update in a native run dashboard.</p>
     <p>No interactive terminal UI involved — just a lightweight panel fed by <code>gg</code>'s headless JSON heartbeat, so it stays responsive no matter how long or heavy the run is.</p>
   </div>
   <div slot="visual">

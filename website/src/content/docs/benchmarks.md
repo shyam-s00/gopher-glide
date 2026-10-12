@@ -3,6 +3,8 @@ title: "Benchmarks"
 ---
 # Hive Engine: Performance Benchmarks
 
+> These numbers measure the load generator (`gg` itself), not your API. What the service under test is written in doesn't change them; it only changes how much of this headroom your backend can absorb.
+
 * **Primary Test Rig:** Apple M4 Pro (12-core) | OS: `darwin/arm64`
 * **Standard CI Rig / Laptop Expected Multiplier:** ~2.5x to 3x execution time.
 

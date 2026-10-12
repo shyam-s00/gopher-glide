@@ -7,7 +7,7 @@ Headless mode used to be a one-way radio: `gg --headless` gave you a live heartb
 
 This is the foundation live bias/mark/stop controls in the [JetBrains and VS Code plugins](/plugin) will build on. It's also directly usable today, no IDE required — type commands into a headless run, or script them. **New to this? Start with [Driving a Run Live](/live-control)**, a hands-on guide with a copy-paste example, the multi-terminal and container recipes, and troubleshooting. This page is the reference.
 
-> **v1.3 scope:** `bias`, `mark`, `stop`. More commands (`pause`/`resume`, `set-rps`, chaos toggles) are coming in later releases — see [Roadmap](https://github.com/shyam-s00/gopher-glide) for what's next. The protocol is versioned so old and new binaries/plugins stay compatible as that grows (see [Versioning & capabilities](#versioning--capabilities) below).
+> **Commands today:** `bias`, `mark`, `stop`. The protocol is versioned and capability-based, so if commands are ever added, existing binaries and plugins keep working (see [Versioning & capabilities](#versioning--capabilities) below).
 
 ---
 
@@ -136,10 +136,10 @@ The `started` event gains two fields so old and new binaries/plugins can talk to
 ```
 
 - **`protocol_version`** bumps only on a breaking change (the goal is to never need this).
-- **`capabilities`** lists what this run's listener actually accepts. New commands show up as new capability strings in later releases — check for the string, not the version number, before showing a control in your own tooling.
+- **`capabilities`** lists what this run's listener actually accepts. Any command added in the future would show up as a new capability string — check for the string, not the version number, before showing a control in your own tooling.
 - With `--control none`, `capabilities` is an explicit empty array (`[]`) — distinct from an older `gg` binary that has no `capabilities` field at all.
 
-A tool built against v1.3 that talks to a future `gg` with more capabilities keeps working unchanged; it just won't offer controls for capabilities it doesn't recognize yet.
+A tool built against v1.3 that talks to a newer `gg` with extra capabilities keeps working unchanged; it just won't offer controls for capabilities it doesn't recognize.
 
 ---
 

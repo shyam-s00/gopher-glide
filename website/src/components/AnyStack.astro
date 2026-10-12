@@ -1,0 +1,155 @@
+---
+const stacks = [
+  'Node.js',
+  'Python',
+  'Java',
+  'Kotlin',
+  '.NET',
+  'Ruby on Rails',
+  'PHP',
+  'Rust',
+  'Elixir',
+  'Go',
+];
+
+const points = [
+  {
+    icon: '🔌',
+    title: 'Nothing to install in your app',
+    desc: 'gg is an outside-in HTTP client. No agent, no SDK, no code changes, no restart. If it answers a request, gg can drive it.',
+  },
+  {
+    icon: '📄',
+    title: 'Plain .http files',
+    desc: 'The same request files your editor already runs. Reuse the ones in your repo from PyCharm, WebStorm, Rider, IntelliJ, VS Code and more.',
+  },
+  {
+    icon: '📦',
+    title: 'One binary, no runtime',
+    desc: 'No JVM, Node or Python needed to run gg itself. Install with Homebrew, grab a release binary, or use the Docker image in CI.',
+  },
+];
+---
+<section class="any-stack-section" aria-labelledby="any-stack-title">
+  <div class="any-stack-header">
+    <h2 class="any-stack-title" id="any-stack-title">Any backend. Any language.</h2>
+    <p class="any-stack-subtitle">gg speaks HTTP, so it doesn't care what your API is written in. Point it at a URL and go.</p>
+  </div>
+
+  <ul class="any-stack-chips" aria-label="Examples of backends gg can test">
+    {stacks.map((name) => <li class="any-stack-chip">{name}</li>)}
+    <li class="any-stack-chip any-stack-chip-more">anything that speaks HTTP</li>
+  </ul>
+
+  <div class="any-stack-grid">
+    {points.map((p) => (
+      <div class="any-stack-card">
+        <div class="any-stack-icon" aria-hidden="true">{p.icon}</div>
+        <h3 class="any-stack-card-title">{p.title}</h3>
+        <p class="any-stack-card-desc">{p.desc}</p>
+      </div>
+    ))}
+  </div>
+
+  <p class="any-stack-cta">
+    <a href="/any-backend">See how it works with your stack &rarr;</a>
+  </p>
+</section>
+
+<style>
+  .any-stack-section {
+    max-width: 900px;
+    margin: 0 auto 3rem auto;
+    padding: 0 1.5rem;
+  }
+  .any-stack-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+  .any-stack-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--sl-color-text);
+    margin: 0 0 0.5rem 0;
+  }
+  .any-stack-subtitle {
+    color: var(--sl-color-gray-2);
+    font-size: 1rem;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  .any-stack-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    list-style: none;
+    margin: 0 0 2rem 0;
+    padding: 0;
+  }
+  .any-stack-chip {
+    margin: 0;
+    padding: 0.3rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--sl-color-text);
+    background: var(--gg-glass-bg);
+    border: 1px solid var(--gg-glass-border);
+    backdrop-filter: blur(8px);
+  }
+  .any-stack-chip-more {
+    color: var(--sl-color-accent);
+    border-color: var(--sl-color-accent);
+  }
+  .any-stack-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  .any-stack-card {
+    margin: 0 !important;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 1.25rem;
+    background: var(--gg-glass-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--gg-glass-border);
+    border-radius: 14px;
+    box-shadow: 0 4px 20px var(--gg-glass-shadow);
+  }
+  .any-stack-icon {
+    font-size: 1.6rem;
+    line-height: 1;
+  }
+  .any-stack-card-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--sl-color-text);
+    margin: 0.25rem 0 0 0;
+  }
+  .any-stack-card-desc {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--sl-color-gray-2);
+    margin: 0;
+  }
+  .any-stack-cta {
+    text-align: center;
+    margin: 1.5rem 0 0 0;
+  }
+  .any-stack-cta a {
+    color: var(--sl-color-accent);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .any-stack-cta a:hover {
+    text-decoration: underline;
+  }
+  @media (max-width: 720px) {
+    .any-stack-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
