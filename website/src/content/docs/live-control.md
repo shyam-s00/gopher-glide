@@ -73,7 +73,8 @@ Pick the way that matches how you want to drive the run:
 | Send commands from **another terminal or tab** | Connect them with a [named pipe](#-from-a-second-terminal). |
 | Run a **timed** sequence | Use a [subshell with `sleep`s](#-timed-scripts), as in the quick start above. |
 | Drive a run in a **container** | Pass [`-i` to `docker run`](#-in-a-container). |
-| Drive it from a **plugin or your own tool** | Spawn `gg --headless` with a piped stdin and write one JSON line per command — see the [protocol reference](/control-protocol). |
+| Steer a run from the **JetBrains plugin** | Use the bias, Mark and Stop controls in the Run tab (plugin 7.0+). See [Native Run Dashboard](/plugin#-native-run-dashboard). |
+| Drive it from **your own tool** | Spawn `gg --headless` with a piped stdin and write one JSON line per command — see the [protocol reference](/control-protocol). |
 
 ### 📟 In the same terminal
 

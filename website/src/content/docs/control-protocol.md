@@ -5,7 +5,7 @@ description: "Drive a running gg process from stdin — bias, mark, and stop a h
 
 Headless mode used to be a one-way radio: `gg --headless` gave you a live heartbeat stream, but the only way to touch it was `Ctrl+C`. The **Live Control Protocol (LCP)** turns that into a two-way conversation — send commands in over stdin, get replies interleaved with the heartbeats out.
 
-This is the foundation live bias/mark/stop controls in the [JetBrains and VS Code plugins](/plugin) will build on. It's also directly usable today, no IDE required — type commands into a headless run, or script them. **New to this? Start with [Driving a Run Live](/live-control)**, a hands-on guide with a copy-paste example, the multi-terminal and container recipes, and troubleshooting. This page is the reference.
+This is what the live bias/mark/stop controls in the [JetBrains plugin](/plugin#-native-run-dashboard) (7.0+) are built on; the VS Code extension is next. It's also directly usable,  no IDE required — type commands into a headless run, or script them. **New to this? Start with [Driving a Run Live](/live-control)**, a hands-on guide with a copy-paste example, the multi-terminal and container recipes, and troubleshooting. This page is the reference.
 
 > **Commands today:** `bias`, `mark`, `stop`. The protocol is versioned and capability-based, so if commands are ever added, existing binaries and plugins keep working (see [Versioning & capabilities](#versioning--capabilities) below).
 
@@ -145,7 +145,7 @@ A tool built against v1.3 that talks to a newer `gg` with extra capabilities kee
 
 ## 🖱 For plugin authors: button vs. slider
 
-The protocol carries a generic signed `amount` on purpose — the widget is a plugin decision, not a protocol one. Our recommendation for v1.3: build a **stepper (± buttons)**, matching the TUI's feel and giving users exact parity with what they already know from the terminal.
+The protocol carries a generic signed `amount` on purpose — the widget is a plugin decision, not a protocol one. Our recommendation: build a **stepper (± buttons)**, matching the TUI's feel and giving users exact parity with what they already know from the terminal. The JetBrains plugin does this, with −10 / −5 / +5 / +10 steps and a Reset.
 
 A slider is a perfectly reasonable follow-up using the exact same `bias` command — just **debounce drag events**. Every command is applied and none are dropped, but the request rate only changes once a second, so one command per pixel of drag adds noise (and a long reply stream) without adding precision. Emit on drag-end, or throttle to a few times a second.
 

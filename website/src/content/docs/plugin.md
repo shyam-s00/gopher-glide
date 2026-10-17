@@ -42,7 +42,14 @@ While a simulation runs, the **Run** tab of the **Gopher Glide** tool window upd
 - A **P50 / P95 / P99** latency card
 - A scaled **RPS chart**
 - A **stage timeline** — a horizontal progress bar with segment widths proportional to each stage's actual duration
-- A **Stop** action to cancel the run cleanly
+- A **Stop** action that ends the run cleanly — `gg` finishes writing the snapshot first. If it doesn't answer, the plugin interrupts it, and a second click forces it to end.
+
+**Live control** (JetBrains plugin 7.0+, `gg` v1.3.0+) adds a strip above the metric cards while a run is in progress:
+- **Bias** — **−10 / −5 / +5 / +10** change the target RPS without stopping the run; **Reset** returns to the planned rate. The badge shows the bias `gg` reports.
+- **Mark…** — drop a named marker at the current point of the run. A mark is stamped when you confirm its label.
+- Bias changes and marks are drawn on the RPS chart, and both are recorded in the snapshot.
+
+With an older `gg`, the strip is replaced by a short notice that names the installed version and offers to install or upgrade it. The run itself works as before.
 
 ![Native run dashboard showing live RPS chart, metric cards, and stage timeline](/assets/plugin-run-view.png)
 
@@ -52,8 +59,8 @@ The **Snaps** tab is a full native UI for managing Snapshots — list, view, dif
 
 Toolbar actions:
 - **Refresh** — reload the snapshot list from disk.
-- **View Detail** — inspect a snapshot. The detailed view provides an **Endpoint Breakdown** (Error Rate, P95, Payload Avg) and a dedicated **Inferred JSON Schema** viewer showing the precise `Type`, `Presence %`, and `Stability` of every field observed during the run.
-- **Compare (Diff)** — semantically diff two snapshots side-by-side (select exactly two rows). The diff UI automatically flags **Configuration mismatches** (e.g., if you diff a baseline run with a different config hash) and highlights specific schema regressions, such as a field's presence dropping from 100% to 19% under heavy load.
+- **View Detail** — inspect a snapshot. The detailed view provides an **Endpoint Breakdown** (Error Rate, P95, Payload Avg) and a dedicated **Inferred JSON Schema** viewer showing the precise `Type`, `Presence %`, and `Stability` of every field observed during the run. For runs recorded with `gg` v1.3.0+, a **Manual changes** section lists every mark and bias change in time order, with final bias, peak bias, how long a bias was in effect, and when the first change happened.
+- **Compare (Diff)** — semantically diff two snapshots side-by-side (select exactly two rows). The diff UI automatically flags **Configuration mismatches** (e.g., if you diff a baseline run with a different config hash) and highlights specific schema regressions, such as a field's presence dropping from 100% to 19% under heavy load. When either run had marks or bias changes made by hand, a one-line notice says so, since those runs may not be like for like.
 - **Assert...** — run `gg snap assert` between any two snapshots against configurable thresholds.
 - **Prune...** — clean up old snapshots by ID(s), tag, keep-last count, or age (e.g. `30d`) — with a dry-run preview by default.
 
@@ -71,6 +78,7 @@ Available under **Settings / Preferences → Tools → Gopher Glide**:
 - Set a **custom `gg` binary path** or **custom snapshots directory**.
 - **Run panel refresh interval** — controls the `--heartbeat-interval` passed to `gg`.
 - **Check for Updates** / **Install Gopher Glide** — one-click binary management with download progress.
+- **Check for gg updates on startup** — on by default; looks for a newer release at most once a day and shows one notification with **Update Now**, **Open Settings** and **Skip This Version**. It stays quiet when you're offline, already current, or use a custom binary path.
 - **Copy Diagnostics to Clipboard** — useful when filing a bug report.
 
 ### Compatibility
@@ -147,9 +155,9 @@ The **Snaps** tree view in the panel sidebar lets you:
 
 ## 🎛 Live Control Protocol
 
-Both plugins already talk to `gg` over its headless heartbeat stream. As of v1.3, that stream is two-way: `gg --headless` accepts commands over stdin — `bias`, `mark`, `stop` — and replies inline, without killing the process. See [Driving a Run Live](/live-control) to try it by hand and the [Live Control Protocol](/control-protocol) for the full spec. Live bias/mark/stop controls in the run dashboard are on the roadmap for both plugins, built directly on top of it.
+Both plugins already talk to `gg` over its headless heartbeat stream. As of v1.3, that stream is two-way: `gg --headless` accepts commands over stdin — `bias`, `mark`, `stop` — and replies inline, without killing the process. See [Driving a Run Live](/live-control) to try it by hand and the [Live Control Protocol](/control-protocol) for the full spec. The JetBrains plugin (7.0+) is built on it: the Run tab drives `bias`, `mark` and `stop` live, and a clean Stop keeps the snapshot. Live controls for the VS Code extension are on the roadmap.
 
-**A note for whoever wires that up (or builds their own tooling on the protocol):** it carries a generic signed `amount` for bias, not a fixed ±5 step — the widget is a UI decision, not a protocol one. Default to a **stepper (± buttons)** for parity with the TUI's `↑`/`↓` feel; a slider is a reasonable follow-up using the exact same command, just **debounce drag events** (throttle to a few per second) — the request rate only changes once a second, so one command per pixel of drag adds noise without adding precision.
+**A note for whoever wires up the VS Code extension (or builds their own tooling on the protocol):** it carries a generic signed `amount` for bias, not a fixed ±5 step — the widget is a UI decision, not a protocol one. Default to a **stepper (± buttons)** for parity with the TUI's `↑`/`↓` feel; a slider is a reasonable follow-up using the exact same command, just **debounce drag events** (throttle to a few per second) — the request rate only changes once a second, so one command per pixel of drag adds noise without adding precision.
 
 ---
 
