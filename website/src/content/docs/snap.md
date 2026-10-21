@@ -110,7 +110,7 @@ The diff engine compares the Baseline (first argument) against the Current (seco
 
 Green, yellow, and red borders make it easy to instantly see which endpoints **Passed**, received a **Warning**, or suffered a **Regression**.
 
-Before trusting a latency delta as a real regression, check both snapshots' `final_bias`/`bias_events` (see [Manual bias & marks](#manual-bias--marks-in-the-raw-file) above) — the diff doesn't surface this yet, but a nonzero `final_bias` means a human was leaning on the RPS slider, not a code change.
+Before trusting a latency delta as a real regression, check both snapshots' `final_bias`/`bias_events` (see [Manual bias & marks](#manual-bias--marks-in-the-raw-file) above) — the command-line diff doesn't surface this, but the [IDE plugins'](/plugin) Snap Diff shows a notice when either run had manual changes. A nonzero `final_bias` means a human was leaning on the RPS throttle, not a code change.
 
 ---
 

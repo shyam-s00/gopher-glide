@@ -90,7 +90,7 @@ Available under **Settings / Preferences → Tools → Gopher Glide**:
 
 ## VS Code Extension
 
-Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=gopherglide.gg-plugin) or [Open VSX Registry](https://open-vsx.org/extension/gopherglide/gg-plugin), or search **Gopher-Glide** in the Extensions panel (`Ctrl+Shift+X`).
+Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=gopherglide.gg-plugin) or [Open VSX Registry](https://open-vsx.org/extension/gopherglide/gg-plugin), or search **Gopher Glide** in the Extensions panel (`Ctrl+Shift+X`).
 
 Compatible with VS Code `1.120.0+` and any Open VSX-compatible editor (VSCodium, Gitpod, etc.).
 
@@ -99,7 +99,7 @@ Compatible with VS Code `1.120.0+` and any Open VSX-compatible editor (VSCodium,
 1. Install the extension — if no `gg` binary is found, it downloads one automatically on first use.
 2. Open any `.http` or `.rest` file — a **Run** button appears in the editor title bar and a CodeLens link appears inline above each request.
 3. Pick a load profile from the Quick Pick (or let the extension use your `gg.defaultProfile` setting).
-4. Watch it run in the **Gopher-Glide** panel at the bottom of the editor.
+4. Watch it run in the **Gopher Glide** panel at the bottom of the editor — and steer it live from there (see [Live control](#live-control-in-vs-code)).
 5. Switch to the **Snaps** tree view to browse, diff, and assert snapshots.
 
 ### ▶️ Running Traffic Simulations
@@ -107,7 +107,7 @@ Compatible with VS Code `1.120.0+` and any Open VSX-compatible editor (VSCodium,
 Entry points on `.http` / `.rest` files:
 - **Editor title bar play button** — one click to run with a profile picker.
 - **CodeLens** — inline run/config links above each request block.
-- **Right-click context menu** (Editor and Explorer) → **Gopher-Glide** submenu.
+- **Right-click context menu** (Editor and Explorer) → **Gopher Glide** submenu.
 
 On `.gg.yaml` files, the context menu shows **Run (Config)** to run the config directly.
 
@@ -115,20 +115,38 @@ All 21 built-in profiles are available in the Quick Pick, plus optional RPS/dura
 
 ### 🖥 Native Run Dashboard
 
-The **Run** tab of the **Gopher-Glide** panel shows a live webview updated from `gg`'s headless heartbeat stream:
+The **Gopher Glide** panel at the bottom of the editor shows a live webview updated from `gg`'s headless heartbeat stream:
 
 - Status and elapsed time
 - Target/Actual RPS, Error Rate, Total Requests
 - P50 / P95 / P99 latency percentiles
 - Live RPS chart and stage timeline
+- A **Stop** button that ends the run cleanly — `gg` finishes writing the snapshot first. If `gg` is stuck, the button becomes **Force Stop**.
+
+![Gopher Glide run dashboard in VS Code: live RPS chart with bias ticks and mark lines, the Director Bias bar and metric cards](/assets/vscode-run-view.png)
+
+#### Live control in VS Code
+
+*(VS Code extension 3.0+, `gg` v1.3.0+.)* A control bar sits above the chart while a run is in progress:
+
+- **Director Bias** — **−10 / −5 / +5 / +10** change the target RPS without stopping the run; **Reset** returns to the planned rate. The badge shows the total bias in effect. `gg` applies a change within about a second, and the chart follows at the next heartbeat (set `gg.heartbeatIntervalSeconds` lower for snappier feedback).
+- **Drop Mark** — asks for a label (for example `cache-cleared`) and drops a named marker at the current point of the run. A mark is stamped when `gg` receives it, which is when you confirm the label.
+- Bias changes and marks are drawn on the RPS chart — ticks on the target line, labeled dashed lines for marks — and both are recorded in the snapshot.
+- **Stop** asks `gg` to finish the run itself, so a `--snap` snapshot is written with every bias change and mark. While `gg` wraps up the button reads *Stopping…* and then turns into **Force Stop**; a double-click can't accidentally cut off a snapshot being written.
+
+With an older `gg`, the controls are replaced by a short notice naming the installed version, with the next step that fits how `gg` was installed: **Update gg** for the copy the extension manages, **Install managed gg** if yours comes from `$PATH`, or **Open Settings** if you picked a custom binary or use `pathOnly` mode. The run itself works as before.
 
 ### 🗂 Snap Explorer
 
 The **Snaps** tree view in the panel sidebar lets you:
-- **View** a snapshot's endpoint breakdown (latency, status distribution, response schema).
-- **Diff** any two snapshots — select two entries and click **Diff Snapshots**.
+- **View** a snapshot's endpoint breakdown (latency, status distribution, response schema). For runs recorded with `gg` v1.3.0+, a **Manual changes** section lists every mark and bias change in time order, with final bias, peak bias, how long a bias was in effect, and when the first change happened. Snapshots from older versions say that marks and bias changes were not recorded.
+- **Diff** any two snapshots — select two entries and click **Diff Snapshots**. When either run had marks or bias changes made by hand, a one-line notice says so, since those runs may not be like for like.
 - **Assert** — run `gg snap assert` as a CI-style gate with configurable thresholds.
 - **Prune** — clean up old snapshots by ID, tag, or age.
+
+![Snapshot view in VS Code with the Manual changes list, bias figures and inferred JSON schema](/assets/vscode-snap-view.png)
+
+![Snapshot diff in VS Code with the manual-changes notice, per-endpoint deltas and status-code distribution](/assets/vscode-snap-diff.png)
 
 ### 🔗 Smart YAML Editing
 
@@ -149,15 +167,16 @@ The **Snaps** tree view in the panel sidebar lets you:
 ### Compatibility
 
 - **VS Code** `1.120.0+`
+- **Live control** needs `gg` v1.3.0+ (the extension's auto-managed binary stays current, so most installs get it automatically); everything else works with older versions
 - Any [Open VSX](https://open-vsx.org/extension/gopherglide/gg-plugin)-compatible editor (VSCodium, Gitpod, Eclipse Theia, etc.)
 
 ---
 
 ## 🎛 Live Control Protocol
 
-Both plugins already talk to `gg` over its headless heartbeat stream. As of v1.3, that stream is two-way: `gg --headless` accepts commands over stdin — `bias`, `mark`, `stop` — and replies inline, without killing the process. See [Driving a Run Live](/live-control) to try it by hand and the [Live Control Protocol](/control-protocol) for the full spec. The JetBrains plugin (7.0+) is built on it: the Run tab drives `bias`, `mark` and `stop` live, and a clean Stop keeps the snapshot. Live controls for the VS Code extension are on the roadmap.
+Both plugins already talk to `gg` over its headless heartbeat stream. As of v1.3, that stream is two-way: `gg --headless` accepts commands over stdin — `bias`, `mark`, `stop` — and replies inline, without killing the process. See [Driving a Run Live](/live-control) to try it by hand and the [Live Control Protocol](/control-protocol) for the full spec. Both the JetBrains plugin (7.0+) and the VS Code extension (3.0+) are built on it: the run dashboard drives `bias`, `mark` and `stop` live, and a clean Stop keeps the snapshot.
 
-**A note for whoever wires up the VS Code extension (or builds their own tooling on the protocol):** it carries a generic signed `amount` for bias, not a fixed ±5 step — the widget is a UI decision, not a protocol one. Default to a **stepper (± buttons)** for parity with the TUI's `↑`/`↓` feel; a slider is a reasonable follow-up using the exact same command, just **debounce drag events** (throttle to a few per second) — the request rate only changes once a second, so one command per pixel of drag adds noise without adding precision.
+**A note for anyone building their own tooling on the protocol:** it carries a generic signed `amount` for bias, not a fixed ±5 step — the widget is a UI decision, not a protocol one. Both plugins use a **stepper (± buttons)** for parity with the TUI's `↑`/`↓` feel; a slider is a reasonable alternative using the exact same command, just **debounce drag events** (throttle to a few per second) — the request rate only changes once a second, so one command per pixel of drag adds noise without adding precision.
 
 ---
 

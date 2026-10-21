@@ -147,7 +147,7 @@ At least one filter flag is required.
 | `--ids <1,3,5>` | — | Comma-separated list of snapshot IDs to delete. |
 | `--dry-run` | `false` | Preview candidates without deleting anything. |
 | `--yes` | `false` | Skip the interactive confirmation prompt (required for CI / non-interactive use). |
-| `--reporter <text\|json>` | `text` | `json` is the stable contract used by the JetBrains plugin's Snap Explorer. |
+| `--reporter <text\|json>` | `text` | `json` is the stable contract used by the IDE plugins' Snap Explorer. |
 | `--snap-dir <path>` | OS config dir | Override the default snapshot directory. |
 
 ---

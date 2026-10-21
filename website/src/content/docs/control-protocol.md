@@ -5,7 +5,7 @@ description: "Drive a running gg process from stdin — bias, mark, and stop a h
 
 Headless mode used to be a one-way radio: `gg --headless` gave you a live heartbeat stream, but the only way to touch it was `Ctrl+C`. The **Live Control Protocol (LCP)** turns that into a two-way conversation — send commands in over stdin, get replies interleaved with the heartbeats out.
 
-This is what the live bias/mark/stop controls in the [JetBrains plugin](/plugin#-native-run-dashboard) (7.0+) are built on; the VS Code extension is next. It's also directly usable,  no IDE required — type commands into a headless run, or script them. **New to this? Start with [Driving a Run Live](/live-control)**, a hands-on guide with a copy-paste example, the multi-terminal and container recipes, and troubleshooting. This page is the reference.
+This is what the live bias/mark/stop controls in the [JetBrains plugin](/plugin#-native-run-dashboard) (7.0+) and the [VS Code extension](/plugin#live-control-in-vs-code) (3.0+) are built on. It's also directly usable,  no IDE required — type commands into a headless run, or script them. **New to this? Start with [Driving a Run Live](/live-control)**, a hands-on guide with a copy-paste example, the multi-terminal and container recipes, and troubleshooting. This page is the reference.
 
 > **Commands today:** `bias`, `mark`, `stop`. The protocol is versioned and capability-based, so if commands are ever added, existing binaries and plugins keep working (see [Versioning & capabilities](#versioning--capabilities) below).
 
