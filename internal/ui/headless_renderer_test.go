@@ -103,8 +103,8 @@ func TestHeadlessRenderer_StartedEvent_Capabilities(t *testing.T) {
 		controlMode string
 		wantCaps    string
 	}{
-		{"default (unset) is stdin", "", `"capabilities":["control.bias","control.mark","control.stop"]`},
-		{"explicit stdin", "stdin", `"capabilities":["control.bias","control.mark","control.stop"]`},
+		{"default (unset) is stdin", "", `"capabilities":["control.bias","control.mark","control.mark.elapsed","control.stop"]`},
+		{"explicit stdin", "stdin", `"capabilities":["control.bias","control.mark","control.mark.elapsed","control.stop"]`},
 		{"control none", "none", `"capabilities":[]`},
 	}
 
@@ -416,5 +416,206 @@ func TestHeadlessRenderer_Stopped_WithHook_CarriesStats(t *testing.T) {
 	}
 	if last.TotalReqs != 42 || last.SuccessCount != 40 || last.FailureCount != 2 {
 		t.Errorf("stopped event lost final stats: %+v", last)
+	}
+}
+
+// fixedStartRunner pins GetStartTime so a test controls the server-side
+// elapsed time a mark is clamped against. A zero start models a command
+// that reaches the loop before the engine has recorded its start.
+type fixedStartRunner struct {
+	blockingRunner
+	start time.Time
+}
+
+func (r *fixedStartRunner) GetStartTime() time.Time { return r.start }
+
+var _ engine.Runner = &fixedStartRunner{}
+
+// runControlScript feeds lines (plus a closing stop) to a fresh renderer and
+// returns every emitted event as a generic map, so tests can assert on key
+// presence, not just values.
+func runControlScript(t *testing.T, rb engine.Runner, lines ...string) ([]map[string]any, *HeadlessRenderer) {
+	t.Helper()
+	r := &HeadlessRenderer{
+		Reporter:          "json",
+		ControlMode:       "stdin",
+		ControlInput:      strings.NewReader(strings.Join(lines, "\n") + "\n" + `{"command":"stop"}` + "\n"),
+		HeartbeatInterval: time.Hour,
+	}
+	out := captureStdout(t, func() {
+		if err := r.Run(rb, testConfig(), nil, RunOptions{}); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	})
+	var events []map[string]any
+	for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(l), &m); err != nil {
+			t.Fatalf("line did not parse as JSON: %s: %v", l, err)
+		}
+		events = append(events, m)
+	}
+	return events, r
+}
+
+func eventsNamed(events []map[string]any, name string) []map[string]any {
+	var out []map[string]any
+	for _, e := range events {
+		if e["event"] == name {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func TestHeadlessRenderer_Mark_ElapsedS(t *testing.T) {
+	tests := []struct {
+		name        string
+		runStarted  time.Duration // how long ago the engine "started"; 0 = zero start time
+		line        string
+		wantExact   *float64 // exact offset expected
+		wantRange   [2]float64
+		wantClamped bool
+	}{
+		{name: "absent uses server time", runStarted: 10 * time.Second,
+			line: `{"id":"m1","command":"mark","label":"x"}`, wantRange: [2]float64{10, 12}},
+		{name: "client value honored exactly", runStarted: 30 * time.Second,
+			line: `{"id":"m1","command":"mark","label":"x","elapsed_s":18.4}`, wantExact: f64(18.4)},
+		{name: "zero is emitted, not dropped", runStarted: 10 * time.Second,
+			line: `{"id":"m1","command":"mark","label":"x","elapsed_s":0}`, wantExact: f64(0)},
+		{name: "future value clamped to server now", runStarted: 10 * time.Second,
+			line: `{"id":"m1","command":"mark","label":"x","elapsed_s":99999}`, wantRange: [2]float64{10, 12}, wantClamped: true},
+		{name: "huge value clamped", runStarted: 10 * time.Second,
+			line: `{"id":"m1","command":"mark","label":"x","elapsed_s":1e308}`, wantRange: [2]float64{10, 12}, wantClamped: true},
+		{name: "zero start time, client value clamps to 0", runStarted: 0,
+			line: `{"id":"m1","command":"mark","label":"x","elapsed_s":5}`, wantExact: f64(0), wantClamped: true},
+		{name: "zero start time, no client value stays 0", runStarted: 0,
+			line: `{"id":"m1","command":"mark","label":"x"}`, wantExact: f64(0)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rb := &fixedStartRunner{}
+			if tt.runStarted > 0 {
+				rb.start = time.Now().Add(-tt.runStarted)
+			}
+			events, r := runControlScript(t, rb, tt.line)
+
+			marks := eventsNamed(events, "mark")
+			if len(marks) != 1 {
+				t.Fatalf("want 1 mark event, got %d: %v", len(marks), events)
+			}
+			ev := marks[0]
+			got, ok := ev["elapsed_s"].(float64)
+			if !ok {
+				t.Fatalf("mark event has no elapsed_s key: %v", ev)
+			}
+			if tt.wantExact != nil && got != *tt.wantExact {
+				t.Errorf("elapsed_s = %v, want %v", got, *tt.wantExact)
+			}
+			if tt.wantExact == nil && (got < tt.wantRange[0] || got >= tt.wantRange[1]) {
+				t.Errorf("elapsed_s = %v, want in [%v, %v)", got, tt.wantRange[0], tt.wantRange[1])
+			}
+			if _, has := ev["clamped"]; has != tt.wantClamped {
+				t.Errorf("clamped key present = %v, want %v (event: %v)", has, tt.wantClamped, ev)
+			}
+			if ev["id"] != "m1" {
+				t.Errorf("id not echoed: %v", ev)
+			}
+			if recorded := r.Marks(); len(recorded) != 1 || recorded[0].ElapsedS != got {
+				t.Errorf("recorded marks %+v must carry the echoed offset %v", recorded, got)
+			}
+		})
+	}
+}
+
+func TestHeadlessRenderer_Mark_InvalidElapsedS(t *testing.T) {
+	rb := &fixedStartRunner{start: time.Now().Add(-10 * time.Second)}
+	events, r := runControlScript(t, rb,
+		`{"id":"m1","command":"mark","label":"x","elapsed_s":"soon"}`,
+		`{"id":"m2","command":"mark","label":"x","elapsed_s":-1}`,
+	)
+	if n := len(eventsNamed(events, "mark")); n != 0 {
+		t.Errorf("invalid elapsed_s must not produce a mark event, got %d", n)
+	}
+	errs := eventsNamed(events, "error")
+	if len(errs) != 2 {
+		t.Fatalf("want 2 error events, got %d: %v", len(errs), events)
+	}
+	for i, e := range errs {
+		if e["reason"] != "invalid_argument" || e["command"] != "mark" {
+			t.Errorf("error[%d] = %v, want invalid_argument on mark", i, e)
+		}
+		if _, has := e["elapsed_s"]; has {
+			t.Errorf("error[%d] must not carry elapsed_s: %v", i, e)
+		}
+	}
+	if got := r.Marks(); len(got) != 0 {
+		t.Errorf("no mark should be recorded, got %+v", got)
+	}
+}
+
+// TestHeadlessRenderer_ElapsedS_OnlyOnMarkEvents pins the raw key: it rides
+// on mark replies and nothing else (acks, errors, heartbeats, terminal event).
+func TestHeadlessRenderer_ElapsedS_OnlyOnMarkEvents(t *testing.T) {
+	rb := &fixedStartRunner{start: time.Now().Add(-10 * time.Second)}
+	events, _ := runControlScript(t, rb,
+		`{"id":"b1","command":"bias","amount":3}`,
+		`{"id":"m1","command":"mark","label":"x","elapsed_s":4}`,
+		`{"id":"m2","command":"mark","label":""}`,
+		`not json`,
+	)
+	for _, e := range events {
+		_, has := e["elapsed_s"]
+		if want := e["event"] == "mark"; has != want {
+			t.Errorf("event %v: elapsed_s present = %v, want %v", e["event"], has, want)
+		}
+	}
+}
+
+// TestHeadlessRenderer_Mark_OutOfOrder: a mark confirmed late can arrive
+// after a later-clicked one. The stream keeps arrival order; the snapshot is
+// chronological, with equal offsets in arrival order.
+func TestHeadlessRenderer_Mark_OutOfOrder(t *testing.T) {
+	rb := &fixedStartRunner{start: time.Now().Add(-60 * time.Second)}
+	events, r := runControlScript(t, rb,
+		`{"id":"mB","command":"mark","label":"B","elapsed_s":20}`,
+		`{"id":"mA","command":"mark","label":"A","elapsed_s":10}`,
+		`{"id":"mA2","command":"mark","label":"A2","elapsed_s":10}`,
+	)
+
+	var streamOrder []string
+	for _, e := range eventsNamed(events, "mark") {
+		streamOrder = append(streamOrder, e["label"].(string))
+	}
+	if got := strings.Join(streamOrder, ","); got != "B,A,A2" {
+		t.Errorf("stream order = %s, want B,A,A2", got)
+	}
+
+	rec := snap.NewDefaultRecorder(0)
+	s, err := rec.Finalize(snap.RunMeta{Marks: r.Marks()})
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	var snapOrder []string
+	for _, m := range s.Meta.Marks {
+		snapOrder = append(snapOrder, m.Label)
+	}
+	if got := strings.Join(snapOrder, ","); got != "A,A2,B" {
+		t.Errorf("snapshot order = %s, want A,A2,B", got)
+	}
+}
+
+func TestHeadlessRenderer_Mark_TextReporter(t *testing.T) {
+	r := &HeadlessRenderer{
+		Reporter:          "text",
+		ControlMode:       "stdin",
+		ControlInput:      strings.NewReader(`{"command":"mark","label":"canary","elapsed_s":5}` + "\n" + `{"command":"stop"}` + "\n"),
+		HeartbeatInterval: time.Hour,
+	}
+	out := captureStdout(t, func() {
+		_ = r.Run(&fixedStartRunner{start: time.Now().Add(-10 * time.Second)}, testConfig(), nil, RunOptions{})
+	})
+	if !strings.Contains(out, `mark "canary" (t+5.0s)`) {
+		t.Errorf("text mark line missing or wrong:\n%s", out)
 	}
 }

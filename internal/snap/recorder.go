@@ -4,11 +4,13 @@
 package snap
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"fmt"
 	"math"
 	"math/rand/v2"
 	"net/http"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -472,7 +474,7 @@ func (r *DefaultRecorder) Finalize(meta RunMeta) (*Snapshot, error) {
 				MaxBodyKB:  meta.MaxBodyKB,
 			},
 			FinalBias:  meta.FinalBias,
-			Marks:      meta.Marks,
+			Marks:      sortedMarks(meta.Marks),
 			BiasEvents: meta.BiasEvents,
 		},
 	}
@@ -494,6 +496,18 @@ func (r *DefaultRecorder) Finalize(meta RunMeta) (*Snapshot, error) {
 	snap.Meta.TotalRequests = totalRequests
 
 	return snap, nil
+}
+
+// sortedMarks returns marks ordered by ElapsedS (equal offsets keep arrival
+// order) without touching the caller's slice. Client-supplied offsets can
+// arrive out of order.
+func sortedMarks(marks []Mark) []Mark {
+	if len(marks) == 0 {
+		return nil
+	}
+	out := slices.Clone(marks)
+	slices.SortStableFunc(out, func(a, b Mark) int { return cmp.Compare(a.ElapsedS, b.ElapsedS) })
+	return out
 }
 
 // Dropped returns the number of RecordEntry values dropped due to a full

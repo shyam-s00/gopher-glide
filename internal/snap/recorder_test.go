@@ -254,3 +254,61 @@ func TestPercentile(t *testing.T) {
 		}
 	}
 }
+
+func TestFinalize_SortsMarksStable(t *testing.T) {
+	in := []Mark{{"late", 20}, {"first-tie", 10}, {"second-tie", 10}, {"earliest", 5}}
+	orig := append([]Mark(nil), in...)
+
+	rec := NewDefaultRecorder(0)
+	s, err := rec.Finalize(RunMeta{Marks: in})
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+
+	want := []string{"earliest", "first-tie", "second-tie", "late"}
+	if len(s.Meta.Marks) != len(want) {
+		t.Fatalf("got %d marks, want %d", len(s.Meta.Marks), len(want))
+	}
+	for i, w := range want {
+		if s.Meta.Marks[i].Label != w {
+			t.Errorf("marks[%d] = %q, want %q", i, s.Meta.Marks[i].Label, w)
+		}
+	}
+	for i := range in {
+		if in[i] != orig[i] {
+			t.Fatalf("Finalize mutated the caller's slice: %+v", in)
+		}
+	}
+}
+
+func TestFinalize_NoMarks_StaysNil(t *testing.T) {
+	rec := NewDefaultRecorder(0)
+	s, err := rec.Finalize(RunMeta{})
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if s.Meta.Marks != nil {
+		t.Errorf("Marks = %+v, want nil", s.Meta.Marks)
+	}
+}
+
+// Large enough that an unstable sort would visibly reorder equal offsets.
+func TestFinalize_SortsMarksStable_ManyTies(t *testing.T) {
+	var in []Mark
+	for i := 0; i < 200; i++ {
+		in = append(in, Mark{Label: fmt.Sprintf("m%03d", i), ElapsedS: float64(3 - i%4)})
+	}
+
+	rec := NewDefaultRecorder(0)
+	s, err := rec.Finalize(RunMeta{Marks: in})
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	got := s.Meta.Marks
+	for i := 1; i < len(got); i++ {
+		a, b := got[i-1], got[i]
+		if a.ElapsedS > b.ElapsedS || (a.ElapsedS == b.ElapsedS && a.Label > b.Label) {
+			t.Fatalf("marks[%d]=%+v before marks[%d]=%+v: not chronological-then-arrival", i-1, a, i, b)
+		}
+	}
+}

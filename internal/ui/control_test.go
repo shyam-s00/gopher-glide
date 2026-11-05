@@ -2,11 +2,14 @@ package ui
 
 import (
 	"bytes"
+	"math"
 	"math/rand"
 	"strings"
 	"testing"
 	"time"
 )
+
+func f64(v float64) *float64 { return &v }
 
 // TestParseControlLine is the parse table: every documented outcome,
 // exercised directly against parseControlLine.
@@ -17,6 +20,7 @@ func TestParseControlLine(t *testing.T) {
 		wantCmd       string // "" when an error is expected
 		wantAmount    int
 		wantLabel     string
+		wantElapsed   *float64 // nil = field must come back nil
 		wantErrReason string
 		wantErrID     string // expected controlError.ID (empty unless noted)
 		wantErrCmd    string // expected controlError.Command
@@ -26,6 +30,14 @@ func TestParseControlLine(t *testing.T) {
 		{name: "valid mark", line: `{"id":"c1","command":"mark","label":"deploy-v2-canary"}`, wantCmd: "mark", wantLabel: "deploy-v2-canary"},
 		{name: "valid mark no id", line: `{"command":"mark","label":"x"}`, wantCmd: "mark", wantLabel: "x"},
 		{name: "valid stop", line: `{"id":"c1","command":"stop"}`, wantCmd: "stop"},
+		{name: "mark with elapsed_s", line: `{"id":"m1","command":"mark","label":"x","elapsed_s":18.4}`, wantCmd: "mark", wantLabel: "x", wantElapsed: f64(18.4)},
+		{name: "mark with integer elapsed_s", line: `{"command":"mark","label":"x","elapsed_s":5}`, wantCmd: "mark", wantLabel: "x", wantElapsed: f64(5)},
+		{name: "mark with elapsed_s zero", line: `{"command":"mark","label":"x","elapsed_s":0}`, wantCmd: "mark", wantLabel: "x", wantElapsed: f64(0)},
+		{name: "mark with elapsed_s negative zero", line: `{"command":"mark","label":"x","elapsed_s":-0}`, wantCmd: "mark", wantLabel: "x", wantElapsed: f64(0)},
+		{name: "mark with elapsed_s null is absent", line: `{"command":"mark","label":"x","elapsed_s":null}`, wantCmd: "mark", wantLabel: "x"},
+		{name: "mark with huge elapsed_s", line: `{"command":"mark","label":"x","elapsed_s":1e308}`, wantCmd: "mark", wantLabel: "x", wantElapsed: f64(1e308)},
+		{name: "elapsed_s ignored on stop", line: `{"command":"stop","elapsed_s":"junk"}`, wantCmd: "stop"},
+		{name: "elapsed_s ignored on bias", line: `{"command":"bias","amount":2,"elapsed_s":-1}`, wantCmd: "bias", wantAmount: 2},
 		{name: "extra fields ignored", line: `{"id":"c1","command":"stop","amount":5,"label":"x"}`, wantCmd: "stop"},
 
 		{
@@ -69,6 +81,34 @@ func TestParseControlLine(t *testing.T) {
 			wantErrReason: "invalid_argument", wantErrID: "c1", wantErrCmd: "mark",
 		},
 		{
+			name: "mark elapsed_s string", line: `{"id":"m2","command":"mark","label":"x","elapsed_s":"5"}`,
+			wantErrReason: "invalid_argument", wantErrID: "m2", wantErrCmd: "mark",
+		},
+		{
+			name: "mark elapsed_s bool", line: `{"id":"m2","command":"mark","label":"x","elapsed_s":true}`,
+			wantErrReason: "invalid_argument", wantErrID: "m2", wantErrCmd: "mark",
+		},
+		{
+			name: "mark elapsed_s object", line: `{"id":"m2","command":"mark","label":"x","elapsed_s":{"v":1}}`,
+			wantErrReason: "invalid_argument", wantErrID: "m2", wantErrCmd: "mark",
+		},
+		{
+			name: "mark elapsed_s array", line: `{"id":"m2","command":"mark","label":"x","elapsed_s":[1]}`,
+			wantErrReason: "invalid_argument", wantErrID: "m2", wantErrCmd: "mark",
+		},
+		{
+			name: "mark elapsed_s negative", line: `{"id":"m2","command":"mark","label":"x","elapsed_s":-0.5}`,
+			wantErrReason: "invalid_argument", wantErrID: "m2", wantErrCmd: "mark",
+		},
+		{
+			name: "mark elapsed_s out of float range", line: `{"id":"m2","command":"mark","label":"x","elapsed_s":1e999}`,
+			wantErrReason: "invalid_argument", wantErrID: "m2", wantErrCmd: "mark",
+		},
+		{
+			name: "mark bad label wins over bad elapsed_s", line: `{"id":"m3","command":"mark","label":"","elapsed_s":"x"}`,
+			wantErrReason: "invalid_argument", wantErrID: "m3", wantErrCmd: "mark",
+		},
+		{
 			name: "mark label non-string", line: `{"id":"c1","command":"mark","label":5}`,
 			wantErrReason: "invalid_argument", wantErrID: "c1", wantErrCmd: "mark",
 		},
@@ -90,6 +130,16 @@ func TestParseControlLine(t *testing.T) {
 				}
 				if cmd.Label != tt.wantLabel {
 					t.Errorf("Label = %q, want %q", cmd.Label, tt.wantLabel)
+				}
+				switch {
+				case tt.wantElapsed == nil && cmd.ElapsedS != nil:
+					t.Errorf("ElapsedS = %v, want nil", *cmd.ElapsedS)
+				case tt.wantElapsed != nil && cmd.ElapsedS == nil:
+					t.Errorf("ElapsedS = nil, want %v", *tt.wantElapsed)
+				case tt.wantElapsed != nil && *cmd.ElapsedS != *tt.wantElapsed:
+					t.Errorf("ElapsedS = %v, want %v", *cmd.ElapsedS, *tt.wantElapsed)
+				case tt.wantElapsed != nil && math.Signbit(*cmd.ElapsedS):
+					t.Errorf("ElapsedS = %v, sign bit must be clear", *cmd.ElapsedS)
 				}
 				return
 			}

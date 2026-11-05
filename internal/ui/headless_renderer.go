@@ -100,7 +100,7 @@ func (r *HeadlessRenderer) controlInput() io.Reader {
 func (r *HeadlessRenderer) capabilities() *[]string {
 	caps := []string{}
 	if r.controlMode() == "stdin" {
-		caps = []string{"control.bias", "control.mark", "control.stop"}
+		caps = []string{"control.bias", "control.mark", "control.mark.elapsed", "control.stop"}
 	}
 	return &caps
 }
@@ -161,7 +161,8 @@ type HeartbeatPayload struct {
 	Command         string    `json:"command,omitempty"`          // set on ack/error only
 	Reason          string    `json:"reason,omitempty"`           // error replies only
 	Label           string    `json:"label,omitempty"`            // mark replies only
-	ElapsedS        float64   `json:"elapsed_s,omitempty"`        // mark replies only, run-relative offset
+	ElapsedS        *float64  `json:"elapsed_s,omitempty"`        // mark replies only, run-relative offset; pointer so a real 0 is still emitted
+	Clamped         bool      `json:"clamped,omitempty"`          // mark replies only: client elapsed_s was ahead of the run and got capped
 }
 
 // Run executes the engine headlessly and blocks until the run finishes or an
@@ -285,7 +286,7 @@ loop:
 					Message: fmt.Sprintf("bias %+d applied (cumulative %+d)", cmd.Amount, cumulative),
 				})
 			case "mark":
-				elapsed := elapsedSince(eng.GetStartTime())
+				elapsed, clamped := markElapsed(cmd.ElapsedS, elapsedSince(eng.GetStartTime()))
 				r.marks = append(r.marks, snap.Mark{Label: cmd.Label, ElapsedS: elapsed})
 				// The mark event itself is the reply — no separate ack.
 				r.emit(HeartbeatPayload{
@@ -293,7 +294,8 @@ loop:
 					Event:    "mark",
 					ID:       cmd.ID,
 					Label:    cmd.Label,
-					ElapsedS: elapsed,
+					ElapsedS: &elapsed,
+					Clamped:  clamped,
 				})
 			case "stop":
 				r.emit(HeartbeatPayload{
@@ -418,7 +420,11 @@ func (r *HeadlessRenderer) emit(p HeartbeatPayload) {
 		case "mark":
 			// No Message on this event by design — Label/ElapsedS
 			// already say everything, so the text line is built from those.
-			_, _ = fmt.Fprintf(os.Stdout, "[%s] mark %q (t+%.1fs)\n", p.Time, p.Label, p.ElapsedS)
+			var at float64
+			if p.ElapsedS != nil {
+				at = *p.ElapsedS
+			}
+			_, _ = fmt.Fprintf(os.Stdout, "[%s] mark %q (t+%.1fs)\n", p.Time, p.Label, at)
 		default:
 			if p.Message != "" {
 				_, _ = fmt.Fprintf(os.Stdout, "[%s] %s\n", p.Time, p.Message)
@@ -435,6 +441,18 @@ func (r *HeadlessRenderer) emitMessage(event, message string) {
 // now returns the current UTC time formatted for log lines.
 func now() string {
 	return time.Now().UTC().Format("2006-01-02T15:04:05Z")
+}
+
+// markElapsed picks the offset a mark is recorded at: the client's value when
+// given, capped at the server's current run time (clamped reports the cap).
+func markElapsed(client *float64, serverNow float64) (elapsed float64, clamped bool) {
+	if client == nil {
+		return serverNow, false
+	}
+	if *client > serverNow {
+		return serverNow, true
+	}
+	return *client, false
 }
 
 // elapsedSince returns seconds since start, or 0 if start is the zero time —

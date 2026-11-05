@@ -20,6 +20,10 @@ type controlCommand struct {
 	Amount  int    // bias only: signed, non-zero delta
 	Label   string // mark only: non-empty annotation text
 
+	// ElapsedS is a mark's client-captured run-relative offset; nil when the
+	// client sent none (the server then stamps its own receive time).
+	ElapsedS *float64
+
 	// Err is set when the line failed to parse or validate. Every other
 	// field is zero; the select loop should reply with Err, not execute
 	// anything.
@@ -37,14 +41,15 @@ type controlError struct {
 
 func (e *controlError) Error() string { return e.Message }
 
-// rawControlCommand keeps Amount/Label raw so a bad type there doesn't fail
-// decoding — only a non-string id/command, or broken JSON, is parse_error.
-// Amount/Label are validated separately, into invalid_argument.
+// rawControlCommand keeps Amount/Label/ElapsedS raw so a bad type there doesn't
+// fail decoding — only a non-string id/command, or broken JSON, is parse_error.
+// Those fields are validated separately, into invalid_argument.
 type rawControlCommand struct {
-	ID      string          `json:"id"`
-	Command string          `json:"command"`
-	Amount  json.RawMessage `json:"amount"`
-	Label   json.RawMessage `json:"label"`
+	ID       string          `json:"id"`
+	Command  string          `json:"command"`
+	Amount   json.RawMessage `json:"amount"`
+	Label    json.RawMessage `json:"label"`
+	ElapsedS json.RawMessage `json:"elapsed_s"`
 }
 
 // parseControlLine decodes and validates one NDJSON command line, returning
@@ -79,7 +84,14 @@ func parseControlLine(line []byte) (controlCommand, *controlError) {
 				Message: "label must be a non-empty string",
 			}
 		}
-		return controlCommand{ID: raw.ID, Command: raw.Command, Label: label}, nil
+		elapsed, ok := decodeOptionalOffset(raw.ElapsedS)
+		if !ok {
+			return controlCommand{}, &controlError{
+				Reason: "invalid_argument", ID: raw.ID, Command: raw.Command,
+				Message: "elapsed_s must be a non-negative number",
+			}
+		}
+		return controlCommand{ID: raw.ID, Command: raw.Command, Label: label, ElapsedS: elapsed}, nil
 
 	case "stop":
 		return controlCommand{ID: raw.ID, Command: raw.Command}, nil
@@ -117,6 +129,23 @@ func decodeString(raw json.RawMessage) (string, bool) {
 		return "", false
 	}
 	return s, true
+}
+
+// decodeOptionalOffset parses an optional non-negative JSON number. Absent and
+// null both mean "not provided" (nil, ok); anything else non-numeric or
+// negative is ok=false.
+func decodeOptionalOffset(raw json.RawMessage) (*float64, bool) {
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil, true
+	}
+	var v float64
+	if err := json.Unmarshal(raw, &v); err != nil || v < 0 {
+		return nil, false
+	}
+	if v == 0 {
+		v = 0 // normalise -0 so it never serialises as "-0"
+	}
+	return &v, true
 }
 
 // controlReader reads r line by line into cmdCh — parsing only, not
