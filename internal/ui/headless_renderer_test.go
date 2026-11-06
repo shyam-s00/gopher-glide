@@ -447,6 +447,11 @@ func runControlScript(t *testing.T, rb engine.Runner, lines ...string) ([]map[st
 			t.Fatalf("Run: %v", err)
 		}
 	})
+	return decodeEvents(t, out), r
+}
+
+func decodeEvents(t *testing.T, out string) []map[string]any {
+	t.Helper()
 	var events []map[string]any
 	for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
 		var m map[string]any
@@ -455,7 +460,7 @@ func runControlScript(t *testing.T, rb engine.Runner, lines ...string) ([]map[st
 		}
 		events = append(events, m)
 	}
-	return events, r
+	return events
 }
 
 func eventsNamed(events []map[string]any, name string) []map[string]any {
@@ -617,5 +622,76 @@ func TestHeadlessRenderer_Mark_TextReporter(t *testing.T) {
 	})
 	if !strings.Contains(out, `mark "canary" (t+5.0s)`) {
 		t.Errorf("text mark line missing or wrong:\n%s", out)
+	}
+}
+
+// TestHeadlessRenderer_MarkElapsedScript drives testdata/mark-elapsed-script.jsonl
+// through the loop and checks every line's outcome, in order, then the
+// chronological snapshot listing.
+func TestHeadlessRenderer_MarkElapsedScript(t *testing.T) {
+	f, err := os.Open("testdata/mark-elapsed-script.jsonl")
+	if err != nil {
+		t.Fatalf("open fixture: %v", err)
+	}
+	defer f.Close()
+
+	r := &HeadlessRenderer{Reporter: "json", ControlMode: "stdin", ControlInput: f, HeartbeatInterval: time.Hour}
+	rb := &fixedStartRunner{start: time.Now().Add(-60 * time.Second)}
+	var runErr error
+	out := captureStdout(t, func() { runErr = r.Run(rb, testConfig(), nil, RunOptions{}) })
+	if runErr != nil {
+		t.Fatalf("Run: %v", runErr)
+	}
+	events := decodeEvents(t, out)
+
+	// started, one reply per line e1..e8, then stop's ack and the terminal event.
+	wantEvents := []string{"started", "mark", "mark", "mark", "mark", "error", "error", "mark", "mark", "ack", "stopped"}
+	var got []string
+	for _, e := range events {
+		got = append(got, e["event"].(string))
+	}
+	if strings.Join(got, ",") != strings.Join(wantEvents, ",") {
+		t.Fatalf("events = %v, want %v", got, wantEvents)
+	}
+
+	num := func(e map[string]any) float64 { return e["elapsed_s"].(float64) }
+	if e := events[1]; e["id"] != "e1" || num(e) != 12.5 || e["clamped"] != nil {
+		t.Errorf("e1 (client offset honored): %v", e)
+	}
+	if e := events[2]; e["id"] != "e2" || num(e) != 0 || e["clamped"] != nil {
+		t.Errorf("e2 (zero kept): %v", e)
+	}
+	if e := events[3]; e["id"] != "e3" || num(e) != 4 {
+		t.Errorf("e3: %v", e)
+	}
+	if e := events[4]; e["id"] != "e4" || e["clamped"] != true || num(e) < 60 || num(e) > 62 {
+		t.Errorf("e4 (future value capped to server now): %v", e)
+	}
+	for i, id := range map[int]string{5: "e5", 6: "e6"} {
+		if e := events[i]; e["id"] != id || e["reason"] != "invalid_argument" || e["command"] != "mark" {
+			t.Errorf("%s should be invalid_argument on mark: %v", id, e)
+		}
+	}
+	for i, id := range map[int]string{7: "e7", 8: "e8"} {
+		if e := events[i]; e["id"] != id || e["clamped"] != nil || num(e) < 60 || num(e) > 62 {
+			t.Errorf("%s should carry server time: %v", id, e)
+		}
+	}
+
+	marks := r.Marks()
+	if len(marks) != 6 {
+		t.Fatalf("recorded %d marks, want 6 (the two invalid lines record none): %+v", len(marks), marks)
+	}
+	s, err := snap.NewDefaultRecorder(0).Finalize(snap.RunMeta{Marks: marks})
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	var order []string
+	for _, m := range s.Meta.Marks {
+		order = append(order, m.Label)
+	}
+	want := "clicked-at-start,late-confirm-of-earlier-click,clicked-at-12s,from-the-future,null-is-absent,server-stamped"
+	if strings.Join(order, ",") != want {
+		t.Errorf("snapshot order = %v, want %s", order, want)
 	}
 }

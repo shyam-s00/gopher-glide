@@ -79,7 +79,7 @@ gg snap view v1-baseline
 
 If a run was manually nudged — a live RPS bias via `↑`/`↓` in the TUI, or a `bias`/`mark` command sent over the [Live Control Protocol](/control-protocol) — and `--snap` was set, that's captured in the snapshot's `meta` object too:
 
-- `marks` — labeled, timestamped annotations you sent during the run (e.g. `"deploy-v2-canary"` at `t+12.4s`).
+- `marks` — labeled, timestamped annotations you sent during the run (e.g. `"deploy-v2-canary"` at `t+12.4s`), listed in order of `elapsed_s`. A mark sent with an explicit `elapsed_s` sits at that moment, not at the moment `gg` received it.
 - `bias_events` — the full timeline of manual RPS nudges: each entry's `amount`, the `cumulative` value at that point, and `elapsed_s`.
 - `final_bias` — the cumulative bias in effect when the run ended (`0` if nobody touched it).
 

@@ -54,6 +54,11 @@ func main() {
 		return
 	}
 
+	if len(os.Args) >= 2 && os.Args[1] == "mcp" {
+		runMCPCmd(os.Args[2:])
+		return
+	}
+
 	// <config-file> is an optional positional argument: used as the config path
 	// when present and not flag-like, otherwise gg falls back to DefaultConfig.
 	var configPath string

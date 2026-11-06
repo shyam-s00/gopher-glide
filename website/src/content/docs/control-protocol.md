@@ -71,6 +71,16 @@ Drops a labeled, timestamped annotation into the run — useful for narrating a 
 
 `label` must be a non-empty string.
 
+**`elapsed_s`** (optional, `gg` v1.4.0+) — the moment, in seconds since the run started, that the mark belongs to:
+
+```json
+{"id":"c3","command":"mark","label":"deploy-v2-canary","elapsed_s":12.4}
+```
+
+Use it when the moment was captured earlier than the command is sent — a UI that pops up a label dialog after a click, say. Without it, the mark is stamped when `gg` receives the command. It must be a non-negative number (`null` counts as omitted); anything else is an `invalid_argument` error and no mark is recorded. A value later than the run's current time is capped to it, and the reply says `"clamped":true`. Measure the offset from when your client received the `started` event; `gg`'s own clock starts slightly earlier, so expect a difference of milliseconds.
+
+Only a `gg` that lists the `control.mark.elapsed` [capability](#versioning--capabilities) honors the field. Older versions ignore it and stamp the mark with the receive time — no error — so check first and, if it's missing, send the mark without `elapsed_s`.
+
 ### `stop`
 
 Ends the run cleanly — the snapshot is finalized exactly as for a run that completed on its own, and the process exits with status `0`. (`Ctrl+C` is different: it ends a run with an `interrupted` event.) If `--snap` is set, the snapshot is still written, including any marks and bias applied before the stop.
@@ -94,7 +104,7 @@ Every command produces exactly one reply, interleaved with the regular heartbeat
 ```
 
 - **`bias`** → `ack` on success (carries the cumulative value in the `bias` field, not just in `message`), `error` on a bad `amount`.
-- **`mark`** → the `mark` event **is** the reply — there's no separate `ack`.
+- **`mark`** → the `mark` event **is** the reply — there's no separate `ack`. Its `elapsed_s` is the offset the mark was recorded at (always present, including `0`), and `"clamped":true` appears only if your `elapsed_s` was capped.
 - **`stop`** → an immediate `ack` confirming receipt, then the run's terminal event fires once finalize completes: `stopped` (replacing `finished`) rather than a second reply. Like `finished`, it carries the final run statistics — also when `--snap` is on, in which case its `message` is the snapshot status line.
 
 A malformed or unparseable line still gets a reply — with no `id`/`command`, since neither could be recovered:
@@ -107,7 +117,7 @@ A malformed or unparseable line still gets a reply — with no `id`/`command`, s
 |---|---|
 | `parse_error` | The line wasn't valid JSON at all. |
 | `unknown_command` | Valid JSON, but `command` isn't one of `bias` / `mark` / `stop`. |
-| `invalid_argument` | Missing/zero `amount` on `bias`, or empty `label` on `mark`. |
+| `invalid_argument` | Missing/zero `amount` on `bias`, or empty `label` or a bad `elapsed_s` on `mark`. |
 
 Unrecognized extra fields on a command are ignored, not rejected — send whatever your plugin's data model already has lying around.
 
@@ -132,11 +142,12 @@ See [CLI Reference → Headless heartbeat payload](/cli-reference#headless-heart
 The `started` event gains two fields so old and new binaries/plugins can talk to each other without guessing versions:
 
 ```json
-{"event":"started","protocol_version":1,"capabilities":["control.bias","control.mark","control.stop"], …}
+{"event":"started","protocol_version":1,"capabilities":["control.bias","control.mark","control.mark.elapsed","control.stop"], …}
 ```
 
 - **`protocol_version`** bumps only on a breaking change (the goal is to never need this).
 - **`capabilities`** lists what this run's listener actually accepts. Any command added in the future would show up as a new capability string — check for the string, not the version number, before showing a control in your own tooling.
+- **`control.mark.elapsed`** means `mark` honors its optional `elapsed_s`. Check that the list *contains* the string; don't compare the whole list, since it grows over time.
 - With `--control none`, `capabilities` is an explicit empty array (`[]`) — distinct from an older `gg` binary that has no `capabilities` field at all.
 
 A tool built against v1.3 that talks to a newer `gg` with extra capabilities keeps working unchanged; it just won't offer controls for capabilities it doesn't recognize.
@@ -148,6 +159,12 @@ A tool built against v1.3 that talks to a newer `gg` with extra capabilities kee
 The protocol carries a generic signed `amount` on purpose — the widget is a plugin decision, not a protocol one. Our recommendation: build a **stepper (± buttons)**, matching the TUI's feel and giving users exact parity with what they already know from the terminal. The JetBrains plugin does this, with −10 / −5 / +5 / +10 steps and a Reset.
 
 A slider is a perfectly reasonable follow-up using the exact same `bias` command — just **debounce drag events**. Every command is applied and none are dropped, but the request rate only changes once a second, so one command per pixel of drag adds noise (and a long reply stream) without adding precision. Emit on drag-end, or throttle to a few times a second.
+
+---
+
+## 🕒 For plugin authors: marks with a confirm step
+
+If your UI asks for a label after the user clicks "mark", the moment that matters is the click, not the confirm. Record the offset at click time (seconds since you received `started`, from a monotonic clock), hold it while the dialog is open, and send it as `elapsed_s` with the command — but only when `capabilities` contains `control.mark.elapsed`; otherwise send the mark without it. Marks can then arrive out of order (an early click confirmed after a later one); the snapshot lists them by `elapsed_s`, so the order in the file is chronological. If the run ends while the dialog is open there's nothing left to receive the command, so tell the user the mark wasn't saved.
 
 ---
 

@@ -1,0 +1,9 @@
+{"id":"e1","command":"mark","label":"clicked-at-12s","elapsed_s":12.5}
+{"id":"e2","command":"mark","label":"clicked-at-start","elapsed_s":0}
+{"id":"e3","command":"mark","label":"late-confirm-of-earlier-click","elapsed_s":4}
+{"id":"e4","command":"mark","label":"from-the-future","elapsed_s":99999}
+{"id":"e5","command":"mark","label":"bad-type","elapsed_s":"soon"}
+{"id":"e6","command":"mark","label":"bad-negative","elapsed_s":-3}
+{"id":"e7","command":"mark","label":"null-is-absent","elapsed_s":null}
+{"id":"e8","command":"mark","label":"server-stamped"}
+{"id":"e9","command":"stop"}

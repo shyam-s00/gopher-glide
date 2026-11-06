@@ -1,6 +1,6 @@
 # Live Control Protocol
 
-**Status:** Supported from gg v1.3.0+
+**Status:** Supported from gg v1.3.0+. The optional `elapsed_s` field on `mark` is supported from gg v1.4.0+.
 
 This document specifies the Live Control Protocol (LCP) — a way to send commands into a running
 `gg` headless load test, and to receive structured replies and events back. It is a complete,
@@ -105,9 +105,22 @@ after the fact.
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `label` | string | yes | Non-empty free text describing the annotation. |
+| `elapsed_s` | number | no | Seconds since the run started at which the annotation belongs. For clients that capture the moment before they can send the command — for example a UI that asks for a label after the user clicks. Must be a non-negative number; `null` counts as omitted. Default: the moment `gg` receives the command. |
+
+```json
+{"id":"c3","command":"mark","label":"deploy-v2-canary","elapsed_s":12.4}
+```
+
+Measure `elapsed_s` from when the client received the `started` event; `gg` begins its own clock
+a moment earlier, so expect a difference of milliseconds. A value later than the run's current
+elapsed time can't be right, so it is capped to the current time and the reply carries
+`"clamped":true` — the mark is still recorded. Only a `gg` that advertises the
+[`control.mark.elapsed`](#5-handshake) capability honors the field; an older one ignores it and
+stamps the mark with its receive time, without an error. On other commands the field is ignored.
 
 On success, the reply *is* a [`mark` event](#43-mark) — there is no separate acknowledgment. On
-failure — `label` missing or empty — replies with an `error`, reason `invalid_argument`.
+failure — `label` missing or empty, or `elapsed_s` present but not a non-negative number —
+replies with an `error`, reason `invalid_argument`.
 
 ### 3.3 `stop`
 
@@ -185,7 +198,8 @@ specifically handle.
 |---|---|
 | `id` | Echoes the command's `id`, if one was given. |
 | `label` | The annotation text, as sent. |
-| `elapsed_s` | Seconds elapsed since the run started, at the moment the mark was recorded. |
+| `elapsed_s` | The offset the mark was recorded at, in seconds since the run started: the `elapsed_s` the client sent (possibly capped — see `clamped`), or, if none was sent, the time `gg` received the command. Always present on `mark` events, including `0`. |
+| `clamped` | `true` only when the client's `elapsed_s` was later than the run's current time and was capped to it. Omitted otherwise. |
 
 ### 4.4 `stopped`
 
@@ -205,17 +219,22 @@ The first line `gg --headless` ever writes (the `started` event) includes two fi
 establish what this run of `gg` supports:
 
 ```json
-{"event":"started","protocol_version":1,"capabilities":["control.bias","control.mark","control.stop"], "...": "..."}
+{"event":"started","protocol_version":1,"capabilities":["control.bias","control.mark","control.mark.elapsed","control.stop"], "...": "..."}
 ```
 
 | Field | Meaning |
 |---|---|
 | `protocol_version` | An integer, starting at `1`. Only increments on a breaking change to this protocol (expected to be rare — see [Versioning and Forward Compatibility](#8-versioning-and-forward-compatibility)). |
-| `capabilities` | The list of control commands this specific run actually accepts, as namespaced strings (`control.bias`, `control.mark`, `control.stop`, ...). |
+| `capabilities` | The list of control commands this specific run actually accepts, as namespaced strings (`control.bias`, `control.mark`, `control.mark.elapsed`, `control.stop`, ...). |
 
 **A client should check for the specific capability string it needs, not assume support based on
 `protocol_version` alone.** For example, before showing a bias control in a UI, check that
 `"control.bias"` is present in `capabilities`.
+
+`control.mark.elapsed` means the `mark` command honors its optional `elapsed_s` field. It is a
+separate string because a `gg` without it silently ignores `elapsed_s` and stamps marks with the
+receive time. Check for it, and when it's absent send `mark` without `elapsed_s`. Check by
+membership (`capabilities` contains the string), never by comparing the whole list.
 
 If control is disabled for the run (`--control none`), `capabilities` is present but **empty**
 (`[]`) — this is a deliberate, meaningful signal: "this binary supports the protocol, but this
@@ -248,7 +267,7 @@ snapshot also records what control activity happened during that run:
 
 | Field | Meaning |
 |---|---|
-| `marks` | The list of `mark` commands sent during the run, each with its label and the elapsed time (seconds since run start) at which it was sent. Omitted if no marks were sent. |
+| `marks` | The list of `mark` commands sent during the run, each with its label and the elapsed time (seconds since run start) it belongs to — the client's `elapsed_s` when one was sent, otherwise the time `gg` received it. Listed in order of elapsed time, which can differ from the order received. Omitted if no marks were sent. |
 | `bias_events` | The list of `bias` commands sent during the run, each with its amount, the resulting cumulative value, and elapsed time. Omitted if bias was never touched. |
 | `final_bias` | The cumulative bias value at the end of the run. `0` if bias was never touched. Always present, even at `0`. |
 

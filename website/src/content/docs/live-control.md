@@ -56,6 +56,16 @@ Expect something like this (timings will differ):
 {"final_bias":10,"marks":[{"label":"deploy-v2","elapsed_s":14.0}],"bias_events":[{"amount":30,"cumulative":30,"elapsed_s":8.0},{"amount":-20,"cumulative":10,"elapsed_s":19.0}]}
 ```
 
+### 🕒 Marking a moment that has already passed
+
+A mark is normally stamped the moment `gg` receives it. If your tooling noticed the moment earlier — a dialog that asks for a label after a click, say — send the offset it captured as `elapsed_s` (seconds since the run started; `gg` v1.4.0+):
+
+```json
+{"id":"m2","command":"mark","label":"cache cleared","elapsed_s":12.5}
+```
+
+The `mark` reply echoes the offset it recorded, and the snapshot stores the mark at that moment, however late the command arrives. An offset later than the run's current time is capped to it and the reply carries `"clamped":true`. Marks are listed by `elapsed_s` in the snapshot, so one confirmed late still sorts into its place. Only `gg` versions that list `control.mark.elapsed` in the `started` event's `capabilities` honor the field; see the [protocol reference](/control-protocol) for the details.
+
 ---
 
 ## 🎯 Where do commands go?

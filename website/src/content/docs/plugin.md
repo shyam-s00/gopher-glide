@@ -176,6 +176,8 @@ The **Snaps** tree view in the panel sidebar lets you:
 
 Both plugins already talk to `gg` over its headless heartbeat stream. As of v1.3, that stream is two-way: `gg --headless` accepts commands over stdin — `bias`, `mark`, `stop` — and replies inline, without killing the process. See [Driving a Run Live](/live-control) to try it by hand and the [Live Control Protocol](/control-protocol) for the full spec. Both the JetBrains plugin (7.0+) and the VS Code extension (3.0+) are built on it: the run dashboard drives `bias`, `mark` and `stop` live, and a clean Stop keeps the snapshot.
 
+**Marks with a confirm step:** a `mark` can carry the offset captured when the user clicked (`elapsed_s`, `gg` v1.4.0+), so a slow label dialog doesn't shift the mark later in the run. Send it only when the `started` event's `capabilities` contains `control.mark.elapsed`; otherwise send the mark without it. Details in [For plugin authors: marks with a confirm step](/control-protocol#-for-plugin-authors-marks-with-a-confirm-step).
+
 **A note for anyone building their own tooling on the protocol:** it carries a generic signed `amount` for bias, not a fixed ±5 step — the widget is a UI decision, not a protocol one. Both plugins use a **stepper (± buttons)** for parity with the TUI's `↑`/`↓` feel; a slider is a reasonable alternative using the exact same command, just **debounce drag events** (throttle to a few per second) — the request rate only changes once a second, so one command per pixel of drag adds noise without adding precision.
 
 ---
