@@ -128,8 +128,13 @@ type mcpChild struct {
 
 func startMCPChild(t *testing.T, args ...string) *mcpChild {
 	t.Helper()
+	return startMCPChildEnv(t, nil, args...)
+}
+
+func startMCPChildEnv(t *testing.T, env []string, args ...string) *mcpChild {
+	t.Helper()
 	cmd := exec.Command(os.Args[0], append([]string{"mcp"}, args...)...)
-	cmd.Env = append(os.Environ(), "GG_TEST_RUN_AS_GG=1")
+	cmd.Env = append(append(os.Environ(), "GG_TEST_RUN_AS_GG=1"), env...)
 	stderr := &bytes.Buffer{}
 	cmd.Stderr = stderr
 	in, err := cmd.StdinPipe()

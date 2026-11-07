@@ -248,7 +248,7 @@ on them.
 
 ## 6. Heartbeat additions
 
-Every `heartbeat` line gains one new field:
+Every `heartbeat` line gains one new field, and (since `gg` v1.4.0) may carry a second:
 
 ```json
 {"event":"heartbeat","bias":5, "...": "..."}
@@ -257,6 +257,29 @@ Every `heartbeat` line gains one new field:
 | Field | Meaning |
 |---|---|
 | `bias` | The cumulative bias currently in effect, from all `bias` commands sent so far in this run. `0` if none has been sent. Always present on heartbeats, not just when non-zero. |
+| `error_mix` | What kind of failures happened recently. Present on `heartbeat` events only, and only when at least one request failed in the last 10 seconds; absent otherwise (and on every other event). See below. |
+
+### 6.1 `error_mix`
+
+```json
+{"event":"heartbeat", "...": "...",
+ "error_mix":{"window_s":10,"sampled":37,"transport":2,"http_4xx":30,"http_5xx":4,"extract":1,
+              "top_codes":[{"code":429,"n":28},{"code":503,"n":4},{"code":404,"n":2}],"capped":false}}
+```
+
+| Field | Meaning |
+|---|---|
+| `window_s` | How far back the summary looks, in seconds (currently 10). |
+| `sampled` | Failed requests counted. Always `transport + http_4xx + http_5xx + extract`. |
+| `transport` | No HTTP response: connection refused, reset, DNS, timeout. |
+| `http_4xx`, `http_5xx` | Responses with a 4xx / 5xx status. |
+| `extract` | The response was fine (status below 400) but an `@gg-export` found nothing, so the journey was aborted. |
+| `top_codes` | Up to three most frequent 4xx/5xx status codes, most frequent first (ties: lower code first). Omitted when there were none. |
+| `capped` | `true` when the engine's bounded failure log filled up inside the window, so older failures in the window may be missing. Counts are then a lower bound; the proportions between kinds remain meaningful. |
+
+It is a summary of recent failures, not a running total: use `failure_count` and `error_rate` for
+totals. There is no capability string for it, because it is purely additive; a client that does
+not know the field ignores it. Engines that cannot produce it simply never send it.
 
 ---
 

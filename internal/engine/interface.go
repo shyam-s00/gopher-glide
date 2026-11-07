@@ -99,3 +99,31 @@ type Runner interface {
 	// Useful for direct-control scenarios outside of staged profiles.
 	SetTargetRPS(rps int)
 }
+
+// CodeCount is one HTTP status code and how many recent errors carried it.
+type CodeCount struct {
+	Code int `json:"code"`
+	N    int `json:"n"`
+}
+
+// ErrorMix summarises the failures in a recent time window by kind. It is
+// derived from the engine's bounded error log, so counts are a lower bound
+// once Capped is true; the proportions stay meaningful.
+type ErrorMix struct {
+	WindowS   float64     `json:"window_s"`
+	Sampled   int         `json:"sampled"`
+	Transport int         `json:"transport"`
+	HTTP4xx   int         `json:"http_4xx"`
+	HTTP5xx   int         `json:"http_5xx"`
+	Extract   int         `json:"extract"`
+	TopCodes  []CodeCount `json:"top_codes,omitempty"`
+	Capped    bool        `json:"capped"`
+}
+
+// ErrorMixer is implemented by engines that can report a recent error mix.
+// It is separate from Runner so existing implementations and fakes are unaffected.
+type ErrorMixer interface {
+	// RecentErrorMix reports failures newer than window. ok is false when
+	// there were none.
+	RecentErrorMix(window time.Duration) (mix ErrorMix, ok bool)
+}

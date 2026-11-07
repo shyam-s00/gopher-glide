@@ -133,6 +133,26 @@ The regular heartbeat stream gains one field: `bias` (the cumulative Director bi
 {"time":"…","event":"heartbeat","stage":1,"total_stages":2,"target_rps":15,"actual_rps":14.8,"bias":5, …}
 ```
 
+From `gg` v1.4.0 a heartbeat may also carry `error_mix`, a summary of *what kind* of failures happened in the last 10 seconds. It is there only when something failed in that window:
+
+```json
+{"time":"…","event":"heartbeat", …,
+ "error_mix":{"window_s":10,"sampled":37,"transport":2,"http_4xx":30,"http_5xx":4,"extract":1,
+              "top_codes":[{"code":429,"n":28},{"code":503,"n":4},{"code":404,"n":2}],"capped":false}}
+```
+
+| Field | Meaning |
+|---|---|
+| `window_s` | How far back it looks, in seconds. |
+| `sampled` | Failures counted: `transport + http_4xx + http_5xx + extract`. |
+| `transport` | No HTTP response at all (refused, reset, DNS, timeout). |
+| `http_4xx` / `http_5xx` | Responses with a 4xx / 5xx status. |
+| `extract` | Status was fine but an `@gg-export` found nothing, so the journey stopped. |
+| `top_codes` | Up to three most frequent 4xx/5xx codes. Left out if there were none. |
+| `capped` | `true` if the engine's bounded failure log filled up inside the window. Counts are then a lower bound; the mix between kinds is still a good guide. |
+
+It is a "what is going wrong right now" view, not a running total (use `failure_count` and `error_rate` for those). It needs no capability check: a client that doesn't know the field just ignores it. The text reporter does not print it.
+
 See [CLI Reference → Headless heartbeat payload](/cli-reference#headless-heartbeat-payload) for the full field list.
 
 ---

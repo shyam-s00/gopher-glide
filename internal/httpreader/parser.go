@@ -33,14 +33,44 @@ func ParseFile(path string) ([]Journey, error) {
 //	2 – body
 //	3 – JS-embed block (JetBrains `> {% … %}` response handler; ignored)
 func Parse(content string) ([]RequestSpec, error) {
+	specs, _, err := ParseWithSourceMap(content)
+	return specs, err
+}
+
+// SourceMap locates what Parse accepted, and what it silently dropped, by
+// 1-based line number. Requests is parallel to the returned specs.
+type SourceMap struct {
+	Requests []RequestLines
+	// EmptyBlocks are `###` lines whose block never had a request line.
+	EmptyBlocks []int
+}
+
+// RequestLines is the location data for one request.
+type RequestLines struct {
+	// Request is the line of the request line (method and URL).
+	Request int
+	// Exports is parallel to RequestSpec.Exports.
+	Exports []int
+	// BadExports are `# @gg-export` lines that did not parse and were ignored.
+	BadExports []int
+	// BadHeaders are header-section lines that are not a valid `Name: value`.
+	BadHeaders []int
+}
+
+// ParseWithSourceMap is Parse plus a SourceMap for diagnostics.
+func ParseWithSourceMap(content string) ([]RequestSpec, *SourceMap, error) {
 	var requests []RequestSpec
 	var currentRequest *RequestSpec
+	sm := &SourceMap{}
+	var cur RequestLines
+	lineNo := 0
 
 	scanner := bufio.NewScanner(strings.NewReader(content))
 
 	state := 0 // see state legend above
 
 	for scanner.Scan() {
+		lineNo++
 		line := scanner.Text()
 		trimmed := strings.TrimSpace(line)
 
@@ -58,12 +88,16 @@ func Parse(content string) ([]RequestSpec, error) {
 				currentRequest.Body = strings.TrimSpace(currentRequest.Body)
 				if currentRequest.URL != "" {
 					requests = append(requests, *currentRequest)
+					sm.Requests = append(sm.Requests, cur)
+				} else {
+					sm.EmptyBlocks = append(sm.EmptyBlocks, cur.Request)
 				}
 			}
 			currentRequest = &RequestSpec{
 				Name:    strings.TrimSpace(strings.TrimPrefix(trimmed, "###")),
 				Headers: make(http.Header),
 			}
+			cur = RequestLines{Request: lineNo}
 			state = 0
 			continue
 		}
@@ -76,6 +110,7 @@ func Parse(content string) ([]RequestSpec, error) {
 			currentRequest = &RequestSpec{
 				Headers: make(http.Header),
 			}
+			cur = RequestLines{Request: lineNo}
 			state = 0
 		}
 
@@ -84,7 +119,11 @@ func Parse(content string) ([]RequestSpec, error) {
 		if state == 1 || state == 2 {
 			if d, ok := parseExportDirective(trimmed); ok {
 				currentRequest.Exports = append(currentRequest.Exports, d)
+				cur.Exports = append(cur.Exports, lineNo)
 				continue
+			}
+			if strings.HasPrefix(trimmed, exportPrefix) {
+				cur.BadExports = append(cur.BadExports, lineNo)
 			}
 		}
 
@@ -114,6 +153,7 @@ func Parse(content string) ([]RequestSpec, error) {
 					currentRequest.URL = parts[0]
 				}
 				state = 1
+				cur.Request = lineNo
 			}
 
 		case 1: // Headers
@@ -124,7 +164,12 @@ func Parse(content string) ([]RequestSpec, error) {
 				if len(parts) == 2 {
 					key := strings.TrimSpace(parts[0])
 					val := strings.TrimSpace(parts[1])
+					if !validHeaderName(key) {
+						cur.BadHeaders = append(cur.BadHeaders, lineNo)
+					}
 					currentRequest.Headers.Add(key, val)
+				} else {
+					cur.BadHeaders = append(cur.BadHeaders, lineNo)
 				}
 			}
 
@@ -138,32 +183,55 @@ func Parse(content string) ([]RequestSpec, error) {
 		}
 	}
 
-	if currentRequest != nil && currentRequest.URL != "" {
-		currentRequest.Body = strings.TrimSpace(currentRequest.Body)
-		requests = append(requests, *currentRequest)
+	if currentRequest != nil {
+		if currentRequest.URL != "" {
+			currentRequest.Body = strings.TrimSpace(currentRequest.Body)
+			requests = append(requests, *currentRequest)
+			sm.Requests = append(sm.Requests, cur)
+		} else {
+			sm.EmptyBlocks = append(sm.EmptyBlocks, cur.Request)
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scanner error: %w", err)
+		return nil, nil, fmt.Errorf("scanner error: %w", err)
 	}
 
 	for i := range requests {
 		requests[i].Compile()
 	}
 
-	return requests, nil
+	return requests, sm, nil
+}
+
+const exportPrefix = "# @gg-export"
+
+// validHeaderName reports whether name is a non-empty HTTP token.
+func validHeaderName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case strings.IndexByte("!#$%&'*+-.^_`|~", c) >= 0:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // parseExportDirective attempts to parse a `# @gg-export` pragma from line.
 // Expected format:  # @gg-export <varName> = <engine>: <pattern>
 // Returns the parsed directive and true on success; zero value and false otherwise.
 func parseExportDirective(line string) (ExportDirective, bool) {
-	const prefix = "# @gg-export"
-	if !strings.HasPrefix(line, prefix) {
+	if !strings.HasPrefix(line, exportPrefix) {
 		return ExportDirective{}, false
 	}
 
-	rest := strings.TrimSpace(line[len(prefix):])
+	rest := strings.TrimSpace(line[len(exportPrefix):])
 
 	// Split on the first '=' to get varName and "engine: pattern"
 	eqIdx := strings.Index(rest, "=")

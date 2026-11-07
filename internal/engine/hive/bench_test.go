@@ -23,6 +23,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -433,5 +436,170 @@ func BenchmarkMetrics_RpsWindowRate(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = w.rate()
+	}
+}
+
+// fillErrorRings saturates every shard's error ring with fresh entries.
+func fillErrorRings(e *Engine) {
+	for shard := 0; shard < numShards; shard++ {
+		for i := 0; i < e.maxLogs; i++ {
+			e.logCall(shard, "GET", "http://x/a", 500+i%4, time.Millisecond, ErrHttpError)
+		}
+	}
+}
+
+// BenchmarkErrorMix_RingsFull is the cost of one heartbeat's scan when every
+// ring is full (worst case for the read).
+func BenchmarkErrorMix_RingsFull(b *testing.B) {
+	e := New()
+	fillErrorRings(e)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, ok := e.RecentErrorMix(10 * time.Second); !ok {
+			b.Fatal("no mix")
+		}
+	}
+}
+
+// BenchmarkErrorMix_WithWriters runs the scan while actors keep logging errors
+// on every shard, and reports the writers' per-call latency under that load.
+func BenchmarkErrorMix_WithWriters(b *testing.B) {
+	e := New()
+	fillErrorRings(e)
+	var stop atomic.Bool
+	var wg sync.WaitGroup
+	for w := 0; w < numShards; w++ {
+		wg.Add(1)
+		go func(shard int) {
+			defer wg.Done()
+			for !stop.Load() {
+				e.logCall(shard, "GET", "http://x/a", 503, time.Millisecond, ErrHttpError)
+			}
+		}(w)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		e.RecentErrorMix(10 * time.Second)
+	}
+	b.StopTimer()
+	stop.Store(true)
+	wg.Wait()
+}
+
+// BenchmarkLogCall_WhileMixScans measures writer cost per logCall with and
+// without a concurrent heartbeat-rate scan (once per ms, far above the real 1/s).
+func BenchmarkLogCall_WhileMixScans(b *testing.B) {
+	for _, scanning := range []bool{false, true} {
+		name := "no_scan"
+		if scanning {
+			name = "scan_every_1ms"
+		}
+		b.Run(name, func(b *testing.B) {
+			e := New()
+			fillErrorRings(e)
+			stop := make(chan struct{})
+			var wg sync.WaitGroup
+			if scanning {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					t := time.NewTicker(time.Millisecond)
+					defer t.Stop()
+					for {
+						select {
+						case <-stop:
+							return
+						case <-t.C:
+							e.RecentErrorMix(10 * time.Second)
+						}
+					}
+				}()
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				shard := int(atomic.AddInt32(&benchShard, 1))
+				for pb.Next() {
+					e.logCall(shard, "GET", "http://x/a", 503, time.Millisecond, ErrHttpError)
+				}
+			})
+			b.StopTimer()
+			close(stop)
+			wg.Wait()
+		})
+	}
+}
+
+var benchShard int32
+
+// BenchmarkLogCallLatency_PacedWriters runs one writer per shard at ~50k
+// logCalls/s each (about 800k RPS in total, well above what the engine
+// sustains) for a second, with and without a 100 Hz error-mix scan, and
+// reports the writers' logCall tail latency and the scan duration.
+func BenchmarkLogCallLatency_PacedWriters(b *testing.B) {
+	const gap = 20 * time.Microsecond
+	for _, scan := range []bool{false, true} {
+		name := "no_scan"
+		if scan {
+			name = "scan_100hz"
+		}
+		b.Run(name, func(b *testing.B) {
+			for n := 0; n < b.N; n++ {
+				e := New()
+				fillErrorRings(e)
+				var stop atomic.Bool
+				var wg sync.WaitGroup
+				lat := make([][]time.Duration, numShards)
+				for w := 0; w < numShards; w++ {
+					wg.Add(1)
+					go func(w int) {
+						defer wg.Done()
+						buf := make([]time.Duration, 0, 1<<17)
+						for !stop.Load() {
+							t0 := time.Now()
+							e.logCall(w, "GET", "http://x/a", 503, time.Millisecond, ErrHttpError)
+							buf = append(buf, time.Since(t0))
+							for end := time.Now().Add(gap); time.Now().Before(end); {
+							}
+						}
+						lat[w] = buf
+					}(w)
+				}
+				var scans []time.Duration
+				if scan {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						for !stop.Load() {
+							t0 := time.Now()
+							e.RecentErrorMix(10 * time.Second)
+							scans = append(scans, time.Since(t0))
+							time.Sleep(10 * time.Millisecond)
+						}
+					}()
+				}
+				time.Sleep(time.Second)
+				stop.Store(true)
+				wg.Wait()
+
+				var all []time.Duration
+				for _, l := range lat {
+					all = append(all, l...)
+				}
+				sort.Slice(all, func(i, j int) bool { return all[i] < all[j] })
+				pct := func(p float64) float64 { return float64(all[int(float64(len(all)-1)*p)].Nanoseconds()) }
+				b.ReportMetric(pct(0.50), "logcall_p50_ns")
+				b.ReportMetric(pct(0.99), "logcall_p99_ns")
+				b.ReportMetric(pct(0.9999), "logcall_p9999_ns")
+				b.ReportMetric(float64(all[len(all)-1].Nanoseconds()), "logcall_max_ns")
+				if len(scans) > 0 {
+					sort.Slice(scans, func(i, j int) bool { return scans[i] < scans[j] })
+					b.ReportMetric(float64(scans[len(scans)/2].Microseconds()), "scan_p50_us")
+					b.ReportMetric(float64(scans[len(scans)-1].Microseconds()), "scan_max_us")
+				}
+			}
+		})
 	}
 }

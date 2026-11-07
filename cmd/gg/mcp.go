@@ -105,7 +105,7 @@ func runMCPCmd(args []string) {
 	start := time.Now()
 	logger.Info("gg mcp ready", "transport", "stdio", "max_rps", opts.limits.MaxRPS,
 		"max_duration", opts.limits.MaxDuration, "max_sessions", opts.limits.MaxSessions)
-	if err := mcp.Serve(ctx, srv, os.Stdin, protocolOut); err != nil {
+	if err := srv.Serve(ctx, os.Stdin, protocolOut); err != nil {
 		logger.Error("gg mcp stopped", "error", err)
 		os.Exit(1)
 	}

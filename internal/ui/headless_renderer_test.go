@@ -695,3 +695,238 @@ func TestHeadlessRenderer_MarkElapsedScript(t *testing.T) {
 		t.Errorf("snapshot order = %v, want %s", order, want)
 	}
 }
+
+// runningRunner stays "running" until stopped, so heartbeats tick.
+type runningRunner struct{ blockingRunner }
+
+func (*runningRunner) IsRunning() bool { return true }
+
+// mixRunner also reports a recent error mix.
+type mixRunner struct {
+	runningRunner
+	mix engine.ErrorMix
+	ok  bool
+}
+
+func (m *mixRunner) RecentErrorMix(time.Duration) (engine.ErrorMix, bool) { return m.mix, m.ok }
+
+var _ engine.ErrorMixer = &mixRunner{}
+
+// runHeartbeats runs rb for ~100 ms of 10 ms heartbeats, then sends stop.
+func runHeartbeats(t *testing.T, rb engine.Runner) (events []map[string]any, raw string) {
+	t.Helper()
+	pr, pw := io.Pipe()
+	r := &HeadlessRenderer{Reporter: "json", ControlMode: "stdin", ControlInput: pr, HeartbeatInterval: 10 * time.Millisecond}
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		_, _ = io.WriteString(pw, `{"command":"stop"}`+"\n")
+	}()
+	out := captureStdout(t, func() {
+		if err := r.Run(rb, testConfig(), nil, RunOptions{}); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	})
+	_ = pw.Close()
+	return decodeEvents(t, out), out
+}
+
+func TestHeartbeat_CarriesErrorMixWhenEngineReportsOne(t *testing.T) {
+	rb := &mixRunner{ok: true, mix: engine.ErrorMix{
+		WindowS: 10, Sampled: 9, Transport: 1, HTTP4xx: 3, HTTP5xx: 4, Extract: 1,
+		TopCodes: []engine.CodeCount{{Code: 429, N: 3}, {Code: 503, N: 4}}, Capped: true,
+	}}
+	events, _ := runHeartbeats(t, rb)
+
+	beats := eventsNamed(events, "heartbeat")
+	if len(beats) == 0 {
+		t.Fatal("no heartbeats were emitted")
+	}
+	for _, hb := range beats {
+		em, ok := hb["error_mix"].(map[string]any)
+		if !ok {
+			t.Fatalf("heartbeat lacks error_mix: %v", hb)
+		}
+		if em["window_s"] != 10.0 || em["sampled"] != 9.0 || em["transport"] != 1.0 || em["http_4xx"] != 3.0 ||
+			em["http_5xx"] != 4.0 || em["extract"] != 1.0 || em["capped"] != true {
+			t.Errorf("error_mix = %v", em)
+		}
+		codes := em["top_codes"].([]any)
+		if len(codes) != 2 || codes[0].(map[string]any)["code"] != 429.0 || codes[1].(map[string]any)["n"] != 4.0 {
+			t.Errorf("top_codes = %v", codes)
+		}
+	}
+}
+
+// error_mix belongs to heartbeats only.
+func TestHeartbeat_ErrorMixAbsentOnEveryOtherEvent(t *testing.T) {
+	rb := &mixRunner{ok: true, mix: engine.ErrorMix{WindowS: 10, Sampled: 1, HTTP5xx: 1}}
+	events, _ := runHeartbeats(t, rb)
+	for _, ev := range events {
+		_, has := ev["error_mix"]
+		if ev["event"] == "heartbeat" && !has {
+			t.Errorf("heartbeat missing error_mix: %v", ev)
+		}
+		if ev["event"] != "heartbeat" && has {
+			t.Errorf("%v event must not carry error_mix", ev["event"])
+		}
+	}
+}
+
+func TestHeartbeat_NoErrorsInWindowOmitsField(t *testing.T) {
+	events, raw := runHeartbeats(t, &mixRunner{ok: false})
+	if len(eventsNamed(events, "heartbeat")) == 0 {
+		t.Fatal("no heartbeats")
+	}
+	if strings.Contains(raw, "error_mix") {
+		t.Errorf("no errors, so no error_mix anywhere:\n%s", raw)
+	}
+}
+
+// Engines (and test doubles) without the method keep working unchanged.
+func TestHeartbeat_RunnerWithoutErrorMixerOmitsField(t *testing.T) {
+	events, raw := runHeartbeats(t, &runningRunner{})
+	if len(eventsNamed(events, "heartbeat")) == 0 {
+		t.Fatal("no heartbeats")
+	}
+	if strings.Contains(raw, "error_mix") {
+		t.Errorf("runner without ErrorMixer must not emit error_mix:\n%s", raw)
+	}
+}
+
+// Old consumers decode heartbeats into their own structs; the new field must be ignorable.
+func TestHeartbeat_ErrorMixIgnoredByOldDecoders(t *testing.T) {
+	_, raw := runHeartbeats(t, &mixRunner{ok: true, mix: engine.ErrorMix{WindowS: 10, Sampled: 2, HTTP4xx: 2}})
+	type oldHeartbeat struct {
+		Event     string  `json:"event"`
+		ErrorRate float64 `json:"error_rate"`
+		P99Ms     float64 `json:"p99_ms"`
+	}
+	n := 0
+	for _, l := range strings.Split(strings.TrimSpace(raw), "\n") {
+		var h oldHeartbeat
+		if err := json.Unmarshal([]byte(l), &h); err != nil {
+			t.Fatalf("old-style decode failed on %s: %v", l, err)
+		}
+		if h.Event == "heartbeat" {
+			n++
+		}
+	}
+	if n == 0 {
+		t.Fatal("no heartbeats decoded")
+	}
+}
+
+func TestHeartbeat_TextReporterUnaffected(t *testing.T) {
+	pr, pw := io.Pipe()
+	r := &HeadlessRenderer{Reporter: "text", ControlMode: "stdin", ControlInput: pr, HeartbeatInterval: 10 * time.Millisecond}
+	go func() {
+		time.Sleep(60 * time.Millisecond)
+		_, _ = io.WriteString(pw, `{"command":"stop"}`+"\n")
+	}()
+	rb := &mixRunner{ok: true, mix: engine.ErrorMix{WindowS: 10, Sampled: 1, HTTP5xx: 1}}
+	out := captureStdout(t, func() { _ = r.Run(rb, testConfig(), nil, RunOptions{}) })
+	_ = pw.Close()
+	if strings.Contains(out, "error_mix") || strings.Contains(out, "http_5xx") {
+		t.Errorf("text reporter must not print the mix:\n%s", out)
+	}
+	if !strings.Contains(out, "errors=") {
+		t.Errorf("expected text heartbeat lines:\n%s", out)
+	}
+}
+
+// timedRunner finishes on its own after d, like a short real run.
+type timedRunner struct {
+	blockingRunner
+	d time.Duration
+}
+
+func (r *timedRunner) RunStages(ctx context.Context, cfg *config.Config, specs []httpreader.RequestSpec) error {
+	select {
+	case <-time.After(r.d):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func runWithClosedInput(t *testing.T, rb engine.Runner, exitOnEOF bool, hook func() string) []map[string]any {
+	t.Helper()
+	r := &HeadlessRenderer{
+		Reporter:          "json",
+		ControlMode:       "stdin",
+		ControlInput:      strings.NewReader(""), // EOF immediately
+		ControlExitOnEOF:  exitOnEOF,
+		HeartbeatInterval: time.Hour,
+	}
+	done := make(chan struct{})
+	var out string
+	go func() {
+		defer close(done)
+		out = captureStdout(t, func() {
+			if err := r.Run(rb, testConfig(), nil, RunOptions{OnRunComplete: hook}); err != nil {
+				t.Errorf("Run: %v", err)
+			}
+		})
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return")
+	}
+	return decodeEvents(t, out)
+}
+
+// With the flag, EOF is a graceful stop: one "stopped" event and the post-run hook ran.
+func TestHeadless_ControlExitOnEOF_StopsGracefully(t *testing.T) {
+	hooked := 0
+	events := runWithClosedInput(t, &blockingRunner{}, true, func() string { hooked++; return "snapshot saved" })
+
+	stopped := eventsNamed(events, "stopped")
+	if len(stopped) != 1 || stopped[0]["message"] != "snapshot saved" || hooked != 1 {
+		t.Fatalf("stopped=%v hooked=%d events=%v", stopped, hooked, events)
+	}
+	if len(eventsNamed(events, "finished")) != 0 || len(eventsNamed(events, "interrupted")) != 0 {
+		t.Errorf("exactly one terminal event expected: %v", events)
+	}
+	for _, e := range events {
+		if e["event"] == "ack" || e["event"] == "error" {
+			t.Errorf("EOF must not produce replies: %v", e)
+		}
+	}
+}
+
+// Default behaviour is unchanged: EOF does not stop the run.
+func TestHeadless_ControlEOF_WithoutFlagDoesNotStop(t *testing.T) {
+	events := runWithClosedInput(t, &timedRunner{d: 300 * time.Millisecond}, false, nil)
+	if len(eventsNamed(events, "stopped")) != 0 || len(eventsNamed(events, "finished")) != 1 {
+		t.Fatalf("run should finish on its own: %v", events)
+	}
+}
+
+// A run that already ended must not hang on the EOF notification.
+func TestHeadless_ControlExitOnEOF_RunEndedFirst(t *testing.T) {
+	r := &HeadlessRenderer{Reporter: "json", ControlMode: "stdin", ControlExitOnEOF: true, HeartbeatInterval: time.Hour}
+	pr, pw := io.Pipe()
+	r.ControlInput = pr
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = captureStdout(t, func() { _ = r.Run(&timedRunner{d: 20 * time.Millisecond}, testConfig(), nil, RunOptions{}) })
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run hung")
+	}
+	_ = pw.Close()
+}
+
+// --control none ignores the flag: nothing is read, so nothing can close.
+func TestHeadless_ControlExitOnEOF_IgnoredWithControlNone(t *testing.T) {
+	r := &HeadlessRenderer{Reporter: "json", ControlMode: "none", ControlExitOnEOF: true, ControlInput: strings.NewReader(""), HeartbeatInterval: time.Hour}
+	out := captureStdout(t, func() { _ = r.Run(&timedRunner{d: 100 * time.Millisecond}, testConfig(), nil, RunOptions{}) })
+	events := decodeEvents(t, out)
+	if len(eventsNamed(events, "finished")) != 1 || len(eventsNamed(events, "stopped")) != 0 {
+		t.Fatalf("events = %v", events)
+	}
+}

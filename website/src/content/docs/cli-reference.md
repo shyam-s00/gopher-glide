@@ -51,6 +51,7 @@ gg [config-file] [flags]
 | `--headless` | `false` | Run without the interactive TUI — emits structured heartbeat logs to stdout instead. Use this in CI. |
 | `--reporter <text\|json>` | `text` | Output format in headless mode. `json` emits one [`HeartbeatPayload`](#headless-heartbeat-payload) object per line. |
 | `--control <stdin\|none>` | `stdin` | In headless mode, `stdin` listens for `bias`/`mark`/`stop` commands on this process's own standard input; `none` disables the listener for locked-down CI. Not used in TUI mode. See [Driving a Run Live](/live-control) and the [Live Control Protocol](/control-protocol). |
+| `--control-exit-on-eof` | off | Headless only, with `--control stdin`: when standard input closes, stop gracefully (as if a `stop` command arrived) and finish the snapshot. Meant for a supervisor that launches `gg` and may exit before it does; without it, a closed stdin is not a stop. |
 | `--heartbeat-interval <dur>` | `5s` | Headless heartbeat cadence, e.g. `2s` for smoother dashboard repaints. `0` or a negative value falls back to the default. |
 | `--tui-tick-ms <n>` | `42` (~24fps) | Interactive TUI redraw cadence in milliseconds. Clamped to `[16, 100]` — below 16ms wastes CPU on redraws no terminal can render that fast anyway; above 100ms the UI starts to feel unresponsive. `0` uses the default. Ignored in `--headless` mode. |
 
@@ -68,6 +69,7 @@ Each line in `--reporter json` mode is one JSON object. `event` is one of `start
 - `stages` — the full stage plan (name inferred the same way the TUI infers it; see [Stage inference rules](/configuration#stage-inference-rules)), sent once on `started`.
 - `profile` / `profile_scale` — only present when the run was launched via `--profile`; omitted entirely for plain config/`.http`-file runs.
 - `heartbeat` events additionally carry `stage`, `total_stages`, `target_rps`, `actual_rps`, `total_requests`, `success_count`, `failure_count`, `error_rate`, `p50_ms`, `p95_ms`, `p99_ms`, `bias` (cumulative Director bias, `0` if none applied). `bias` is present on heartbeats and on the `ack` for a `bias` command only — not on other events.
+- `heartbeat` events may also carry `error_mix` (v1.4.0+) — the kinds of failures in the last 10 seconds (`transport`, `http_4xx`, `http_5xx`, `extract`, `top_codes`, `capped`). Present only when something failed in that window; see [Heartbeat additions](/control-protocol#-heartbeat-additions).
 - `started` also carries `protocol_version` and `capabilities` — see [Versioning & capabilities](/control-protocol#versioning--capabilities).
 
 ---

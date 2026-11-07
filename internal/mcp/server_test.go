@@ -10,7 +10,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func newTestServer(t *testing.T) *sdk.Server {
+func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	s, err := NewServer(Options{Limits: DefaultLimits(), Version: "test"})
 	if err != nil {
@@ -25,7 +25,7 @@ func connect(t *testing.T) *sdk.ClientSession {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
 	ct, st := sdk.NewInMemoryTransports()
-	ss, err := newTestServer(t).Connect(ctx, st, nil)
+	ss, err := newTestServer(t).SDK.Connect(ctx, st, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestServe_StdinEOFEndsCleanly(t *testing.T) {
 	go func() { _, _ = io.Copy(io.Discard, outR) }()
 
 	done := make(chan error, 1)
-	go func() { done <- Serve(context.Background(), newTestServer(t), inR, outW) }()
+	go func() { done <- newTestServer(t).Serve(context.Background(), inR, outW) }()
 
 	_ = inW.Close()
 	select {
@@ -118,7 +118,7 @@ func TestServe_ContextCancelEndsCleanly(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- Serve(ctx, newTestServer(t), inR, outW) }()
+	go func() { done <- newTestServer(t).Serve(ctx, inR, outW) }()
 
 	cancel()
 	select {

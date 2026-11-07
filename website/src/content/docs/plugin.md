@@ -49,6 +49,8 @@ While a simulation runs, the **Run** tab of the **Gopher Glide** tool window upd
 - **Mark…** — drop a named marker at the current point of the run. A mark is stamped when you confirm its label.
 - Bias changes and marks are drawn on the RPS chart, and both are recorded in the snapshot.
 
+**Failure breakdown** (`gg` v1.4.0+): each heartbeat can carry an `error_mix` object saying what kind of failures are happening right now — connection errors, 4xx, 5xx, extraction failures and the top status codes. The plugins don't display it yet; they ignore it safely. See the [Live Control Protocol](/control-protocol#-heartbeat-additions).
+
 With an older `gg`, the strip is replaced by a short notice that names the installed version and offers to install or upgrade it. The run itself works as before.
 
 ![Native run dashboard showing live RPS chart, metric cards, and stage timeline](/assets/plugin-run-view.png)

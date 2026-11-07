@@ -1,6 +1,7 @@
 package httpreader
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -669,5 +670,86 @@ Authorization: Bearer {{token}}
 	}
 	if len(specs[1].Exports) != 0 {
 		t.Fatalf("step 2: expected 0 exports, got %d", len(specs[1].Exports))
+	}
+}
+
+func TestParseWithSourceMap_LinesAlignWithSpecs(t *testing.T) {
+	src := `# leading comment
+
+### login
+POST https://x.example.com/login
+Content-Type: application/json
+
+{"u":1}
+
+# @gg-export token = jsonpath: $.t
+# @gg-export broken jsonpath $.t
+
+### empty block
+
+### me
+GET https://x.example.com/me
+bad header line
+X-A: 1
+`
+	specs, sm, err := ParseWithSourceMap(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 2 || len(sm.Requests) != 2 {
+		t.Fatalf("specs=%d map=%d", len(specs), len(sm.Requests))
+	}
+	login, me := sm.Requests[0], sm.Requests[1]
+	if login.Request != 4 || len(login.Exports) != 1 || login.Exports[0] != 9 || len(login.BadExports) != 1 || login.BadExports[0] != 10 {
+		t.Errorf("login = %+v", login)
+	}
+	if me.Request != 15 || len(me.BadHeaders) != 1 || me.BadHeaders[0] != 16 {
+		t.Errorf("me = %+v", me)
+	}
+	if len(sm.EmptyBlocks) != 1 || sm.EmptyBlocks[0] != 12 {
+		t.Errorf("empty blocks = %v", sm.EmptyBlocks)
+	}
+}
+
+// Parse must behave exactly as before the source map existed.
+func TestParse_MatchesParseWithSourceMap(t *testing.T) {
+	src := "### a\nGET https://x.example.com/a\n\n### b\nPOST https://x.example.com/b\nX: 1\n\nbody\n# @gg-export v = regex: (\\d+)\n"
+	a, err := Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _, err := ParseWithSourceMap(src)
+	if err != nil || len(a) != len(b) {
+		t.Fatalf("a=%d b=%d err=%v", len(a), len(b), err)
+	}
+	for i := range a {
+		if a[i].Method != b[i].Method || a[i].URL != b[i].URL || a[i].Body != b[i].Body || len(a[i].Exports) != len(b[i].Exports) {
+			t.Errorf("spec %d differs: %+v vs %+v", i, a[i], b[i])
+		}
+	}
+}
+
+func TestValidHeaderName(t *testing.T) {
+	for _, ok := range []string{"Accept", "X-Request-ID", "x_custom", "A1"} {
+		if !validHeaderName(ok) {
+			t.Errorf("%q should be valid", ok)
+		}
+	}
+	for _, bad := range []string{"", `{"a"`, "has space", "a:b", "a/b"} {
+		if validHeaderName(bad) {
+			t.Errorf("%q should be invalid", bad)
+		}
+	}
+}
+
+func TestReferencedVars_SortedAndExcludesDynamic(t *testing.T) {
+	spec := RequestSpec{
+		URL:     "https://x/{{b}}/{{$uuid}}",
+		Body:    "{{a}} {{b}}",
+		Headers: http.Header{"X": {"{{c}}"}},
+	}
+	got := ReferencedVars(spec)
+	if len(got) != 3 || got[0] != "a" || got[1] != "b" || got[2] != "c" {
+		t.Fatalf("got %v", got)
 	}
 }

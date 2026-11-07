@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/shyam-s00/gopher-glide/internal/mcp/session"
 )
 
 // Options configures a Server.
@@ -18,6 +21,10 @@ type Options struct {
 	// Logger receives server activity. It must not write to the transport's
 	// stdout; nil discards logs.
 	Logger *slog.Logger
+	// Exe is the gg binary simulations are launched from; default is this one.
+	Exe string
+	// Sessions tunes timeouts and retention; MaxSessions comes from Limits.
+	Sessions session.ManagerOptions
 }
 
 const instructions = `gg is an HTTP load-testing tool. Read the gg://docs/http-syntax resource before writing a .http file, ` +
@@ -37,8 +44,15 @@ var toolNames = []string{
 	"snap_assert",
 }
 
-// NewServer builds a server with all resources and prompts registered.
-func NewServer(o Options) (*sdk.Server, error) {
+// Server is an MCP server together with the simulations it supervises.
+type Server struct {
+	// SDK is the underlying protocol server.
+	SDK      *sdk.Server
+	sessions *session.Manager
+}
+
+// NewServer builds a server with all resources, prompts and tools registered.
+func NewServer(o Options) (*Server, error) {
 	if err := o.Limits.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid limits: %w", err)
 	}
@@ -50,6 +64,15 @@ func NewServer(o Options) (*sdk.Server, error) {
 	if version == "" {
 		version = "dev"
 	}
+	exe := o.Exe
+	if exe == "" {
+		var err error
+		if exe, err = os.Executable(); err != nil {
+			return nil, fmt.Errorf("locate the gg executable: %w", err)
+		}
+	}
+	o.Sessions.MaxSessions = o.Limits.MaxSessions
+	mgr := session.NewManager(o.Sessions)
 
 	s := sdk.NewServer(
 		&sdk.Implementation{Name: "gg", Title: "Gopher Glide", Version: version},
@@ -58,16 +81,25 @@ func NewServer(o Options) (*sdk.Server, error) {
 	if err := registerResources(s); err != nil {
 		return nil, err
 	}
+	registerAuthorTools(s, o.Limits)
+	registerSimTools(s, mgr, o.Limits, exe)
 	registerPrompts(s)
-	return s, nil
+	return &Server{SDK: s, sessions: mgr}, nil
 }
 
-// Serve runs s over newline-delimited JSON-RPC on in/out until the client
-// disconnects (EOF on in) or ctx is cancelled. Both are clean shutdowns.
-func Serve(ctx context.Context, s *sdk.Server, in io.ReadCloser, out io.WriteCloser) error {
-	err := s.Run(ctx, &sdk.IOTransport{Reader: in, Writer: out})
+// Serve runs the server over newline-delimited JSON-RPC on in/out until the
+// client disconnects (EOF on in) or ctx is cancelled; both are clean
+// shutdowns. Either way every running simulation is stopped before it returns.
+func (s *Server) Serve(ctx context.Context, in io.ReadCloser, out io.WriteCloser) error {
+	defer s.Close()
+	err := s.SDK.Run(ctx, &sdk.IOTransport{Reader: in, Writer: out})
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) {
 		return nil
 	}
 	return err
+}
+
+// Close stops all running simulations and refuses new ones.
+func (s *Server) Close() {
+	s.sessions.Shutdown(context.Background())
 }

@@ -8,6 +8,10 @@ import (
 	"io"
 )
 
+// cmdInputClosed is an internal pseudo-command, never parsed from the wire: the
+// control input reached EOF and the renderer was asked to stop on that.
+const cmdInputClosed = "\x00input-closed"
+
 // controlLineMaxBytes caps a single control command line — a deliberate
 // protocol limit, not an incidental one.
 const controlLineMaxBytes = 64 * 1024

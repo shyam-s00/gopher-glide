@@ -51,6 +51,11 @@ type HeadlessRenderer struct {
 	// is "stdin". Defaults to os.Stdin; tests inject their own reader.
 	ControlInput io.Reader
 
+	// ControlExitOnEOF makes the end of the control input behave like a "stop"
+	// command, so a supervised run stops gracefully (and keeps its snapshot)
+	// when its parent exits. Off by default: EOF is otherwise not a stop.
+	ControlExitOnEOF bool
+
 	// biasEvents records every bias command applied this run, for
 	// SnapMeta.BiasEvents at finalize. Exposed via BiasEvents().
 	biasEvents []snap.BiasEvent
@@ -163,6 +168,26 @@ type HeartbeatPayload struct {
 	Label           string    `json:"label,omitempty"`            // mark replies only
 	ElapsedS        *float64  `json:"elapsed_s,omitempty"`        // mark replies only, run-relative offset; pointer so a real 0 is still emitted
 	Clamped         bool      `json:"clamped,omitempty"`          // mark replies only: client elapsed_s was ahead of the run and got capped
+
+	// ErrorMix is set on heartbeats only, and only when failures occurred in the recent window.
+	ErrorMix *engine.ErrorMix `json:"error_mix,omitempty"`
+}
+
+// errorMixWindow is how far back a heartbeat looks when summarising failures.
+const errorMixWindow = 10 * time.Second
+
+// recentErrorMix returns the engine's recent failure mix, or nil when the
+// engine cannot report one or nothing failed in the window.
+func recentErrorMix(eng engine.Runner) *engine.ErrorMix {
+	em, ok := eng.(engine.ErrorMixer)
+	if !ok {
+		return nil
+	}
+	mix, any := em.RecentErrorMix(errorMixWindow)
+	if !any {
+		return nil
+	}
+	return &mix
 }
 
 // Run executes the engine headlessly and blocks until the run finishes or an
@@ -188,7 +213,12 @@ func (r *HeadlessRenderer) Run(eng engine.Runner, cfg *config.Config, specs []ht
 	var cmdCh chan controlCommand
 	if r.controlMode() == "stdin" {
 		cmdCh = make(chan controlCommand, controlCmdChanCap)
-		go controlReader(r.controlInput(), cmdCh)
+		go func() {
+			controlReader(r.controlInput(), cmdCh)
+			if r.ControlExitOnEOF {
+				cmdCh <- controlCommand{Command: cmdInputClosed}
+			}
+		}()
 	}
 
 	if opts.Snapping {
@@ -269,6 +299,10 @@ loop:
 				continue
 			}
 			switch cmd.Command {
+			case cmdInputClosed:
+				stopRequested = true
+				cancel()
+				break loop
 			case "bias":
 				eng.ApplyBias(cmd.Amount)
 				cumulative := eng.GetBias()
@@ -339,6 +373,7 @@ loop:
 				P95Ms:        m.P95Latency,
 				P99Ms:        m.P99Latency,
 				Bias:         &m.Bias,
+				ErrorMix:     recentErrorMix(eng),
 			})
 		}
 	}

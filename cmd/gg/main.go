@@ -99,6 +99,7 @@ func main() {
 	reporter := fs.String("reporter", "text", "output format in headless mode: text | json")
 	heartbeatInterval := fs.Duration("heartbeat-interval", 0, "headless heartbeat cadence, e.g. 2s (0 = default of 5s)")
 	controlMode := fs.String("control", "stdin", "headless control protocol mode: stdin | none")
+	controlExitOnEOF := fs.Bool("control-exit-on-eof", false, "headless: stop gracefully (keeping the snapshot) when the control input closes, for supervised runs")
 	tuiTickMs := fs.Int("tui-tick-ms", 0, "interactive TUI redraw cadence in ms, clamped to [16, 100] (0 = default of 42ms)")
 	_ = fs.Parse(flagArgs)
 
@@ -336,6 +337,7 @@ func main() {
 		hr.Reporter = *reporter
 		hr.HeartbeatInterval = *heartbeatInterval
 		hr.ControlMode = *controlMode
+		hr.ControlExitOnEOF = *controlExitOnEOF
 	}
 
 	// controlData returns the marks/bias events recorded so far: from hr for
