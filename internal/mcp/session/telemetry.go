@@ -51,6 +51,7 @@ type Telemetry struct {
 	ErrorMix *engine.ErrorMix `json:"error_mix,omitempty"`
 	Final    *Final           `json:"final,omitempty"`
 	Marks    []MarkInfo       `json:"recent_marks,omitempty"`
+	Steers   []SteerInfo      `json:"recent_steers,omitempty"`
 
 	SnapshotPath string `json:"snapshot_path,omitempty"`
 	Message      string `json:"message,omitempty"`
@@ -70,6 +71,9 @@ func (s *Session) Telemetry() Telemetry {
 	t := Telemetry{SessionID: s.ID, State: s.state, SnapshotPath: s.snapPath}
 	if len(s.marks) > 0 {
 		t.Marks = append([]MarkInfo(nil), s.marks...)
+	}
+	if len(s.steers) > 0 {
+		t.Steers = append([]SteerInfo(nil), s.steers...)
 	}
 	t.PlannedS = round2(s.spec.Planned.Seconds())
 	if !s.t0.IsZero() {

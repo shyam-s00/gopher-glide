@@ -83,6 +83,7 @@ func NewServer(o Options) (*Server, error) {
 	}
 	registerAuthorTools(s, o.Limits)
 	registerSimTools(s, mgr, o.Limits, exe)
+	registerSnapTools(s, mgr)
 	registerPrompts(s)
 	return &Server{SDK: s, sessions: mgr}, nil
 }

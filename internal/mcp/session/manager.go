@@ -28,6 +28,10 @@ type ManagerOptions struct {
 	Retention    time.Duration
 	StartTimeout time.Duration
 	Stop         StopOptions
+	// ReplyTimeout is how long a steering command waits for gg's reply.
+	ReplyTimeout time.Duration
+	// SteerSettle is how long after a bias change a heartbeat is trusted to reflect it.
+	SteerSettle time.Duration
 }
 
 // NotFoundError is returned for a session id that is unknown or expired.
@@ -79,6 +83,12 @@ func NewManager(o ManagerOptions) *Manager {
 	if o.StartTimeout <= 0 {
 		o.StartTimeout = DefaultStartTimeout
 	}
+	if o.ReplyTimeout <= 0 {
+		o.ReplyTimeout = DefaultReplyTimeout
+	}
+	if o.SteerSettle <= 0 {
+		o.SteerSettle = DefaultSteerSettle
+	}
 	if o.Stop.Graceful <= 0 {
 		o.Stop.Graceful = DefaultGraceful
 	}
@@ -102,6 +112,7 @@ func (m *Manager) Start(ctx context.Context, spec Spec) (*Session, error) {
 		return nil, &LimitError{Max: m.opts.MaxSessions, Running: running}
 	}
 	s := newSession(newID(), spec)
+	s.replyTimeout, s.settle = m.opts.ReplyTimeout, m.opts.SteerSettle
 	m.sessions[s.ID] = s
 	m.mu.Unlock()
 

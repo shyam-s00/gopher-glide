@@ -17,6 +17,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/shyam-s00/gopher-glide/internal/snap"
 )
 
 // tool calls an MCP tool and returns its structured result.
@@ -114,6 +116,23 @@ func TestMCPCommand_RealSimulation_StartTelemetryStopWithSnapshot(t *testing.T) 
 	}
 	if !strings.Contains(filepath.Base(path), "smoke") {
 		t.Errorf("snapshot name should carry the tag: %s", path)
+	}
+
+	// The new snapshot is readable through the snapshot tools, by session, path and tag.
+	for n, args := range []map[string]any{{"session_id": id}, {"snapshot": path}, {"snapshot": "smoke"}} {
+		capt, isErr, text := c.tool(100+n, "snap_capture", args)
+		if isErr {
+			t.Fatalf("snap_capture %v: %s", args, text)
+		}
+		eps, _ := capt["endpoints"].([]any)
+		hdr, _ := capt["snapshot"].(map[string]any)
+		if len(eps) != 2 || hdr["tag"] != "smoke" || hdr["total_requests"].(float64) < 5 {
+			t.Errorf("snap_capture %v = %v", args, capt)
+		}
+	}
+	diff, isErr, text := c.tool(110, "snap_diff", map[string]any{"baseline": path, "current": "smoke"})
+	if isErr || diff["overall"] != "PASS" {
+		t.Errorf("a snapshot compared with itself must pass: %v %s", diff, text)
 	}
 
 	_ = c.stdin.Close()
@@ -279,4 +298,93 @@ loop:
 		t.Errorf("snapshots = %v", snaps)
 	}
 	_, _ = fmt.Fprint(io.Discard, "")
+}
+
+// Steering a real run: the rate follows a bias, a mark carries the offset the
+// agent supplied, and both end up in the snapshot.
+func TestMCPCommand_RealSimulation_SteerRateAndMark(t *testing.T) {
+	srv, _ := targetServer(t)
+	snapDir := t.TempDir()
+	c := startMCPChildEnv(t, []string{"GG_SNAP_DIR=" + snapDir}, "--max-rps", "200")
+	c.handshake()
+
+	out, isErr, text := c.tool(10, "start_simulation", map[string]any{
+		"http_content": "GET " + srv.URL + "/ok\n", "profile": "load", "peak_rps": 20, "duration": "40s", "snap": true,
+	})
+	if isErr {
+		t.Fatalf("start: %s", text)
+	}
+	id := out["session_id"].(string)
+
+	id2 := 20
+	telemetry := func(ok func(map[string]any) bool) map[string]any {
+		t.Helper()
+		var tel map[string]any
+		for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(250 * time.Millisecond) {
+			id2++
+			tel, _, _ = c.tool(id2, "get_live_telemetry", map[string]any{"session_id": id})
+			if m, _ := tel["metrics"].(map[string]any); m != nil && ok(m) {
+				return tel
+			}
+		}
+		t.Fatalf("telemetry never matched: %v", tel)
+		return nil
+	}
+	tel := telemetry(func(m map[string]any) bool { return m["total_requests"].(float64) > 0 })
+	seen := tel["elapsed_s"].(float64)
+	before := tel["metrics"].(map[string]any)["target_rps"].(float64)
+
+	adj, isErr, text := c.tool(11, "steer_traffic", map[string]any{"action": "adjust_rps", "delta": 50})
+	if isErr || adj["applied"] != true || adj["bias_total"].(float64) != 50 || adj["target_rps_before"].(float64) <= 0 {
+		t.Fatalf("adjust: %v %s", adj, text)
+	}
+	tel = telemetry(func(m map[string]any) bool { return m["target_rps"].(float64) >= before+49 })
+	if steers, _ := tel["recent_steers"].([]any); len(steers) != 1 {
+		t.Errorf("recent_steers = %v", tel["recent_steers"])
+	}
+
+	mark, isErr, text := c.tool(12, "steer_traffic", map[string]any{"action": "mark", "label": "saw it", "at_elapsed_s": seen})
+	if isErr || mark["elapsed_s"].(float64) != seen || mark["clamped"] == true {
+		t.Fatalf("mark: %v %s (offset sent %v)", mark, text, seen)
+	}
+
+	// Let the rate settle, then aim for an absolute rate.
+	time.Sleep(2 * time.Second)
+	var set map[string]any
+	for n := 30; n < 40; n++ {
+		set, isErr, text = c.tool(n, "steer_traffic", map[string]any{"action": "set_rps", "target_rps": 30})
+		if !isErr || !strings.Contains(text, "still taking effect") {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if isErr || set["bias_total"] == nil {
+		t.Fatalf("set_rps: %v %s", set, text)
+	}
+
+	_, isErr, text = c.tool(50, "steer_traffic", map[string]any{"action": "set_rps", "target_rps": 500})
+	if !isErr || !strings.Contains(text, "--max-rps") {
+		t.Errorf("above-cap set_rps: isError=%v %q", isErr, text)
+	}
+
+	final, isErr, text := c.tool(60, "stop_simulation", map[string]any{"session_id": id})
+	if isErr {
+		t.Fatalf("stop: %s", text)
+	}
+	if _, isErr, text = c.tool(61, "steer_traffic", map[string]any{"action": "mark", "label": "late", "session_id": id}); !isErr || !strings.Contains(text, "session_not_running") {
+		t.Errorf("mark after stop: isError=%v %q", isErr, text)
+	}
+
+	path, _ := final["snapshot_path"].(string)
+	sn, err := snap.Read(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, m := range sn.Meta.Marks {
+		found = found || (m.Label == "saw it" && m.ElapsedS == seen)
+	}
+	if !found || len(sn.Meta.BiasEvents) == 0 {
+		t.Errorf("snapshot should carry the mark at the supplied offset %v and the bias changes: marks=%v bias=%v", seen, sn.Meta.Marks, sn.Meta.BiasEvents)
+	}
 }

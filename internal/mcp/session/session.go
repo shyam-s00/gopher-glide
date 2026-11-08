@@ -52,6 +52,8 @@ type Spec struct {
 	Dir string
 	// Planned is how long the run is meant to last; zero if unknown.
 	Planned time.Duration
+	// PeakRPS is the highest rate the plan reaches; zero if unknown.
+	PeakRPS int
 }
 
 // Session is one running (or finished) gg child process.
@@ -77,9 +79,18 @@ type Session struct {
 	terminal    *ui.HeartbeatPayload
 	interrupted bool
 	snapPath    string
+	bias        int       // latest cumulative bias reported by the child
+	biasAckAt   time.Time // when the child last confirmed a bias change
+	steers      []SteerInfo
+	pending     map[string]chan *ui.HeartbeatPayload
+	seq         int
 	failure     string
 	endedAt     time.Time
 	stopping    bool
+
+	steerMu      sync.Mutex // one steering action at a time, so cap checks and writes stay atomic
+	replyTimeout time.Duration
+	settle       time.Duration
 }
 
 // MarkInfo is a mark the child confirmed.
@@ -96,6 +107,10 @@ func newSession(id string, spec Spec) *Session {
 		stderr:    &tailBuffer{max: stderrTailBytes},
 		startedCh: make(chan struct{}),
 		done:      make(chan struct{}),
+		pending:   map[string]chan *ui.HeartbeatPayload{},
+
+		replyTimeout: DefaultReplyTimeout,
+		settle:       DefaultSteerSettle,
 	}
 }
 
@@ -142,6 +157,7 @@ func (s *Session) pump(stdout io.Reader) {
 func (s *Session) handle(ev *ui.HeartbeatPayload) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.deliverReply(ev)
 	switch ev.Event {
 	case "started":
 		if s.started == nil {
@@ -150,6 +166,9 @@ func (s *Session) handle(ev *ui.HeartbeatPayload) {
 		}
 	case "heartbeat":
 		s.lastBeat, s.lastBeatAt = ev, time.Now()
+		if ev.Bias != nil {
+			s.bias = *ev.Bias
+		}
 		if s.state == Starting {
 			s.state = Running
 		}
@@ -159,6 +178,10 @@ func (s *Session) handle(ev *ui.HeartbeatPayload) {
 			if len(s.marks) > maxRecentMarks {
 				s.marks = s.marks[len(s.marks)-maxRecentMarks:]
 			}
+		}
+	case "ack":
+		if ev.Command == "bias" && ev.Bias != nil {
+			s.bias, s.biasAckAt = *ev.Bias, time.Now()
 		}
 	case "interrupted":
 		s.interrupted = true

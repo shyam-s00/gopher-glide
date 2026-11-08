@@ -55,6 +55,34 @@ func TestParseMCPFlags(t *testing.T) {
 					t.Errorf("allow hosts = %q", got)
 				}
 			}},
+		{name: "stdio by default", check: func(t *testing.T, o mcpOptions) {
+			if o.http {
+				t.Error("HTTP must be opt-in")
+			}
+		}},
+		{name: "http on loopback needs no token", args: []string{"--port", "8123"}, check: func(t *testing.T, o mcpOptions) {
+			if !o.http || o.port != 8123 || o.bind != "127.0.0.1" || o.token != "" {
+				t.Errorf("%+v", o)
+			}
+		}},
+		{name: "port zero picks a free port", args: []string{"--port", "0"}, check: func(t *testing.T, o mcpOptions) {
+			if !o.http || o.port != 0 {
+				t.Errorf("%+v", o)
+			}
+		}},
+		{name: "public bind with token", args: []string{"--port", "8123", "--bind", "0.0.0.0", "--auth-token", "0123456789abcdef", "--allow-origin", "https://a.example", "--allow-origin", "https://b.example"},
+			check: func(t *testing.T, o mcpOptions) {
+				if o.bind != "0.0.0.0" || o.token != "0123456789abcdef" || strings.Join(o.origins, "|") != "https://a.example|https://b.example" {
+					t.Errorf("%+v", o)
+				}
+			}},
+		{name: "public bind without token", args: []string{"--port", "8123", "--bind", "0.0.0.0"}, wantErr: "without authentication"},
+		{name: "short token", args: []string{"--port", "8123", "--auth-token", "abc"}, wantErr: "at least 16"},
+		{name: "port out of range", args: []string{"--port", "70000"}, wantErr: "--port must be between"},
+		{name: "negative port", args: []string{"--port", "-1"}, wantErr: "--port must be between"},
+		{name: "bind without port", args: []string{"--bind", "0.0.0.0"}, wantErr: "--bind only applies with --port"},
+		{name: "token without port", args: []string{"--auth-token", "0123456789abcdef"}, wantErr: "--auth-token only applies with --port"},
+		{name: "origin without port", args: []string{"--allow-origin", "https://a.example"}, wantErr: "--allow-origin only applies with --port"},
 		{name: "zero rps", args: []string{"--max-rps", "0"}, wantErr: "max-rps"},
 		{name: "negative duration", args: []string{"--max-duration", "-1s"}, wantErr: "max-duration"},
 		{name: "zero sessions", args: []string{"--max-sessions", "0"}, wantErr: "max-sessions"},

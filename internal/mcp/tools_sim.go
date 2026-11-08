@@ -84,7 +84,7 @@ func registerSimTools(s *sdk.Server, mgr *session.Manager, l Limits, exe string)
 			"elapsed_s since the run started, stage, target vs actual RPS, p50/p95/p99 latency in ms, error rate, request counts, and error_mix " +
 			"(what kinds of failures happened in the last 10 s: transport, 4xx, 5xx, extraction failures, top status codes). " +
 			"Numbers are the latest once-per-second reading (age_s says how old; two polls within a second can return the same reading); 'starting' means no reading yet. " +
-			"metrics are cumulative since the start, but error_mix is a rolling 10-second window of recent failures, so its counts are not comparable to the totals. A finished run returns final statistics and snapshot_path; a failed one returns the reason and the child's stderr tail.",
+			"metrics are cumulative since the start, but error_mix is a rolling 10-second window of recent failures, so its counts are not comparable to the totals. recent_marks and recent_steers list what steer_traffic already did. A finished run returns final statistics and snapshot_path; a failed one returns the reason and the child's stderr tail.",
 		Annotations: &sdk.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, Title: "Live telemetry"},
 	}, func(_ context.Context, _ *sdk.CallToolRequest, in SessionRef) (*sdk.CallToolResult, session.Telemetry, error) {
 		sess, err := mgr.Resolve(in.SessionID)
@@ -108,6 +108,8 @@ func registerSimTools(s *sdk.Server, mgr *session.Manager, l Limits, exe string)
 		sess.Stop(ctx, mgr.StopOptions())
 		return nil, sess.Telemetry(), nil
 	})
+
+	registerSteerTool(s, mgr, l)
 }
 
 // plannedRun is a validated request, ready to launch.
@@ -123,7 +125,7 @@ func startSimulation(ctx context.Context, mgr *session.Manager, l Limits, exe st
 	if err != nil {
 		return StartOutput{}, err
 	}
-	sess, err := mgr.Start(ctx, session.Spec{Exe: exe, Args: run.args, Dir: run.dir, Planned: run.dur})
+	sess, err := mgr.Start(ctx, session.Spec{Exe: exe, Args: run.args, Dir: run.dir, Planned: run.dur, PeakRPS: run.peakRPS})
 	if err != nil {
 		return StartOutput{}, err
 	}

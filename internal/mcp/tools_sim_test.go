@@ -5,6 +5,8 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -408,5 +410,206 @@ func TestServe_StopsSimulationsOnStdinEOF(t *testing.T) {
 	case <-sess.Done():
 	default:
 		t.Fatal("Serve returned with a simulation still running")
+	}
+}
+
+func steerClient(t *testing.T, scenario string, mutate func(*Options)) (*sdk.ClientSession, StartOutput) {
+	t.Helper()
+	cs, _ := simClient(t, scenario, func(o *Options) {
+		o.Sessions.SteerSettle = 60 * time.Millisecond
+		o.Sessions.ReplyTimeout = 400 * time.Millisecond
+		if mutate != nil {
+			mutate(o)
+		}
+	})
+	out := startOK(t, cs)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		var tel session.Telemetry
+		call(t, cs, "get_live_telemetry", map[string]any{"session_id": out.SessionID}, &tel)
+		if tel.State == session.Running {
+			return cs, out
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("never reached running")
+	return nil, out
+}
+
+func TestSteerTool_ListedAndHonestAboutEffects(t *testing.T) {
+	cs, _ := simClient(t, "normal", nil)
+	list, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range list.Tools {
+		if tl.Name != "steer_traffic" {
+			continue
+		}
+		if len(tl.Description) < 100 || tl.Annotations == nil || tl.Annotations.DestructiveHint == nil || !*tl.Annotations.DestructiveHint {
+			t.Errorf("steer_traffic changes real load and must say so: %+v", tl)
+		}
+		return
+	}
+	t.Fatal("steer_traffic is not offered")
+}
+
+func TestSteerTool_AdjustThenSetMovesTheTarget(t *testing.T) {
+	cs, st := steerClient(t, "normal", nil)
+
+	var out SteerOutput
+	res := call(t, cs, "steer_traffic", map[string]any{"action": "adjust_rps", "delta": 6}, &out)
+	if res.IsError || !out.Applied || out.Delta == nil || *out.Delta != 6 || *out.BiasTotal != 6 || out.TargetRPSBefore != 10 || !strings.Contains(out.Note, "1 s") {
+		t.Fatalf("adjust = %+v %s", out, errText(res))
+	}
+
+	var tel session.Telemetry
+	waitTelemetry(t, cs, st.SessionID, &tel, func() bool { return tel.Metrics != nil && tel.Metrics.TargetRPS == 16 })
+	if len(tel.Steers) != 1 || tel.Steers[0].Delta != 6 {
+		t.Errorf("steers = %+v", tel.Steers)
+	}
+
+	time.Sleep(150 * time.Millisecond) // let a heartbeat newer than the change arrive
+	res = call(t, cs, "steer_traffic", map[string]any{"action": "set_rps", "target_rps": 4}, &out)
+	if res.IsError || *out.Delta != -12 || *out.BiasTotal != -6 || out.TargetRPSBefore != 16 {
+		t.Fatalf("set = %+v %s", out, errText(res))
+	}
+	waitTelemetry(t, cs, st.SessionID, &tel, func() bool { return tel.Metrics != nil && tel.Metrics.TargetRPS == 4 })
+
+	// Already there: nothing is sent.
+	time.Sleep(150 * time.Millisecond)
+	res = call(t, cs, "steer_traffic", map[string]any{"action": "set_rps", "target_rps": 4}, &out)
+	if res.IsError || out.Applied || *out.Delta != 0 || !strings.Contains(out.Note, "already") {
+		t.Fatalf("no-op set = %+v %s", out, errText(res))
+	}
+}
+
+func waitTelemetry(t *testing.T, cs *sdk.ClientSession, id string, tel *session.Telemetry, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		call(t, cs, "get_live_telemetry", map[string]any{"session_id": id}, tel)
+		if ok() {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("condition never held: %+v", tel)
+}
+
+func TestSteerTool_RefusesWhatBreaksTheCaps(t *testing.T) {
+	cs, _ := steerClient(t, "normal", func(o *Options) { o.Limits.MaxRPS = 100 })
+	for _, args := range []map[string]any{
+		{"action": "set_rps", "target_rps": 101},
+		{"action": "set_rps", "target_rps": 0},
+		{"action": "adjust_rps", "delta": 200},
+	} {
+		res := call(t, cs, "steer_traffic", args, nil)
+		if !res.IsError || !strings.Contains(errText(res), "100") {
+			t.Errorf("%v: isError=%v %q", args, res.IsError, errText(res))
+		}
+	}
+	var tel session.Telemetry
+	call(t, cs, "get_live_telemetry", map[string]any{}, &tel)
+	if len(tel.Steers) != 0 || tel.Metrics.Bias != 0 {
+		t.Errorf("refused changes must leave no trace: %+v", tel)
+	}
+}
+
+func TestSteerTool_MarkHonoursOffsetAndReportsClamp(t *testing.T) {
+	cs, st := steerClient(t, "clamp", nil)
+	var out SteerOutput
+	res := call(t, cs, "steer_traffic", map[string]any{"action": "mark", "label": "spike seen", "at_elapsed_s": 0.01}, &out)
+	if res.IsError || !out.Applied || out.ElapsedS == nil || *out.ElapsedS != 0.01 || out.Clamped || out.Label != "spike seen" {
+		t.Fatalf("mark = %+v %s", out, errText(res))
+	}
+	res = call(t, cs, "steer_traffic", map[string]any{"action": "mark", "label": "future", "at_elapsed_s": 5000}, &out)
+	if res.IsError || !out.Clamped || *out.ElapsedS >= 5000 || out.Warning == "" {
+		t.Fatalf("clamped mark = %+v %s", out, errText(res))
+	}
+	var tel session.Telemetry
+	waitTelemetry(t, cs, st.SessionID, &tel, func() bool { return len(tel.Marks) == 2 })
+}
+
+func TestSteerTool_MarkWithoutCapabilityWarns(t *testing.T) {
+	cs, _ := steerClient(t, "no-elapsed-cap", nil)
+	var out SteerOutput
+	res := call(t, cs, "steer_traffic", map[string]any{"action": "mark", "label": "x", "at_elapsed_s": 3}, &out)
+	if res.IsError || out.Warning == "" || *out.ElapsedS == 3 {
+		t.Fatalf("mark = %+v %s", out, errText(res))
+	}
+}
+
+// Edge 25 through the tool: after stop, steering is refused by name.
+func TestSteerTool_NotRunningAfterStop(t *testing.T) {
+	cs, st := steerClient(t, "normal", nil)
+	call(t, cs, "stop_simulation", map[string]any{"session_id": st.SessionID}, nil)
+	for _, args := range []map[string]any{
+		{"action": "adjust_rps", "delta": 5},
+		{"action": "mark", "label": "late"},
+	} {
+		res := call(t, cs, "steer_traffic", args, nil)
+		if !res.IsError || !strings.Contains(errText(res), "session_not_running") {
+			t.Errorf("%v: isError=%v %q", args, res.IsError, errText(res))
+		}
+	}
+}
+
+func TestSteerTool_InputAndSessionErrors(t *testing.T) {
+	cs, _ := steerClient(t, "normal", nil)
+	for _, c := range []struct {
+		args map[string]any
+		want string
+	}{
+		{map[string]any{"action": "pause"}, "unknown action"},
+		{map[string]any{"action": "adjust_rps"}, "non-zero delta"},
+		{map[string]any{"action": "mark"}, "needs a label"},
+		{map[string]any{"action": "mark", "label": "x", "session_id": "sim_nope"}, "unknown session_id"},
+	} {
+		res := call(t, cs, "steer_traffic", c.args, nil)
+		if !res.IsError || !strings.Contains(errText(res), c.want) {
+			t.Errorf("%v: isError=%v %q, want %q", c.args, res.IsError, errText(res), c.want)
+		}
+	}
+}
+
+func TestSteerTool_RejectionAndSilenceAreReported(t *testing.T) {
+	cs, _ := steerClient(t, "reject-bias", nil)
+	res := call(t, cs, "steer_traffic", map[string]any{"action": "adjust_rps", "delta": 5}, nil)
+	if !res.IsError || !strings.Contains(errText(res), "invalid_argument") {
+		t.Errorf("rejection: %q", errText(res))
+	}
+
+	cs, _ = steerClient(t, "no-reply", nil)
+	res = call(t, cs, "steer_traffic", map[string]any{"action": "adjust_rps", "delta": 5}, nil)
+	if !res.IsError || !strings.Contains(errText(res), "did not reply") {
+		t.Errorf("silence: %q", errText(res))
+	}
+}
+
+// Parallel callers cannot jointly push the bias past the cap.
+func TestSteerTool_ConcurrentAdjustsRespectTheCap(t *testing.T) {
+	cs, st := steerClient(t, "slow-ack", func(o *Options) {
+		o.Limits.MaxRPS = 40
+		o.Sessions.ReplyTimeout = 5 * time.Second
+	})
+	var wg sync.WaitGroup
+	var ok atomic.Int32
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			res, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "steer_traffic", Arguments: map[string]any{"action": "adjust_rps", "delta": 5}})
+			if err == nil && !res.IsError {
+				ok.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	// Peak 20 + bias must stay <= 40, so only four +5 steps fit.
+	var tel session.Telemetry
+	waitTelemetry(t, cs, st.SessionID, &tel, func() bool { return tel.Metrics != nil && tel.Metrics.Bias == 20 })
+	if ok.Load() != 4 {
+		t.Errorf("%d adjustments succeeded, want exactly 4", ok.Load())
 	}
 }

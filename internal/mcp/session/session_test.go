@@ -253,10 +253,15 @@ func TestTelemetry_SerializedSizeBounds(t *testing.T) {
 	for i := 0; i < 8; i++ {
 		_ = s.WriteLine(`{"id":"m","command":"mark","label":"` + strings.Repeat("é", 200) + `","elapsed_s":3}`)
 	}
+	for i := 0; i < 8; i++ {
+		if _, err := s.SteerBias(context.Background(), "adjust_rps", fixed(-1234567)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	time.Sleep(150 * time.Millisecond)
 	raw, _ = json.Marshal(s.Telemetry())
-	if len(raw) > 4096 {
-		t.Errorf("worst-case telemetry is %d bytes (limit 4096)", len(raw))
+	if len(raw) > 4096 || len(s.Telemetry().Steers) != maxRecentSteers {
+		t.Errorf("worst-case telemetry is %d bytes (limit 4096), steers kept %d", len(raw), len(s.Telemetry().Steers))
 	}
 
 	d := start(t, testManager(2), "die-after-start")
