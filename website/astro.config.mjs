@@ -46,19 +46,45 @@ export default defineConfig({
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/shyam-s00/gopher-glide' }
 			],
 			sidebar: [
-				{ label: 'Home', slug: 'index' },
-				{ label: 'Getting Started', slug: 'getting-started' },
-				{ label: 'Works With Any Backend', slug: 'any-backend' },
-				{ label: 'Load Profiles', slug: 'profiles' },
-				{ label: 'Benchmarks', slug: 'benchmarks' },
-				{ label: 'The TUI', slug: 'tui' },
-				{ label: 'Snapshots (gg snap)', slug: 'snap' },
-				{ label: 'IDE Plugins', slug: 'plugin' },
-				{ label: 'Driving a Run Live', slug: 'live-control' },
-				{ label: 'Live Control Protocol', slug: 'control-protocol' },
-				{ label: 'Configuration', slug: 'configuration' },
-				{ label: 'CI & Containers', slug: 'ci' },
-				{ label: 'CLI Reference', slug: 'cli-reference' },
+				{
+					label: 'Start here',
+					items: [
+						{ label: 'Getting Started', slug: 'getting-started' },
+						{ label: 'Works With Any Backend', slug: 'any-backend' },
+						{ label: 'The TUI', slug: 'tui' },
+					],
+				},
+				{
+					label: 'Run & shape traffic',
+					items: [
+						{ label: 'Load Profiles', slug: 'profiles' },
+						{ label: 'Driving a Run Live', slug: 'live-control' },
+						{ label: 'Configuration', slug: 'configuration' },
+					],
+				},
+				{
+					label: 'Catch regressions',
+					items: [
+						{ label: 'Snapshots (gg snap)', slug: 'snap' },
+						{ label: 'CI & Containers', slug: 'ci' },
+					],
+				},
+				{
+					label: 'Integrations',
+					items: [
+						{ label: 'IDE Plugins', slug: 'plugin' },
+						{ label: 'AI Agents (MCP)', slug: 'mcp' },
+					],
+				},
+				{
+					label: 'Reference',
+					collapsed: true,
+					items: [
+						{ label: 'CLI Reference', slug: 'cli-reference' },
+						{ label: 'MCP Tool Reference', slug: 'mcp-tools' },
+						{ label: 'Live Control Protocol', slug: 'control-protocol' },
+					],
+				},
 			],
 		}),
 	],

@@ -167,3 +167,36 @@ See [Load Profiles](/profiles) for the full catalog and scaling flags (`--peak-r
 | `gg profile list` | List all built-in and custom profiles. |
 | `gg profile view <name>` | Show a profile's shape and ASCII chart. |
 | `gg profile export <name>` | Copy a built-in profile to `~/.config/gg/profiles/` as a starting point for customization. Must be renamed before use — built-in names are reserved. |
+
+---
+
+## `gg mcp` — serve gg to AI agents
+
+```bash
+gg mcp [flags]
+```
+
+Runs gg as a [Model Context Protocol](/mcp) server so an AI agent can validate, run, steer and judge load tests. It speaks MCP over **stdio** by default (stdout carries only protocol messages; logs go to stderr). With `--port` it serves Streamable HTTP at `/mcp` instead.
+
+### Safety caps
+
+| Flag | Default | Description |
+|---|---|---|
+| `--max-rps <n>` | `1000` | Highest RPS any simulation may use, including after steering. |
+| `--max-duration <d>` | `10m` | Longest any simulation may run. |
+| `--max-sessions <n>` | `2` | Simulations that may run at the same time. |
+| `--allow-host <host[:port]>` | any | Restrict targets to this host. Repeatable or comma-separated. |
+
+### Transport & logging
+
+| Flag | Default | Description |
+|---|---|---|
+| `--port <n>` | — | Serve Streamable HTTP on this port instead of stdio. `0` picks a free port. |
+| `--bind <addr>` | `127.0.0.1` | Address to listen on with `--port`. Anything but loopback requires an auth token. |
+| `--auth-token <token>` | — | Bearer token clients must send with `--port`. Also read from `GG_MCP_TOKEN`; the flag wins. At least 16 characters. |
+| `--allow-origin <origin>` | none | Browser origin allowed to call the HTTP endpoint, e.g. `https://example.com`. Repeatable. |
+| `--log-level <level>` | `info` | Log verbosity on stderr: `debug`, `info`, `warn`, `error`. |
+
+`--bind`, `--auth-token` and `--allow-origin` are errors without `--port`. A bad flag exits with code `2` and writes nothing to stdout.
+
+Snapshots written by agent runs go where `gg snap` reads them: `$GG_SNAP_DIR`, or `gg/snapshots` in your user config directory.

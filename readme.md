@@ -78,6 +78,10 @@ Know *exactly* why you broke production, not just when. By passing the `--snap` 
 ### 🔌 IDE Integration
 Gopher Glide has official plugins for **[JetBrains](https://plugins.jetbrains.com/plugin/30983-gopher-glide)** (IntelliJ, GoLand, WebStorm, Rider, and more) and **[VS Code](https://marketplace.visualstudio.com/items?itemName=gopherglide.gg-plugin)** (also available on [Open VSX](https://open-vsx.org/extension/gopherglide/gg-plugin) for VSCodium, Gitpod, and other compatible editors). Both plugins bring the full `gg` workflow into your editor — run profiles directly from any `.http` file, watch a live RPS/latency dashboard, and explore semantic snapshot diffs, all without touching a terminal. Both can also steer a run live — nudge the target RPS, drop named marks, and stop cleanly with the snapshot intact (requires `gg` v1.3+).
 
+### 🤖 AI Agents (MCP)
+
+`gg mcp` serves gg to AI agents over the Model Context Protocol. An agent in Claude Code, Cursor, VS Code or a JetBrains IDE can validate and dry-run a `.http` file, start a load test, read live telemetry, steer the rate, drop marks, stop, and diff the result against a baseline snapshot, all within caps you set (`--max-rps`, `--max-duration`, `--allow-host`). Setup: `claude mcp add gg -- gg mcp`. See the [MCP guide](https://gopherglide.dev/mcp).
+
 ### 🔄 Stateful Journeys & Variable Extraction
 No more writing custom JavaScript to test multi-step workflows. `gg` natively understands JetBrains HTTP variable extraction syntax. You can authenticate, extract a token using `@gg-export`, and instantly inject it into the next request using `\{\{token\}\}`.
 

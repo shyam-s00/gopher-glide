@@ -1,36 +1,36 @@
 ---
 // Bump `release` and edit `items` for each release.
-const release = 'v1.3';
-const tagline = 'Live Control — steer a load test while it is running.';
+const release = 'v1.4';
+const tagline = 'AI agents can now run load tests — with limits you set.';
 
 const items = [
   {
-    icon: '🎛',
-    title: 'Drive a run live',
-    desc: 'Bias the request rate up or down, drop labeled markers, and stop cleanly — with the arrow keys in the TUI, or as JSON commands over stdin in headless mode.',
-    href: '/live-control',
-    cta: 'Try it in two minutes',
+    icon: '🤖',
+    title: 'gg mcp for AI agents',
+    desc: 'Claude Code, Cursor, VS Code and JetBrains agents can validate a .http file, dry-run it, start a load test, read live telemetry, steer the rate and stop — all through ten MCP tools.',
+    href: '/mcp',
+    cta: 'Set it up',
   },
   {
-    icon: '📸',
-    title: 'Snapshots remember',
-    desc: 'Every bias nudge and mark is saved in the snapshot (final_bias, bias_events, marks), so you can tell a real regression from a human leaning on the throttle.',
-    href: '/snap#manual-bias--marks-in-the-raw-file',
-    cta: 'See what is recorded',
+    icon: '🛡',
+    title: 'Safe by default',
+    desc: 'Hard caps on RPS, duration and concurrent runs, an optional host allowlist, secrets masked in dry runs, and HTTP mode that refuses to listen beyond loopback without a token.',
+    href: '/mcp#safety',
+    cta: 'Read the safety rules',
   },
   {
-    icon: '🤝',
-    title: 'A protocol for your tools',
-    desc: 'The Live Control Protocol is versioned NDJSON over stdin with a capability handshake — plugins and scripts can integrate without guessing versions.',
+    icon: '🔍',
+    title: 'Judge the result',
+    desc: 'Agents compare a run with a baseline snapshot using the same thresholds as gg snap assert, and the result says when traffic was steered by hand.',
+    href: '/mcp-tools#snap_diff',
+    cta: 'See snap_diff',
+  },
+  {
+    icon: '⏱',
+    title: 'Marks keep their true time',
+    desc: 'A mark can carry the moment it happened (elapsed_s), so a snapshot timeline stays accurate even when the command arrives late. Older clients keep working unchanged.',
     href: '/control-protocol',
-    cta: 'Read the reference',
-  },
-  {
-    icon: '🧩',
-    title: 'Small, compatible additions',
-    desc: 'A --control flag, a bias field on every heartbeat, and new ack, mark and stopped events. Existing tools keep working unchanged.',
-    href: '/cli-reference#headless-mode--tui-output',
-    cta: 'CLI reference',
+    cta: 'Protocol reference',
   },
 ];
 ---
