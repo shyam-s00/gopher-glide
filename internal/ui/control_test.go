@@ -412,3 +412,50 @@ func TestControlReader_NoTrailingNewline(t *testing.T) {
 		t.Fatal("controlReader did not exit on EOF")
 	}
 }
+
+func TestParseControlLine_HoldReleaseSource(t *testing.T) {
+	tests := []struct {
+		name       string
+		line       string
+		wantCmd    string
+		wantRPS    int
+		wantSource string
+		wantReason string // "" = must parse
+	}{
+		{name: "hold", line: `{"id":"h1","command":"hold","rps":220}`, wantCmd: "hold", wantRPS: 220},
+		{name: "hold minimum", line: `{"command":"hold","rps":1}`, wantCmd: "hold", wantRPS: 1},
+		{name: "hold with source", line: `{"command":"hold","rps":5,"source":"autopilot"}`, wantCmd: "hold", wantRPS: 5, wantSource: "autopilot"},
+		{name: "release", line: `{"id":"h2","command":"release"}`, wantCmd: "release"},
+		{name: "release with source", line: `{"command":"release","source":"user"}`, wantCmd: "release", wantSource: "user"},
+		{name: "bias with source", line: `{"command":"bias","amount":2,"source":"agent"}`, wantCmd: "bias", wantSource: "agent"},
+		{name: "mark with source", line: `{"command":"mark","label":"x","source":"user"}`, wantCmd: "mark", wantSource: "user"},
+		{name: "source null is absent", line: `{"command":"bias","amount":2,"source":null}`, wantCmd: "bias"},
+		{name: "source ignored on stop", line: `{"command":"stop","source":"junk"}`, wantCmd: "stop"},
+
+		{name: "hold rps zero", line: `{"id":"h","command":"hold","rps":0}`, wantReason: "invalid_argument"},
+		{name: "hold rps negative", line: `{"id":"h","command":"hold","rps":-5}`, wantReason: "invalid_argument"},
+		{name: "hold rps missing", line: `{"id":"h","command":"hold"}`, wantReason: "invalid_argument"},
+		{name: "hold rps fractional", line: `{"id":"h","command":"hold","rps":2.5}`, wantReason: "invalid_argument"},
+		{name: "hold rps string", line: `{"id":"h","command":"hold","rps":"220"}`, wantReason: "invalid_argument"},
+		{name: "source unknown value", line: `{"command":"bias","amount":2,"source":"robot"}`, wantReason: "invalid_argument"},
+		{name: "source wrong type", line: `{"command":"mark","label":"x","source":5}`, wantReason: "invalid_argument"},
+		{name: "source empty string", line: `{"command":"hold","rps":3,"source":""}`, wantReason: "invalid_argument"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, err := parseControlLine([]byte(tt.line))
+			if tt.wantReason != "" {
+				if err == nil || err.Reason != tt.wantReason {
+					t.Fatalf("want %s error, got cmd=%+v err=%+v", tt.wantReason, cmd, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %+v", err)
+			}
+			if cmd.Command != tt.wantCmd || cmd.RPS != tt.wantRPS || cmd.Source != tt.wantSource {
+				t.Errorf("got %+v", cmd)
+			}
+		})
+	}
+}

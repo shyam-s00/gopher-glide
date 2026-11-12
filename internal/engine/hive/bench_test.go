@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -601,5 +602,57 @@ func BenchmarkLogCallLatency_PacedWriters(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+// BenchmarkErrorMix_TopEndpoints is the heartbeat scan with spec-template
+// grouping over full rings of distinct resolved URLs (the worst case).
+func BenchmarkErrorMix_TopEndpoints(b *testing.B) {
+	e := New()
+	e.epMatch.Store(newEndpointMatcher([]httpreader.RequestSpec{
+		{Method: "GET", URL: "http://x/users/{{id}}"},
+		{Method: "POST", URL: "http://x/checkout"},
+		{Method: "GET", URL: "http://x/orders/{{id}}/items/{{n}}"},
+	}))
+	for shard := 0; shard < numShards; shard++ {
+		for i := 0; i < e.maxLogs; i++ {
+			switch i % 3 {
+			case 0:
+				e.logCall(shard, "GET", "http://x/users/"+strconv.Itoa(i*shard), 500, time.Millisecond, ErrHttpError)
+			case 1:
+				e.logCall(shard, "POST", "http://x/checkout", 503, time.Millisecond, ErrHttpError)
+			default:
+				e.logCall(shard, "GET", "http://x/orders/"+strconv.Itoa(i)+"/items/2", 429, time.Millisecond, ErrHttpError)
+			}
+		}
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if mix, ok := e.RecentErrorMix(10 * time.Second); !ok || len(mix.TopEndpoints) != 3 {
+			b.Fatal("no endpoints")
+		}
+	}
+}
+
+// BenchmarkHealthSince is one windowed-health read: a counter sweep plus a
+// p99 over the window's samples.
+func BenchmarkHealthSince(b *testing.B) {
+	e := New()
+	buf := newLatencyBuf(64 * 1024)
+	e.latBuf.Store(&buf)
+	now := time.Now()
+	e.sampleHealth(now.Add(-6 * time.Second))
+	for i := 0; i < 30000; i++ {
+		e.counters.incSuccess(i)
+		e.recordLatency(i, time.Duration(i%50)*time.Millisecond)
+	}
+	e.sampleHealth(now.Add(-time.Second))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, ok := e.healthSince(now, 5*time.Second); !ok {
+			b.Fatal("no window")
+		}
 	}
 }

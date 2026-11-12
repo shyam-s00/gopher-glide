@@ -20,9 +20,14 @@ const controlLineMaxBytes = 64 * 1024
 // protocol (LCP), or a failed one carrying the error to reply with instead.
 type controlCommand struct {
 	ID      string // caller-chosen correlation id; empty if omitted
-	Command string // "bias" | "mark" | "stop"
+	Command string // "bias" | "mark" | "stop" | "hold" | "release"
 	Amount  int    // bias only: signed, non-zero delta
 	Label   string // mark only: non-empty annotation text
+	RPS     int    // hold only: pinned rate, >= 1
+
+	// Source says who issued a bias, hold, release or mark; empty when the
+	// client sent none.
+	Source string
 
 	// ElapsedS is a mark's client-captured run-relative offset; nil when the
 	// client sent none (the server then stamps its own receive time).
@@ -54,6 +59,8 @@ type rawControlCommand struct {
 	Amount   json.RawMessage `json:"amount"`
 	Label    json.RawMessage `json:"label"`
 	ElapsedS json.RawMessage `json:"elapsed_s"`
+	RPS      json.RawMessage `json:"rps"`
+	Source   json.RawMessage `json:"source"`
 }
 
 // parseControlLine decodes and validates one NDJSON command line, returning
@@ -70,6 +77,17 @@ func parseControlLine(line []byte) (controlCommand, *controlError) {
 	}
 
 	switch raw.Command {
+	case "bias", "mark", "hold", "release":
+		if _, ok := decodeSource(raw.Source); !ok {
+			return controlCommand{}, &controlError{
+				Reason: "invalid_argument", ID: raw.ID, Command: raw.Command,
+				Message: "source must be one of: user, agent, autopilot",
+			}
+		}
+	}
+	source, _ := decodeSource(raw.Source)
+
+	switch raw.Command {
 	case "bias":
 		amount, ok := decodeInt(raw.Amount)
 		if !ok || amount == 0 {
@@ -78,7 +96,7 @@ func parseControlLine(line []byte) (controlCommand, *controlError) {
 				Message: "amount must be a non-zero integer",
 			}
 		}
-		return controlCommand{ID: raw.ID, Command: raw.Command, Amount: amount}, nil
+		return controlCommand{ID: raw.ID, Command: raw.Command, Amount: amount, Source: source}, nil
 
 	case "mark":
 		label, ok := decodeString(raw.Label)
@@ -95,7 +113,20 @@ func parseControlLine(line []byte) (controlCommand, *controlError) {
 				Message: "elapsed_s must be a non-negative number",
 			}
 		}
-		return controlCommand{ID: raw.ID, Command: raw.Command, Label: label, ElapsedS: elapsed}, nil
+		return controlCommand{ID: raw.ID, Command: raw.Command, Label: label, ElapsedS: elapsed, Source: source}, nil
+
+	case "hold":
+		rps, ok := decodeInt(raw.RPS)
+		if !ok || rps < 1 {
+			return controlCommand{}, &controlError{
+				Reason: "invalid_argument", ID: raw.ID, Command: raw.Command,
+				Message: "rps must be an integer >= 1",
+			}
+		}
+		return controlCommand{ID: raw.ID, Command: raw.Command, RPS: rps, Source: source}, nil
+
+	case "release":
+		return controlCommand{ID: raw.ID, Command: raw.Command, Source: source}, nil
 
 	case "stop":
 		return controlCommand{ID: raw.ID, Command: raw.Command}, nil
@@ -133,6 +164,23 @@ func decodeString(raw json.RawMessage) (string, bool) {
 		return "", false
 	}
 	return s, true
+}
+
+// decodeSource parses the optional "source" field. Absent and null mean none
+// (empty, ok); otherwise it must be one of the known values.
+func decodeSource(raw json.RawMessage) (string, bool) {
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return "", true
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return "", false
+	}
+	switch s {
+	case "user", "agent", "autopilot":
+		return s, true
+	}
+	return "", false
 }
 
 // decodeOptionalOffset parses an optional non-negative JSON number. Absent and

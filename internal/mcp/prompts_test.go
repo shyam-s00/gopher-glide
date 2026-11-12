@@ -76,7 +76,7 @@ func TestPrompts_RenderArgumentsAndRequireMandatoryOnes(t *testing.T) {
 var snakeWord = regexp.MustCompile(`\b[a-z]+(?:_[a-z]+)+\b`)
 
 // steerActions are parameters of steer_traffic that prompts may name.
-var steerActions = []string{"adjust_rps", "set_rps"}
+var steerActions = []string{"adjust_rps", "set_rps", "hold_rps", "release_hold", "wait_s", "wake_on_p99_ms", "wake_on_error_rate", "top_endpoints", "error_mix"}
 
 // Prompt text may name tools only if the server really offers them.
 func TestPrompts_OnlyReferenceKnownTools(t *testing.T) {

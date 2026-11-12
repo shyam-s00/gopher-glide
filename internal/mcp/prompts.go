@@ -54,9 +54,9 @@ Do not call start_simulation until the user has confirmed the file and the targe
 				return fmt.Sprintf(`Find the capacity ceiling of the service described by %s, without going above %s.
 
 1. Read gg://profiles/catalog and start a gentle run with start_simulation (a low-RPS profile or a short ramp).
-2. Every few seconds call get_live_telemetry. Healthy means p99 latency is stable and the error rate is below 1%%.
-3. While healthy, call steer_traffic with adjust_rps to raise traffic by about 20%%, and wait for the change to show in telemetry (it applies within about a second).
-4. When p99 roughly doubles or errors exceed 1%%, call steer_traffic with a mark describing what you saw, lower the load, and confirm recovery.
+2. Watch with get_live_telemetry using wait_s (for example 5) and wake_on_p99_ms or wake_on_error_rate, so each call returns as soon as something changes instead of polling. Judge health on the window figures: p99 stable and error rate below 1%%.
+3. While healthy, call steer_traffic with adjust_rps to raise traffic by about 20%%, and wait for the change to show in telemetry (it applies within about a second). To judge a rate on its own, hold_rps pins it flat until release_hold.
+4. When p99 roughly doubles or errors exceed 1%%, call steer_traffic with a mark describing what you saw (error_mix.top_endpoints names the failing endpoints), lower the load, and confirm recovery in the window figures.
 5. Call stop_simulation and report the highest healthy RPS, what degraded first, and the evidence from telemetry.
 Never leave a simulation running when you finish.`, a["http_file"], limit)
 			},
@@ -72,7 +72,7 @@ Never leave a simulation running when you finish.`, a["http_file"], limit)
 				},
 			},
 			build: func(a map[string]string) string {
-				return fmt.Sprintf(`Check %s for regressions against the baseline snapshot %s.
+				return fmt.Sprintf(`Check %s for regressions against the baseline snapshot %s. If the baseline is not at hand, snap_list shows the saved snapshots, newest first.
 
 1. Call start_simulation with snapshot capture enabled and a short, moderate profile that matches how the baseline was recorded.
 2. Watch it with get_live_telemetry, then call stop_simulation to finish and obtain the new snapshot.

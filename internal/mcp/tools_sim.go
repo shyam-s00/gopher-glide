@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -63,6 +64,31 @@ type SessionRef struct {
 	SessionID string `json:"session_id,omitempty" jsonschema:"id returned by start_simulation; may be omitted when only one simulation exists"`
 }
 
+// TelemetryInput are the arguments of get_live_telemetry.
+type TelemetryInput struct {
+	SessionID    string  `json:"session_id,omitempty" jsonschema:"id returned by start_simulation; may be omitted when only one simulation exists"`
+	WaitS        float64 `json:"wait_s,omitempty" jsonschema:"seconds to wait for a new reading before answering, 0 to 30; default 0 answers at once. The wait ends early if the run ends or a wake_on_* threshold is met"`
+	WakeOnP99Ms  float64 `json:"wake_on_p99_ms,omitempty" jsonschema:"end the wait early when a new reading's windowed p99 latency (last few seconds) is at or above this many ms; needs wait_s"`
+	WakeOnErrors float64 `json:"wake_on_error_rate,omitempty" jsonschema:"end the wait early when a new reading's windowed error rate (0-1, last few seconds) is at or above this; needs wait_s"`
+	WakeOnAny    bool    `json:"wake_on_any_error,omitempty" jsonschema:"end the wait early when a new reading shows any failure in error_mix; needs wait_s"`
+}
+
+func (in TelemetryInput) watch() (session.Watch, error) {
+	w := session.Watch{WakeP99Ms: in.WakeOnP99Ms, WakeErrRate: in.WakeOnErrors, WakeAnyError: in.WakeOnAny}
+	switch {
+	case math.IsNaN(in.WaitS) || in.WaitS < 0 || in.WaitS > session.MaxWait.Seconds():
+		return w, fmt.Errorf("wait_s must be between 0 and %.0f", session.MaxWait.Seconds())
+	case in.WakeOnP99Ms < 0 || math.IsNaN(in.WakeOnP99Ms):
+		return w, errors.New("wake_on_p99_ms must be positive")
+	case in.WakeOnErrors < 0 || in.WakeOnErrors > 1 || math.IsNaN(in.WakeOnErrors):
+		return w, errors.New("wake_on_error_rate must be between 0 and 1")
+	case in.WaitS == 0 && (in.WakeOnP99Ms != 0 || in.WakeOnErrors != 0 || in.WakeOnAny):
+		return w, errors.New("wake_on_* conditions need wait_s greater than 0")
+	}
+	w.Wait = time.Duration(in.WaitS * float64(time.Second))
+	return w, nil
+}
+
 func registerSimTools(s *sdk.Server, mgr *session.Manager, l Limits, exe string) {
 	yes := true
 	sdk.AddTool(s, &sdk.Tool{
@@ -80,18 +106,35 @@ func registerSimTools(s *sdk.Server, mgr *session.Manager, l Limits, exe string)
 
 	sdk.AddTool(s, &sdk.Tool{
 		Name: "get_live_telemetry",
-		Description: "Read the current state of a simulation without waiting: state (starting, running, stopping, finished, stopped, failed), " +
+		Description: "Read the current state of a simulation: state (starting, running, stopping, finished, stopped, failed), " +
 			"elapsed_s since the run started, stage, target vs actual RPS, p50/p95/p99 latency in ms, error rate, request counts, and error_mix " +
 			"(what kinds of failures happened in the last 10 s: transport, 4xx, 5xx, extraction failures, top status codes). " +
 			"Numbers are the latest once-per-second reading (age_s says how old; two polls within a second can return the same reading); 'starting' means no reading yet. " +
-			"metrics are cumulative since the start, but error_mix is a rolling 10-second window of recent failures, so its counts are not comparable to the totals. recent_marks and recent_steers list what steer_traffic already did. A finished run returns final statistics and snapshot_path; a failed one returns the reason and the child's stderr tail.",
+			"metrics are cumulative since the start, but error_mix is a rolling 10-second window of recent failures, so its counts are not comparable to the totals. recent_marks and recent_steers list what steer_traffic already did. A finished run returns final statistics and snapshot_path; a failed one returns the reason and the child's stderr tail. " +
+			"window is health over the last few seconds (p99, error rate, sample count), which shows a recovery or a new breach long before the cumulative numbers move. " +
+			"hold_rps appears while the rate is pinned. " +
+			"To watch without polling, set wait_s (up to 30): the call answers when the wait ends, when the run ends, or earlier if wake_on_p99_ms, wake_on_error_rate or wake_on_any_error is met by a reading that arrives during the wait; " +
+			"window_summary then gives waited_s, wake_reason (timer, p99_threshold, error_threshold, run_ended) and the actual-RPS and p99 range seen.",
 		Annotations: &sdk.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, Title: "Live telemetry"},
-	}, func(_ context.Context, _ *sdk.CallToolRequest, in SessionRef) (*sdk.CallToolResult, session.Telemetry, error) {
+	}, func(ctx context.Context, _ *sdk.CallToolRequest, in TelemetryInput) (*sdk.CallToolResult, session.Telemetry, error) {
+		watch, err := in.watch()
+		if err != nil {
+			return nil, session.Telemetry{}, err
+		}
 		sess, err := mgr.Resolve(in.SessionID)
 		if err != nil {
 			return nil, session.Telemetry{}, err
 		}
-		return nil, sess.Telemetry(), nil
+		if watch.Wait <= 0 {
+			return nil, sess.Telemetry(), nil
+		}
+		sum, err := sess.Wait(ctx, watch)
+		if err != nil {
+			return nil, session.Telemetry{}, err
+		}
+		t := sess.Telemetry()
+		t.WindowSummary = &sum
+		return nil, t, nil
 	})
 
 	sdk.AddTool(s, &sdk.Tool{

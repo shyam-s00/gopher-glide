@@ -118,6 +118,18 @@ type ErrorMix struct {
 	Extract   int         `json:"extract"`
 	TopCodes  []CodeCount `json:"top_codes,omitempty"`
 	Capped    bool        `json:"capped"`
+
+	// TopEndpoints are the most-failing endpoints in the window, grouped by
+	// request spec template rather than resolved URL.
+	TopEndpoints []EndpointError `json:"top_endpoints,omitempty"`
+}
+
+// EndpointError is the failure count for one endpoint in an ErrorMix window.
+type EndpointError struct {
+	Endpoint string `json:"endpoint"`       // "METHOD /path/{{var}}"
+	N        int    `json:"n"`              // failures in the window
+	Code     int    `json:"code,omitempty"` // dominant HTTP status; 0 when Kind is transport or extract
+	Kind     string `json:"kind"`           // dominant failure kind: transport | http_4xx | http_5xx | extract
 }
 
 // ErrorMixer is implemented by engines that can report a recent error mix.
@@ -126,4 +138,31 @@ type ErrorMixer interface {
 	// RecentErrorMix reports failures newer than window. ok is false when
 	// there were none.
 	RecentErrorMix(window time.Duration) (mix ErrorMix, ok bool)
+}
+
+// HealthWindow is request health over a trailing window, so a decision can see
+// the effect of a recent change instead of the whole run's history.
+type HealthWindow struct {
+	Seconds   float64 `json:"seconds"`          // span actually covered
+	P99Ms     float64 `json:"p99_ms"`           // over latency samples written in the window
+	ErrorRate float64 `json:"error_rate"`       // failed / completed in the window
+	Samples   int     `json:"samples"`          // latency samples behind P99Ms
+	Capped    bool    `json:"capped,omitempty"` // the window held more samples than were read
+}
+
+// WindowedHealth is implemented by engines that can report health over the
+// last d. ok is false until the engine has taken a reading.
+type WindowedHealth interface {
+	HealthSince(d time.Duration) (w HealthWindow, ok bool)
+}
+
+// Holder is implemented by engines that can pin the request rate, overriding
+// the stage schedule and bias until released.
+type Holder interface {
+	// HoldRPS pins the target rate (rps >= 1); it takes effect on the next scheduling window.
+	HoldRPS(rps int)
+	// ReleaseHold returns to the stage schedule plus bias.
+	ReleaseHold()
+	// GetHoldRPS returns the pinned rate, or 0 when no hold is active.
+	GetHoldRPS() int
 }

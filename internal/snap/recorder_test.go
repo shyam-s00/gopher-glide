@@ -256,7 +256,7 @@ func TestPercentile(t *testing.T) {
 }
 
 func TestFinalize_SortsMarksStable(t *testing.T) {
-	in := []Mark{{"late", 20}, {"first-tie", 10}, {"second-tie", 10}, {"earliest", 5}}
+	in := []Mark{{Label: "late", ElapsedS: 20}, {Label: "first-tie", ElapsedS: 10}, {Label: "second-tie", ElapsedS: 10}, {Label: "earliest", ElapsedS: 5}}
 	orig := append([]Mark(nil), in...)
 
 	rec := NewDefaultRecorder(0)

@@ -52,10 +52,7 @@ func (q *queen) run(
 			if rps < 1 {
 				rps = 1
 			}
-			biasedRPS := rps + int(q.e.rpsBias.Load())
-			if biasedRPS < 1 {
-				biasedRPS = 1
-			}
+			biasedRPS := int(math.Round(q.e.effectiveRPS(float64(rps))))
 			q.e.targetRPS.Store(int64(biasedRPS))
 
 			select {
@@ -104,10 +101,7 @@ func (q *queen) run(
 			}
 
 			currentRPS := startRPS + (endRPS-startRPS)*pct
-			biasedRPS := currentRPS + float64(q.e.rpsBias.Load())
-			if biasedRPS < 1 {
-				biasedRPS = 1
-			}
+			biasedRPS := q.e.effectiveRPS(currentRPS)
 
 			// fullSecondRPS is what the TUI shows as "target RPS".
 			// count is scaled to the actual window so the Hatchery spawns the
@@ -146,4 +140,17 @@ func (q *queen) run(
 		prevRPS = stage.TargetRPS
 	}
 	return nil
+}
+
+// effectiveRPS is the rate for the next window: the pinned hold when set, else
+// the scheduled rate plus bias, never below 1.
+func (e *Engine) effectiveRPS(scheduled float64) float64 {
+	if hold := e.rpsHold.Load(); hold > 0 {
+		return float64(hold)
+	}
+	rps := scheduled + float64(e.rpsBias.Load())
+	if rps < 1 {
+		rps = 1
+	}
+	return rps
 }

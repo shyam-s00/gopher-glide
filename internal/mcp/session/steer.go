@@ -46,6 +46,7 @@ type SteerInfo struct {
 	Action    string  `json:"action"`
 	Delta     int     `json:"delta"`
 	BiasTotal int     `json:"bias_total"`
+	HoldRPS   int     `json:"hold_rps,omitempty"`
 	AtS       float64 `json:"at_s"`
 }
 
@@ -65,6 +66,8 @@ type Reading struct {
 	Age time.Duration
 	// PeakRPS is the plan's highest rate; zero if unknown.
 	PeakRPS int
+	// HoldRPS is the rate pinned by a hold; zero when none.
+	HoldRPS int
 }
 
 // Planner turns a reading into the bias delta to send. A zero delta sends nothing.
@@ -93,7 +96,7 @@ type MarkResult struct {
 func (s *Session) reading() Reading {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	r := Reading{Bias: s.bias, PeakRPS: s.spec.PeakRPS, Settled: true}
+	r := Reading{Bias: s.bias, PeakRPS: s.spec.PeakRPS, HoldRPS: s.hold, Settled: true}
 	if s.lastBeat == nil {
 		return r
 	}
@@ -129,7 +132,7 @@ func (s *Session) SteerBias(ctx context.Context, action string, plan Planner) (B
 		return res, nil
 	}
 
-	reply, err := s.request(ctx, map[string]any{"command": "bias", "amount": delta})
+	reply, err := s.request(ctx, map[string]any{"command": "bias", "amount": delta, "source": SourceAgent})
 	if err != nil {
 		return BiasResult{}, err
 	}
@@ -138,6 +141,58 @@ func (s *Session) SteerBias(ctx context.Context, action string, plan Planner) (B
 	}
 	s.recordSteer(SteerInfo{Action: action, Delta: delta, BiasTotal: res.BiasTotal})
 	return res, nil
+}
+
+// SourceAgent tags every command this server sends on an agent's behalf.
+const SourceAgent = "agent"
+
+// HoldResult is the outcome of a hold or release.
+type HoldResult struct {
+	// HoldRPS is the pinned rate; zero after a release.
+	HoldRPS int
+}
+
+// ErrNoHold is returned when gg cannot pin the rate.
+var ErrNoHold = errors.New("this gg build cannot hold the rate (it does not advertise control.hold); use adjust_rps or set_rps")
+
+// Hold pins the target rate at rps until released. The server's rate cap is the
+// caller's to check; this only sends the command.
+func (s *Session) Hold(ctx context.Context, rps int) (HoldResult, error) {
+	s.steerMu.Lock()
+	defer s.steerMu.Unlock()
+	if err := s.checkRunning(); err != nil {
+		return HoldResult{}, err
+	}
+	if !s.hasCapability("control.hold") {
+		return HoldResult{}, ErrNoHold
+	}
+	reply, err := s.request(ctx, map[string]any{"command": "hold", "rps": rps, "source": SourceAgent})
+	if err != nil {
+		return HoldResult{}, err
+	}
+	res := HoldResult{HoldRPS: rps}
+	if reply.HoldRPS != nil {
+		res.HoldRPS = *reply.HoldRPS
+	}
+	s.recordSteer(SteerInfo{Action: "hold_rps", HoldRPS: res.HoldRPS})
+	return res, nil
+}
+
+// Release returns the run to its profile schedule plus bias.
+func (s *Session) Release(ctx context.Context) error {
+	s.steerMu.Lock()
+	defer s.steerMu.Unlock()
+	if err := s.checkRunning(); err != nil {
+		return err
+	}
+	if !s.hasCapability("control.hold") {
+		return ErrNoHold
+	}
+	if _, err := s.request(ctx, map[string]any{"command": "release", "source": SourceAgent}); err != nil {
+		return err
+	}
+	s.recordSteer(SteerInfo{Action: "release_hold"})
+	return nil
 }
 
 // Mark drops a labelled marker. atElapsed is a run-relative offset in seconds
@@ -153,7 +208,7 @@ func (s *Session) Mark(ctx context.Context, label string, atElapsed *float64) (M
 		return MarkResult{}, err
 	}
 
-	cmd := map[string]any{"command": "mark", "label": label}
+	cmd := map[string]any{"command": "mark", "label": label, "source": SourceAgent}
 	res := MarkResult{Label: label}
 	if atElapsed != nil {
 		if s.hasCapability("control.mark.elapsed") {

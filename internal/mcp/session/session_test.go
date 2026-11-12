@@ -43,7 +43,7 @@ func start(t *testing.T, m *Manager, scenario string) *Session {
 func TestStart_ParsesStartedAndGoesRunningOnFirstHeartbeat(t *testing.T) {
 	s := start(t, testManager(2), "normal")
 	stages, caps, proto, ok := s.Started()
-	if !ok || len(stages) != 2 || stages[1].Name != "Sustain" || proto != 1 || len(caps) != 4 {
+	if !ok || len(stages) != 2 || stages[1].Name != "Sustain" || proto != 1 || len(caps) != 5 {
 		t.Fatalf("started = %+v %v %d ok=%v", stages, caps, proto, ok)
 	}
 	eventually(t, "first heartbeat", func() bool { return s.State() == Running })

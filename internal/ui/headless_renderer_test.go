@@ -559,9 +559,9 @@ func TestHeadlessRenderer_Mark_InvalidElapsedS(t *testing.T) {
 	}
 }
 
-// TestHeadlessRenderer_ElapsedS_OnlyOnMarkEvents pins the raw key: it rides
-// on mark replies and nothing else (acks, errors, heartbeats, terminal event).
-func TestHeadlessRenderer_ElapsedS_OnlyOnMarkEvents(t *testing.T) {
+// TestHeadlessRenderer_ElapsedS_Placement pins which events carry the raw key:
+// replies that report a moment in the run, not parse errors or the opening event.
+func TestHeadlessRenderer_ElapsedS_Placement(t *testing.T) {
 	rb := &fixedStartRunner{start: time.Now().Add(-10 * time.Second)}
 	events, _ := runControlScript(t, rb,
 		`{"id":"b1","command":"bias","amount":3}`,
@@ -571,8 +571,15 @@ func TestHeadlessRenderer_ElapsedS_OnlyOnMarkEvents(t *testing.T) {
 	)
 	for _, e := range events {
 		_, has := e["elapsed_s"]
-		if want := e["event"] == "mark"; has != want {
-			t.Errorf("event %v: elapsed_s present = %v, want %v", e["event"], has, want)
+		switch e["event"] {
+		case "ack", "mark", "stopped", "finished", "heartbeat":
+			if !has {
+				t.Errorf("event %v: elapsed_s missing", e["event"])
+			}
+		default:
+			if has {
+				t.Errorf("event %v: elapsed_s present, want absent", e["event"])
+			}
 		}
 	}
 }

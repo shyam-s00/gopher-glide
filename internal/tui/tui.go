@@ -976,6 +976,7 @@ func (m model) recordBiasEvent(amount int) {
 		Amount:     amount,
 		Cumulative: m.engine.GetBias(),
 		ElapsedS:   elapsedSince(m.engine.GetStartTime()),
+		Source:     "user",
 	})
 }
 

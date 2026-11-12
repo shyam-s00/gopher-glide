@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
+	"path/filepath"
 	"sort"
+	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -104,6 +107,20 @@ type AssertOutput struct {
 
 func registerSnapTools(s *sdk.Server, mgr *session.Manager) {
 	ro := &sdk.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true}
+
+	listAnn := *ro
+	listAnn.Title = "List snapshots"
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "snap_list",
+		Description: "List saved behavioural snapshots, newest first, so you can pick a baseline without guessing paths or tags. Each entry has tag, path, created_at, duration_s, total_requests, " +
+			"error_rate, p95_ms and p99_ms (the worst endpoint's value, since percentiles cannot be merged), endpoints_count, and whether the run had marks or manual rate changes. " +
+			"Filter with tag_glob (for example 'release-*'); the list is capped at 20 by default (limit, max 100) and says how many were left out. " +
+			"Pass an entry's path or tag to snap_capture, snap_diff or snap_assert.",
+		Annotations: &listAnn,
+	}, func(_ context.Context, _ *sdk.CallToolRequest, in ListInput) (*sdk.CallToolResult, ListOutput, error) {
+		out, err := snapList(in)
+		return nil, out, err
+	})
 
 	capAnn := *ro
 	capAnn.Title = "Snapshot summary"
@@ -295,4 +312,112 @@ func snapAssert(in AssertInput) (AssertOutput, error) {
 	out.Violations = append(out.Violations, v...)
 	out.Advisory, out.Steering = steeringAdvisory(steeringOf("baseline", base), steeringOf("current", curr))
 	return out, nil
+}
+
+// ListInput are the arguments of snap_list.
+type ListInput struct {
+	TagGlob string `json:"tag_glob,omitempty" jsonschema:"only snapshots whose tag matches this glob, e.g. 'release-*' or 'baseline'"`
+	Limit   int    `json:"limit,omitempty" jsonschema:"snapshots to list, newest first; default 20, max 100"`
+}
+
+// SnapListEntry is one snapshot in a snap_list result.
+type SnapListEntry struct {
+	Tag           string  `json:"tag"`
+	Path          string  `json:"path"`
+	CreatedAt     string  `json:"created_at"`
+	DurationS     float64 `json:"duration_s"`
+	TotalRequests int64   `json:"total_requests"`
+	ErrorRate     float64 `json:"error_rate"`
+	P95Ms         float64 `json:"p95_ms"`
+	P99Ms         float64 `json:"p99_ms"`
+	Endpoints     int     `json:"endpoints_count"`
+	HasMarks      bool    `json:"has_marks"`
+	HasBias       bool    `json:"has_bias"`
+	// Error is set when the file could not be read; its other numbers are then empty.
+	Error string `json:"error,omitempty"`
+}
+
+// ListOutput is the result of snap_list.
+type ListOutput struct {
+	Dir       string          `json:"dir"`
+	Total     int             `json:"total"`
+	Snapshots []SnapListEntry `json:"snapshots"`
+	Omitted   int             `json:"omitted,omitempty"`
+}
+
+const (
+	defaultListed = 20
+	maxListed     = 100
+)
+
+func snapList(in ListInput) (ListOutput, error) {
+	limit := in.Limit
+	switch {
+	case limit == 0:
+		limit = defaultListed
+	case limit < 0 || limit > maxListed:
+		return ListOutput{}, fmt.Errorf("limit must be between 1 and %d", maxListed)
+	}
+	if _, err := path.Match(in.TagGlob, ""); err != nil {
+		return ListOutput{}, fmt.Errorf("tag_glob %q is not a valid glob: %w", in.TagGlob, err)
+	}
+	dir, err := snap.ResolveSnapDir("")
+	if err != nil {
+		return ListOutput{}, err
+	}
+	if dir, err = filepath.Abs(dir); err != nil {
+		return ListOutput{}, err
+	}
+	infos, err := snap.List(dir)
+	if err != nil {
+		return ListOutput{}, err
+	}
+
+	out := ListOutput{Dir: dir, Snapshots: []SnapListEntry{}}
+	for i := len(infos) - 1; i >= 0; i-- {
+		if in.TagGlob != "" {
+			if ok, _ := path.Match(in.TagGlob, infos[i].Tag); !ok {
+				continue
+			}
+		}
+		out.Total++
+		if len(out.Snapshots) < limit {
+			out.Snapshots = append(out.Snapshots, listEntry(infos[i]))
+		}
+	}
+	out.Omitted = out.Total - len(out.Snapshots)
+	return out, nil
+}
+
+// listEntry summarises one snapshot file; an unreadable one is listed with the reason.
+func listEntry(info snap.SnapInfo) SnapListEntry {
+	e := SnapListEntry{Tag: info.Tag, Path: info.Path, CreatedAt: info.Date.UTC().Format(time.RFC3339)}
+	if _, err := checkSnapFile(info.Path); err != nil {
+		e.Error = err.Error()
+		return e
+	}
+	s, err := snap.Read(info.Path)
+	if err != nil {
+		e.Error = "unreadable: " + unwrapAll(err).Error()
+		return e
+	}
+
+	m := s.Meta
+	if !m.EndTime.IsZero() {
+		e.CreatedAt = m.EndTime.UTC().Format(time.RFC3339)
+		e.DurationS = r2(m.EndTime.Sub(m.StartTime).Seconds())
+	}
+	e.TotalRequests, e.Endpoints = m.TotalRequests, len(s.Endpoints)
+	e.HasMarks, e.HasBias = len(m.Marks) > 0, len(m.BiasEvents) > 0
+
+	var failed float64
+	for _, ep := range s.Endpoints {
+		failed += ep.ErrorRate * float64(ep.RequestCount)
+		e.P95Ms, e.P99Ms = max(e.P95Ms, ep.Latency.P95), max(e.P99Ms, ep.Latency.P99)
+	}
+	if m.TotalRequests > 0 {
+		e.ErrorRate = r4(failed / float64(m.TotalRequests))
+	}
+	e.P95Ms, e.P99Ms = r2(e.P95Ms), r2(e.P99Ms)
+	return e
 }

@@ -74,15 +74,17 @@ type RunMeta struct {
 // SnapMeta.Marks at finalize.
 type Mark struct {
 	Label    string  `json:"label"`
-	ElapsedS float64 `json:"elapsed_s"` // run-relative offset from run start
+	ElapsedS float64 `json:"elapsed_s"`        // run-relative offset from run start
+	Source   string  `json:"source,omitempty"` // who added it: user | agent | autopilot; empty when unattributed
 }
 
 // BiasEvent is one recorded LCP bias command (headless "bias" or the TUI's
 // arrow-key nudge), threaded into RunMeta → SnapMeta.BiasEvents at finalize.
 type BiasEvent struct {
-	Amount     int     `json:"amount"`     // the delta this command applied
-	Cumulative int     `json:"cumulative"` // eng.GetBias() after the delta, same value as the ack
-	ElapsedS   float64 `json:"elapsed_s"`  // run-relative offset, same convention as Mark
+	Amount     int     `json:"amount"`           // the delta this command applied
+	Cumulative int     `json:"cumulative"`       // eng.GetBias() after the delta, same value as the ack
+	ElapsedS   float64 `json:"elapsed_s"`        // run-relative offset, same convention as Mark
+	Source     string  `json:"source,omitempty"` // who applied it, same values as Mark.Source
 }
 
 // Snapshot is the complete behavioral fingerprint of a single load test run.

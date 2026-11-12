@@ -42,6 +42,7 @@ var toolNames = []string{
 	"snap_capture",
 	"snap_diff",
 	"snap_assert",
+	"snap_list",
 }
 
 // Server is an MCP server together with the simulations it supervises.

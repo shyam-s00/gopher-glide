@@ -488,6 +488,7 @@ func waitTelemetry(t *testing.T, cs *sdk.ClientSession, id string, tel *session.
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
+		*tel = session.Telemetry{} // omitted fields must not keep a previous reading's value
 		call(t, cs, "get_live_telemetry", map[string]any{"session_id": id}, tel)
 		if ok() {
 			return

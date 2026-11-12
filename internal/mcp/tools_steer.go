@@ -15,6 +15,8 @@ const (
 	actionAdjust = "adjust_rps"
 	actionSet    = "set_rps"
 	actionMark   = "mark"
+	actionHold   = "hold_rps"
+	actionFree   = "release_hold"
 
 	maxReadingAge = 3 * time.Second
 	lagNote       = "applies within about 1 s; the profile may keep ramping, so check get_live_telemetry for the resulting rate"
@@ -23,9 +25,9 @@ const (
 // SteerInput are the arguments of steer_traffic.
 type SteerInput struct {
 	SessionID  string   `json:"session_id,omitempty" jsonschema:"id returned by start_simulation; may be omitted when only one simulation exists"`
-	Action     string   `json:"action" jsonschema:"adjust_rps (change the rate by delta), set_rps (aim for target_rps) or mark (label a moment in the run)"`
+	Action     string   `json:"action" jsonschema:"adjust_rps (change the rate by delta), set_rps (aim for target_rps), hold_rps (pin the rate at target_rps, ignoring the profile's ramp, until release_hold), release_hold (return to the profile) or mark (label a moment in the run)"`
 	Delta      int      `json:"delta,omitempty" jsonschema:"adjust_rps only: signed change in requests per second, e.g. 50 or -20; not zero"`
-	TargetRPS  int      `json:"target_rps,omitempty" jsonschema:"set_rps only: the rate to aim for, from 1 up to the server's --max-rps"`
+	TargetRPS  int      `json:"target_rps,omitempty" jsonschema:"set_rps and hold_rps: the rate to aim for or pin, from 1 up to the server's --max-rps"`
 	Label      string   `json:"label,omitempty" jsonschema:"mark only: short text saved with the run, e.g. 'p99 spike after cache flush'"`
 	AtElapsedS *float64 `json:"at_elapsed_s,omitempty" jsonschema:"mark only: when it happened, in seconds since the run started (use elapsed_s from the telemetry you saw it in); default is now"`
 }
@@ -40,6 +42,8 @@ type SteerOutput struct {
 	Delta           *int `json:"delta,omitempty"`
 	BiasTotal       *int `json:"bias_total,omitempty"`
 	TargetRPSBefore int  `json:"target_rps_before,omitempty"`
+	// HoldRPS is the pinned rate after hold_rps; absent after release_hold.
+	HoldRPS *int `json:"hold_rps,omitempty"`
 
 	Label    string   `json:"label,omitempty"`
 	ElapsedS *float64 `json:"elapsed_s,omitempty"`
@@ -53,8 +57,9 @@ func registerSteerTool(s *sdk.Server, mgr *session.Manager, l Limits) {
 	sdk.AddTool(s, &sdk.Tool{
 		Name: "steer_traffic",
 		Description: "Change a running simulation or annotate it. action adjust_rps changes the rate by a signed delta; set_rps aims for an absolute target_rps; " +
+			"hold_rps pins the rate flat at target_rps regardless of the profile's ramp (the run still ends on schedule) and release_hold returns to the profile; " +
 			"mark labels the current moment (or at_elapsed_s, a time you saw in telemetry) so the snapshot timeline explains what you did and why. " +
-			"Rate changes are offsets on top of the profile, take effect within about 1 s and are limited by the server's --max-rps; " +
+			"adjust_rps and set_rps are offsets on top of the profile, take effect within about 1 s and are limited by the server's --max-rps; " +
 			"the result gives target_rps_before and the new bias_total, not a promised rate. Only works while the run is running; recent_steers in get_live_telemetry lists what you already did. " +
 			"This changes the load on the target.",
 		Annotations: &sdk.ToolAnnotations{DestructiveHint: boolPtr(true), OpenWorldHint: boolPtr(true), Title: "Steer traffic"},
@@ -70,6 +75,9 @@ func steer(ctx context.Context, mgr *session.Manager, l Limits, in SteerInput) (
 	if err := checkSteerInput(in); err != nil {
 		return SteerOutput{}, err
 	}
+	if in.Action == actionHold && (in.TargetRPS < 1 || in.TargetRPS > l.MaxRPS) {
+		return SteerOutput{}, fmt.Errorf("target_rps must be between 1 and %d (the server's limit, raise it with --max-rps)", l.MaxRPS)
+	}
 	sess, err := mgr.Resolve(in.SessionID)
 	if err != nil {
 		return SteerOutput{}, err
@@ -82,6 +90,22 @@ func steer(ctx context.Context, mgr *session.Manager, l Limits, in SteerInput) (
 			return SteerOutput{}, err
 		}
 		out.Applied, out.Label, out.ElapsedS, out.Clamped, out.Warning = true, res.Label, &res.ElapsedS, res.Clamped, res.Warning
+		return out, nil
+	}
+
+	switch in.Action {
+	case actionHold:
+		res, err := sess.Hold(ctx, in.TargetRPS)
+		if err != nil {
+			return SteerOutput{}, err
+		}
+		out.Applied, out.HoldRPS, out.Note = true, &res.HoldRPS, "takes effect within about 1 s; the profile's stage clock keeps running, so the run still ends on schedule. Call release_hold to rejoin the profile"
+		return out, nil
+	case actionFree:
+		if err := sess.Release(ctx); err != nil {
+			return SteerOutput{}, err
+		}
+		out.Applied, out.Note = true, "the rate rejoins the profile at its current point within about 1 s"
 		return out, nil
 	}
 
@@ -111,6 +135,17 @@ func checkSteerInput(in SteerInput) error {
 		if in.Delta != 0 || in.Label != "" || in.AtElapsedS != nil {
 			return errors.New("set_rps takes only target_rps")
 		}
+	case actionHold:
+		if in.TargetRPS == 0 {
+			return errors.New("hold_rps needs target_rps, the rate to pin")
+		}
+		if in.Delta != 0 || in.Label != "" || in.AtElapsedS != nil {
+			return errors.New("hold_rps takes only target_rps")
+		}
+	case actionFree:
+		if in.Delta != 0 || in.TargetRPS != 0 || in.Label != "" || in.AtElapsedS != nil {
+			return errors.New("release_hold takes no other arguments")
+		}
 	case actionMark:
 		if in.Label == "" {
 			return errors.New("mark needs a label")
@@ -119,7 +154,7 @@ func checkSteerInput(in SteerInput) error {
 			return errors.New("mark takes only label and at_elapsed_s")
 		}
 	default:
-		return fmt.Errorf("unknown action %q; use adjust_rps, set_rps or mark", in.Action)
+		return fmt.Errorf("unknown action %q; use adjust_rps, set_rps, hold_rps, release_hold or mark", in.Action)
 	}
 	return nil
 }
@@ -129,6 +164,9 @@ func planAdjust(l Limits, delta int) session.Planner {
 	return func(r session.Reading) (int, string, error) {
 		if !r.Available {
 			return 0, "", errors.New("no telemetry reading yet (state is starting); retry in a second")
+		}
+		if err := heldErr(r); err != nil {
+			return 0, "", err
 		}
 		if err := checkBiasCap(l, r, r.Bias+delta); err != nil {
 			return 0, "", err
@@ -150,6 +188,8 @@ func planSet(l Limits, target int) session.Planner {
 		switch {
 		case !r.Available:
 			return 0, "", errors.New("no telemetry reading yet (state is starting); retry in a second")
+		case r.HoldRPS > 0:
+			return 0, "", heldErr(r)
 		case r.Age > maxReadingAge:
 			return 0, "", fmt.Errorf("the latest reading is %.0f s old; check get_live_telemetry and retry", r.Age.Seconds())
 		case !r.Settled:
@@ -166,6 +206,14 @@ func planSet(l Limits, target int) session.Planner {
 		}
 		return delta, lagNote, nil
 	}
+}
+
+// heldErr refuses a bias-based change while a hold pins the rate, since it would have no effect.
+func heldErr(r session.Reading) error {
+	if r.HoldRPS == 0 {
+		return nil
+	}
+	return fmt.Errorf("the rate is held at %d RPS, so a bias change would not move it; call hold_rps with a new target_rps, or release_hold first", r.HoldRPS)
 }
 
 // checkBiasCap keeps the plan's peak plus the bias at or under the server's RPS cap.

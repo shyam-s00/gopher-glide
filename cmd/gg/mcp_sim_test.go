@@ -388,3 +388,100 @@ func TestMCPCommand_RealSimulation_SteerRateAndMark(t *testing.T) {
 		t.Errorf("snapshot should carry the mark at the supplied offset %v and the bias changes: marks=%v bias=%v", seen, sn.Meta.Marks, sn.Meta.BiasEvents)
 	}
 }
+
+// The v1.5 steering surface against the real engine: a blocking telemetry wait,
+// hold and release, error attribution by endpoint, and source in the snapshot.
+func TestMCPCommand_RealSimulation_WaitHoldAndSource(t *testing.T) {
+	srv, _ := targetServer(t)
+	snapDir := t.TempDir()
+	c := startMCPChildEnv(t, []string{"GG_SNAP_DIR=" + snapDir}, "--max-rps", "200")
+	c.handshake()
+
+	out, isErr, text := c.tool(10, "start_simulation", map[string]any{
+		"http_content": "GET " + srv.URL + "/ok\n\n###\nGET " + srv.URL + "/boom\n",
+		"profile":      "load", "peak_rps": 40, "duration": "40s", "snap": true,
+	})
+	if isErr {
+		t.Fatalf("start: %s", text)
+	}
+	id := out["session_id"].(string)
+
+	// A wait returns a summary of the readings that arrived while it blocked.
+	begin := time.Now()
+	tel, isErr, text := c.tool(11, "get_live_telemetry", map[string]any{"session_id": id, "wait_s": 3})
+	if isErr {
+		t.Fatalf("wait: %s", text)
+	}
+	w, _ := tel["window_summary"].(map[string]any)
+	if w == nil || w["wake_reason"] != "timer" || w["beats"].(float64) < 1 || w["basis"] != "window" || time.Since(begin) < 2*time.Second {
+		t.Fatalf("window_summary = %v after %v", w, time.Since(begin))
+	}
+	if win, _ := tel["window"].(map[string]any); win == nil || win["samples"].(float64) < 1 {
+		t.Errorf("telemetry should carry the health window: %v", tel["window"])
+	}
+
+	// The failing endpoint is named, grouped by its spec.
+	deadline := time.Now().Add(10 * time.Second)
+	var top []any
+	for n := 12; time.Now().Before(deadline) && top == nil; n++ {
+		tel, _, _ = c.tool(n, "get_live_telemetry", map[string]any{"session_id": id, "wait_s": 1})
+		if mix, _ := tel["error_mix"].(map[string]any); mix != nil {
+			top, _ = mix["top_endpoints"].([]any)
+		}
+	}
+	if len(top) == 0 || top[0].(map[string]any)["endpoint"] != "GET /boom" || top[0].(map[string]any)["code"].(float64) != 503 {
+		t.Fatalf("top_endpoints = %v", top)
+	}
+
+	// Hold pins the rate; bias changes are refused while it is on.
+	hold, isErr, text := c.tool(30, "steer_traffic", map[string]any{"action": "hold_rps", "target_rps": 9})
+	if isErr || hold["hold_rps"].(float64) != 9 {
+		t.Fatalf("hold: %v %s", hold, text)
+	}
+	for n := 31; ; n++ {
+		tel, _, _ = c.tool(n, "get_live_telemetry", map[string]any{"session_id": id, "wait_s": 1})
+		m, _ := tel["metrics"].(map[string]any)
+		if tel["hold_rps"] == 9.0 && m != nil && m["target_rps"] == 9.0 {
+			break
+		}
+		if time.Now().After(deadline.Add(10 * time.Second)) {
+			t.Fatalf("the held rate never showed: %v", tel)
+		}
+	}
+	if _, isErr, text = c.tool(50, "steer_traffic", map[string]any{"action": "adjust_rps", "delta": 5}); !isErr || !strings.Contains(text, "held at 9") {
+		t.Errorf("adjust while held: isError=%v %q", isErr, text)
+	}
+	if _, isErr, text = c.tool(51, "steer_traffic", map[string]any{"action": "mark", "label": "held at 9"}); isErr {
+		t.Fatalf("mark: %s", text)
+	}
+	if rel, isErr, text := c.tool(52, "steer_traffic", map[string]any{"action": "release_hold"}); isErr || rel["applied"] != true {
+		t.Fatalf("release: %v %s", rel, text)
+	}
+	for n := 53; ; n++ {
+		tel, _, _ = c.tool(n, "get_live_telemetry", map[string]any{"session_id": id, "wait_s": 1})
+		if tel["hold_rps"] == nil {
+			break
+		}
+		if time.Now().After(deadline.Add(20 * time.Second)) {
+			t.Fatalf("hold never cleared: %v", tel)
+		}
+	}
+	if _, isErr, text = c.tool(70, "steer_traffic", map[string]any{"action": "adjust_rps", "delta": 5}); isErr {
+		t.Fatalf("adjust after release: %s", text)
+	}
+
+	final, isErr, text := c.tool(80, "stop_simulation", map[string]any{"session_id": id})
+	if isErr {
+		t.Fatalf("stop: %s", text)
+	}
+	sn, err := snap.Read(final["snapshot_path"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sn.Meta.Marks) != 1 || sn.Meta.Marks[0].Source != "agent" {
+		t.Errorf("marks = %+v, want one attributed to the agent", sn.Meta.Marks)
+	}
+	if len(sn.Meta.BiasEvents) != 1 || sn.Meta.BiasEvents[0].Source != "agent" {
+		t.Errorf("bias events = %+v, want one attributed to the agent", sn.Meta.BiasEvents)
+	}
+}

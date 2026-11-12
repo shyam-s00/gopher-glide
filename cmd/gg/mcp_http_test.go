@@ -171,7 +171,7 @@ func TestMCPHTTP_ServesToolsBehindTheToken(t *testing.T) {
 		t.Fatalf("with the token: %v\n%s", err, c.logs())
 	}
 	list, err := cs.ListTools(context.Background(), nil)
-	if err != nil || len(list.Tools) != 10 {
+	if err != nil || len(list.Tools) != 11 {
 		t.Fatalf("tools = %v, err = %v", len(list.Tools), err)
 	}
 	out, isErr, text := callTool(t, cs, "validate_http_file", map[string]any{"content": "GET http://127.0.0.1:9/x\n"})

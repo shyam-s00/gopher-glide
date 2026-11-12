@@ -49,9 +49,15 @@ type Telemetry struct {
 	Stage    string           `json:"stage,omitempty"`
 	Metrics  *Metrics         `json:"metrics,omitempty"`
 	ErrorMix *engine.ErrorMix `json:"error_mix,omitempty"`
-	Final    *Final           `json:"final,omitempty"`
-	Marks    []MarkInfo       `json:"recent_marks,omitempty"`
-	Steers   []SteerInfo      `json:"recent_steers,omitempty"`
+	// Window is health over the last few seconds, so a recovery shows up here
+	// before it shows in the cumulative metrics.
+	Window  *engine.HealthWindow `json:"window,omitempty"`
+	HoldRPS int                  `json:"hold_rps,omitempty"`
+	Final   *Final               `json:"final,omitempty"`
+	// WindowSummary is set when the caller waited for a reading.
+	WindowSummary *WindowSummary `json:"window_summary,omitempty"`
+	Marks         []MarkInfo     `json:"recent_marks,omitempty"`
+	Steers        []SteerInfo    `json:"recent_steers,omitempty"`
 
 	SnapshotPath string `json:"snapshot_path,omitempty"`
 	Message      string `json:"message,omitempty"`
@@ -104,6 +110,8 @@ func (s *Session) Telemetry() Telemetry {
 	case s.lastBeat != nil:
 		t.Metrics = metricsOf(s.lastBeat, time.Since(s.lastBeatAt))
 		t.ErrorMix = s.lastBeat.ErrorMix
+		t.Window = s.lastBeat.Window
+		t.HoldRPS = s.hold
 		t.Stage = s.stageLabel(s.lastBeat)
 	}
 	return t

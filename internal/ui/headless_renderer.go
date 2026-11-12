@@ -102,10 +102,13 @@ func (r *HeadlessRenderer) controlInput() io.Reader {
 // capabilities returns the "started" event's Capabilities pointer: the full
 // LCP set for "stdin", or an explicit empty slice for "none" — distinct from
 // a pre-v1.3 binary that omits the field entirely.
-func (r *HeadlessRenderer) capabilities() *[]string {
+func (r *HeadlessRenderer) capabilities(eng engine.Runner) *[]string {
 	caps := []string{}
 	if r.controlMode() == "stdin" {
 		caps = []string{"control.bias", "control.mark", "control.mark.elapsed", "control.stop"}
+		if _, ok := eng.(engine.Holder); ok {
+			caps = append(caps, "control.hold")
+		}
 	}
 	return &caps
 }
@@ -166,11 +169,66 @@ type HeartbeatPayload struct {
 	Command         string    `json:"command,omitempty"`          // set on ack/error only
 	Reason          string    `json:"reason,omitempty"`           // error replies only
 	Label           string    `json:"label,omitempty"`            // mark replies only
-	ElapsedS        *float64  `json:"elapsed_s,omitempty"`        // mark replies only, run-relative offset; pointer so a real 0 is still emitted
+	ElapsedS        *float64  `json:"elapsed_s,omitempty"`        // run-relative seconds; on heartbeat, ack, mark, stopped and finished. Pointer so a real 0 is still emitted
 	Clamped         bool      `json:"clamped,omitempty"`          // mark replies only: client elapsed_s was ahead of the run and got capped
 
 	// ErrorMix is set on heartbeats only, and only when failures occurred in the recent window.
 	ErrorMix *engine.ErrorMix `json:"error_mix,omitempty"`
+
+	// Window is request health over the last heartbeatWindow; heartbeats only.
+	Window *engine.HealthWindow `json:"window,omitempty"`
+	// HoldRPS is the pinned rate; set on heartbeat and hold ack only while a hold is active.
+	HoldRPS *int `json:"hold_rps,omitempty"`
+	// Source echoes who issued the command (user | agent | autopilot); ack and mark replies.
+	Source string `json:"source,omitempty"`
+}
+
+// heartbeatWindow is the span of the windowed health figures on a heartbeat.
+const heartbeatWindow = 5 * time.Second
+
+// recentWindow returns the engine's windowed health, or nil when unavailable.
+func recentWindow(eng engine.Runner) *engine.HealthWindow {
+	wh, ok := eng.(engine.WindowedHealth)
+	if !ok {
+		return nil
+	}
+	w, ok := wh.HealthSince(heartbeatWindow)
+	if !ok {
+		return nil
+	}
+	return &w
+}
+
+// activeHold returns the pinned rate, or nil when no hold is active.
+func activeHold(eng engine.Runner) *int {
+	h, ok := eng.(engine.Holder)
+	if !ok {
+		return nil
+	}
+	if rps := h.GetHoldRPS(); rps > 0 {
+		return &rps
+	}
+	return nil
+}
+
+// runElapsed is the run-relative seconds to stamp on an event.
+func runElapsed(eng engine.Runner) *float64 {
+	e := elapsedSince(eng.GetStartTime())
+	return &e
+}
+
+// finalElapsed is the run's length once it has ended (the end time is frozen).
+func finalElapsed(eng engine.Runner) *float64 {
+	start := eng.GetStartTime()
+	if start.IsZero() {
+		z := 0.0
+		return &z
+	}
+	e := eng.GetEndTime().Sub(start).Seconds()
+	if e < 0 {
+		e = 0
+	}
+	return &e
 }
 
 // errorMixWindow is how far back a heartbeat looks when summarising failures.
@@ -258,7 +316,7 @@ func (r *HeadlessRenderer) Run(eng engine.Runner, cfg *config.Config, specs []ht
 		ProfileScale:    profileScale,
 		Message:         startedMsg,
 		ProtocolVersion: protocolVersion,
-		Capabilities:    r.capabilities(),
+		Capabilities:    r.capabilities(eng),
 	})
 
 	ticker := time.NewTicker(r.heartbeatInterval())
@@ -310,18 +368,55 @@ loop:
 					Amount:     cmd.Amount,
 					Cumulative: cumulative,
 					ElapsedS:   elapsedSince(eng.GetStartTime()),
+					Source:     cmd.Source,
 				})
 				r.emit(HeartbeatPayload{
-					Time:    now(),
-					Event:   "ack",
-					ID:      cmd.ID,
-					Command: cmd.Command,
-					Bias:    &cumulative,
-					Message: fmt.Sprintf("bias %+d applied (cumulative %+d)", cmd.Amount, cumulative),
+					Time:     now(),
+					Event:    "ack",
+					ID:       cmd.ID,
+					Command:  cmd.Command,
+					Bias:     &cumulative,
+					ElapsedS: runElapsed(eng),
+					Source:   cmd.Source,
+					Message:  fmt.Sprintf("bias %+d applied (cumulative %+d)", cmd.Amount, cumulative),
+				})
+			case "hold":
+				h, ok := eng.(engine.Holder)
+				if !ok {
+					r.emitUnsupported(cmd)
+					continue
+				}
+				h.HoldRPS(cmd.RPS)
+				rps := h.GetHoldRPS()
+				r.emit(HeartbeatPayload{
+					Time:     now(),
+					Event:    "ack",
+					ID:       cmd.ID,
+					Command:  cmd.Command,
+					HoldRPS:  &rps,
+					ElapsedS: runElapsed(eng),
+					Source:   cmd.Source,
+					Message:  fmt.Sprintf("hold %d rps", rps),
+				})
+			case "release":
+				h, ok := eng.(engine.Holder)
+				if !ok {
+					r.emitUnsupported(cmd)
+					continue
+				}
+				h.ReleaseHold()
+				r.emit(HeartbeatPayload{
+					Time:     now(),
+					Event:    "ack",
+					ID:       cmd.ID,
+					Command:  cmd.Command,
+					ElapsedS: runElapsed(eng),
+					Source:   cmd.Source,
+					Message:  "hold released",
 				})
 			case "mark":
 				elapsed, clamped := markElapsed(cmd.ElapsedS, elapsedSince(eng.GetStartTime()))
-				r.marks = append(r.marks, snap.Mark{Label: cmd.Label, ElapsedS: elapsed})
+				r.marks = append(r.marks, snap.Mark{Label: cmd.Label, ElapsedS: elapsed, Source: cmd.Source})
 				// The mark event itself is the reply — no separate ack.
 				r.emit(HeartbeatPayload{
 					Time:     now(),
@@ -330,14 +425,16 @@ loop:
 					Label:    cmd.Label,
 					ElapsedS: &elapsed,
 					Clamped:  clamped,
+					Source:   cmd.Source,
 				})
 			case "stop":
 				r.emit(HeartbeatPayload{
-					Time:    now(),
-					Event:   "ack",
-					ID:      cmd.ID,
-					Command: cmd.Command,
-					Message: "stop received",
+					Time:     now(),
+					Event:    "ack",
+					ID:       cmd.ID,
+					Command:  cmd.Command,
+					ElapsedS: runElapsed(eng),
+					Message:  "stop received",
 				})
 				stopRequested = true
 				cancel()
@@ -373,7 +470,10 @@ loop:
 				P95Ms:        m.P95Latency,
 				P99Ms:        m.P99Latency,
 				Bias:         &m.Bias,
+				ElapsedS:     runElapsed(eng),
 				ErrorMix:     recentErrorMix(eng),
+				Window:       recentWindow(eng),
+				HoldRPS:      activeHold(eng),
 			})
 		}
 	}
@@ -424,11 +524,25 @@ loop:
 			P50Ms:        m.P50Latency,
 			P95Ms:        m.P95Latency,
 			P99Ms:        m.P99Latency,
+			ElapsedS:     finalElapsed(eng),
 			Message:      message,
 		})
 	}
 
 	return nil
+}
+
+// emitUnsupported replies to a command the engine cannot execute, the same way
+// a binary that predates it would.
+func (r *HeadlessRenderer) emitUnsupported(cmd controlCommand) {
+	r.emit(HeartbeatPayload{
+		Time:    now(),
+		Event:   "error",
+		ID:      cmd.ID,
+		Command: cmd.Command,
+		Reason:  "unknown_command",
+		Message: fmt.Sprintf("unknown command %q", cmd.Command),
+	})
 }
 
 // emit writes a single HeartbeatPayload in the configured reporter format.

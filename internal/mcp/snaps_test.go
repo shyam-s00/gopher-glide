@@ -515,7 +515,7 @@ func TestSnapTools_ListedReadOnlyAndDescribed(t *testing.T) {
 			t.Errorf("%s must be read-only and well described: %+v", tl.Name, tl.Annotations)
 		}
 	}
-	if seen != 3 || len(list.Tools) != len(toolNames) {
+	if seen != 4 || len(list.Tools) != len(toolNames) {
 		t.Errorf("snap tools %d, total tools %d (want %d)", seen, len(list.Tools), len(toolNames))
 	}
 }

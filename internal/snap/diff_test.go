@@ -390,11 +390,13 @@ func TestDiff_NilSchema_BaseAndCurrent_NoChanges(t *testing.T) {
 }
 
 func TestDiff_SchemaChanges_SortedByPath(t *testing.T) {
-	base := makeSnap(epWithSchema("GET:/api", makeSchema(map[string]FieldSchema{
+	b := epWithSchema("GET:/api", makeSchema(map[string]FieldSchema{
 		"z_field": {Type: "string", Presence: 1.0, Stability: StabilityStable},
 		"a_field": {Type: "string", Presence: 1.0, Stability: StabilityStable},
-	})))
-	curr := makeSnap(epWithSchema("GET:/api", makeSchema(map[string]FieldSchema{})))
+	}))
+	c := epWithSchema("GET:/api", makeSchema(map[string]FieldSchema{}))
+	b.BodySamplesStored, c.BodySamplesStored = 3, 3
+	base, curr := makeSnap(b), makeSnap(c)
 
 	result := Diff(base, curr, defaultOpts())
 	changes := result.Endpoints[0].SchemaChanges
@@ -555,4 +557,39 @@ func abs(x float64) float64 {
 		return -x
 	}
 	return x
+}
+
+func TestDiff_SchemaSkipped_WhenEitherSideHasNoBodySamples(t *testing.T) {
+	withSchema := epWithSchema("POST:/login", makeSchema(map[string]FieldSchema{
+		"id":    {Type: "string", Presence: 1.0, Stability: StabilityStable},
+		"token": {Type: "string", Presence: 1.0, Stability: StabilityStable},
+	}))
+	withSchema.BodySamplesStored = 3
+	unsampled := ep("POST:/login", 10, 20, 30, 50, 0)
+
+	cases := map[string][2]EndpointSnap{
+		"baseline unsampled": {unsampled, withSchema},
+		"current unsampled":  {withSchema, unsampled},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			d := Diff(makeSnap(c[0]), makeSnap(c[1]), defaultOpts()).Endpoints[0]
+			if len(d.SchemaChanges) != 0 || d.Verdict != VerdictPass {
+				t.Errorf("want no schema changes and PASS, got %d changes, %v", len(d.SchemaChanges), d.Verdict)
+			}
+		})
+	}
+}
+
+func TestDiff_SchemaCompared_WhenBodiesSampledButNotJSON(t *testing.T) {
+	base := ep("GET:/api", 10, 20, 30, 50, 0)
+	base.BodySamplesStored = 4
+	curr := epWithSchema("GET:/api", makeSchema(map[string]FieldSchema{
+		"id": {Type: "string", Presence: 1.0, Stability: StabilityStable},
+	}))
+	curr.BodySamplesStored = 4
+	d := Diff(makeSnap(base), makeSnap(curr), defaultOpts()).Endpoints[0]
+	if len(d.SchemaChanges) != 1 || d.SchemaChanges[0].Kind != FieldAdded {
+		t.Errorf("want one added field, got %+v", d.SchemaChanges)
+	}
 }

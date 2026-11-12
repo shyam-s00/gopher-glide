@@ -120,6 +120,15 @@ func FindByTag(dir, tag string) (*SnapInfo, error) {
 	return nil, fmt.Errorf("snap: no snapshot with tag %q in %q", tag, dir)
 }
 
+// InfoFromPath describes a snapshot file given by path. The tag and date come
+// from the standard file name when it has one; otherwise only Path and FileName are set.
+func InfoFromPath(path string) SnapInfo {
+	if info, err := parseSnapInfo(path); err == nil {
+		return info
+	}
+	return SnapInfo{Path: path, FileName: filepath.Base(path)}
+}
+
 // parseSnapInfo derives a SnapInfo from an absolute .snap file path.
 //
 // Expected name format: {tag}-{YYYYMMDD-HHMMSS}.snap

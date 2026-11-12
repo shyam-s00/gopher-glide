@@ -64,6 +64,13 @@ type Engine struct {
 	// TUI's arrow keys or a headless `bias` control command (LCP). Written
 	// by ApplyBias, read by the Queen at each window boundary.
 	rpsBias atomic.Int64
+	// rpsHold pins the target rate when > 0; read by the Queen once per window.
+	rpsHold atomic.Int64
+
+	// health holds the once-per-second readings behind HealthSince.
+	health healthRing
+	// epMatch maps resolved URLs back to spec templates for error grouping.
+	epMatch atomic.Pointer[endpointMatcher]
 
 	recorder    snap.Recorder
 	sampleCount atomic.Int64
@@ -205,6 +212,8 @@ func (e *Engine) RunStages(ctx context.Context, cfg *config.Config, specs []http
 	e.endTime = time.Time{} // clear previous end time
 	e.timeMu.Unlock()
 	e.isRunning.Store(true)
+	e.epMatch.Store(newEndpointMatcher(specs))
+	defer e.startHealthSampler()()
 
 	defer func() {
 		e.timeMu.Lock()

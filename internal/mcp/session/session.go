@@ -79,7 +79,9 @@ type Session struct {
 	terminal    *ui.HeartbeatPayload
 	interrupted bool
 	snapPath    string
-	bias        int       // latest cumulative bias reported by the child
+	bias        int // latest cumulative bias reported by the child
+	hold        int // pinned rate the child last reported; 0 when none
+	subs        map[chan *ui.HeartbeatPayload]struct{}
 	biasAckAt   time.Time // when the child last confirmed a bias change
 	steers      []SteerInfo
 	pending     map[string]chan *ui.HeartbeatPayload
@@ -108,6 +110,7 @@ func newSession(id string, spec Spec) *Session {
 		startedCh: make(chan struct{}),
 		done:      make(chan struct{}),
 		pending:   map[string]chan *ui.HeartbeatPayload{},
+		subs:      map[chan *ui.HeartbeatPayload]struct{}{},
 
 		replyTimeout: DefaultReplyTimeout,
 		settle:       DefaultSteerSettle,
@@ -169,9 +172,14 @@ func (s *Session) handle(ev *ui.HeartbeatPayload) {
 		if ev.Bias != nil {
 			s.bias = *ev.Bias
 		}
+		s.hold = 0
+		if ev.HoldRPS != nil {
+			s.hold = *ev.HoldRPS
+		}
 		if s.state == Starting {
 			s.state = Running
 		}
+		s.publishLocked(ev)
 	case "mark":
 		if ev.ElapsedS != nil {
 			s.marks = append(s.marks, MarkInfo{Label: clip(ev.Label, 80), ElapsedS: round2(*ev.ElapsedS)})
@@ -180,8 +188,13 @@ func (s *Session) handle(ev *ui.HeartbeatPayload) {
 			}
 		}
 	case "ack":
-		if ev.Command == "bias" && ev.Bias != nil {
+		switch {
+		case ev.Command == "bias" && ev.Bias != nil:
 			s.bias, s.biasAckAt = *ev.Bias, time.Now()
+		case ev.Command == "hold" && ev.HoldRPS != nil:
+			s.hold = *ev.HoldRPS
+		case ev.Command == "release":
+			s.hold = 0
 		}
 	case "interrupted":
 		s.interrupted = true
@@ -195,6 +208,7 @@ func (s *Session) handle(ev *ui.HeartbeatPayload) {
 		default:
 			s.state = Finished
 		}
+		s.publishLocked(ev)
 	}
 }
 

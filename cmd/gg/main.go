@@ -468,7 +468,9 @@ func runSnapCmd(args []string) {
 func runSnapList(args []string) {
 	fs := flag.NewFlagSet("gg snap list", flag.ExitOnError)
 	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
+	reporter := fs.String("reporter", "text", "output format: text | json")
 	_ = fs.Parse(args)
+	asJSON := snapReporterIsJSON("snap list", *reporter)
 
 	dir, err := snap.ResolveSnapDir(*snapDir)
 	if err != nil {
@@ -485,6 +487,10 @@ func runSnapList(args []string) {
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap list: %v\n", err)
 		os.Exit(1)
+	}
+	if asJSON {
+		printSnapJSON("snap list", snap.BuildListReport(dir, summaries))
+		return
 	}
 	if len(summaries) == 0 {
 		fmt.Printf("No snapshots found in %s\n", dir)
@@ -510,6 +516,7 @@ func runSnapList(args []string) {
 func runSnapView(args []string) {
 	fs := flag.NewFlagSet("gg snap view", flag.ExitOnError)
 	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
+	reporter := fs.String("reporter", "text", "output format: text (interactive viewer) | json")
 
 	// Go's flag package stops at the first non-flag argument, so a leading target
 	// (`gg snap view 2 --snap-dir /tmp`) is pulled out first and the rest parsed as
@@ -523,6 +530,7 @@ func runSnapView(args []string) {
 		flagArgs = args
 	}
 	_ = fs.Parse(flagArgs)
+	asJSON := snapReporterIsJSON("snap view", *reporter)
 	if target == "" {
 		if rest := fs.Args(); len(rest) > 0 {
 			target = rest[0]
@@ -530,7 +538,7 @@ func runSnapView(args []string) {
 	}
 
 	if target == "" {
-		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap view <id|tag|file> [--snap-dir DIR]")
+		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap view <id|tag|file> [--snap-dir DIR] [--reporter text|json]")
 		os.Exit(1)
 	}
 
@@ -557,6 +565,10 @@ func runSnapView(args []string) {
 		os.Exit(1)
 	}
 
+	if asJSON {
+		printSnapJSON("snap view", snap.ViewReport{Ref: snap.RefOf(*info), Snapshot: s})
+		return
+	}
 	if err := tui.StartSnapViewer(s, *info); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap view: %v\n", err)
 		os.Exit(1)
@@ -567,6 +579,7 @@ func runSnapDiff(args []string) {
 	fs := flag.NewFlagSet("gg snap diff", flag.ExitOnError)
 	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
 	maxArrayBloat := fs.Float64("max-array-bloat", 0, "array field avg-length % increase that triggers REGRESSION (0 = disabled)")
+	reporter := fs.String("reporter", "text", "output format: text (interactive viewer) | json")
 
 	// Extract the two positional args before any flags, following the same
 	// pattern as runSnapView.  Accepts: IDs, tag names, or file paths.
@@ -580,6 +593,7 @@ func runSnapDiff(args []string) {
 		positional = append(positional, a)
 	}
 	_ = fs.Parse(args[flagStart:])
+	asJSON := snapReporterIsJSON("snap diff", *reporter)
 	// If both positionals weren't found before the first flag, pick up
 	// whatever remains after flag parsing (handles: --snap-dir /x id1 id2).
 	for len(positional) < 2 {
@@ -592,7 +606,7 @@ func runSnapDiff(args []string) {
 	}
 
 	if len(positional) != 2 {
-		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR] [--max-array-bloat PCT]")
+		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR] [--max-array-bloat PCT] [--reporter text|json]")
 		os.Exit(1)
 	}
 
@@ -637,6 +651,10 @@ func runSnapDiff(args []string) {
 	}
 	result := snap.Diff(baseSnap, currSnap, diffOpts)
 
+	if asJSON {
+		printSnapJSON("snap diff", snap.DiffReport{BaselineRef: snap.RefOf(*baseInfo), CurrentRef: snap.RefOf(*currInfo), Result: result})
+		return
+	}
 	if err := tui.StartSnapDiff(result, *baseInfo, *currInfo); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap diff: %v\n", err)
 		os.Exit(1)
@@ -651,7 +669,7 @@ func resolveSnapTarget(target, dir string) (*snap.SnapInfo, error) {
 		return snap.FindByID(dir, id)
 	}
 	if _, err := os.Stat(target); err == nil {
-		si := snap.SnapInfo{Path: target, FileName: filepath.Base(target)}
+		si := snap.InfoFromPath(target)
 		return &si, nil
 	}
 	return snap.FindByTag(dir, target)
@@ -901,13 +919,36 @@ func printPruneCandidates(candidates []snap.PruneCandidate) {
 	_ = w.Flush()
 }
 
+// snapReporterIsJSON validates a --reporter value and reports whether it asks for JSON.
+func snapReporterIsJSON(cmd, reporter string) bool {
+	switch strings.ToLower(strings.TrimSpace(reporter)) {
+	case "", "text":
+		return false
+	case "json":
+		return true
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "%s: --reporter must be text or json, got %q\n", cmd, reporter)
+	os.Exit(1)
+	return false
+}
+
+// printSnapJSON writes a report to stdout as indented JSON, or exits with the error.
+func printSnapJSON(cmd string, report any) {
+	js, err := snap.MarshalReport(report)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "%s: encode report: %v\n", cmd, err)
+		os.Exit(1)
+	}
+	fmt.Println(js)
+}
+
 func snapUsage() {
 	_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap <subcommand> [flags]")
 	_, _ = fmt.Fprintln(os.Stderr, "")
 	_, _ = fmt.Fprintln(os.Stderr, "Subcommands:")
-	_, _ = fmt.Fprintln(os.Stderr, "  list                                   [--snap-dir DIR]   list all saved snapshots")
-	_, _ = fmt.Fprintln(os.Stderr, "  view <id|tag|file>                     [--snap-dir DIR]   view a single snapshot")
-	_, _ = fmt.Fprintln(os.Stderr, "  diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR]   diff two snapshots")
+	_, _ = fmt.Fprintln(os.Stderr, "  list                                   [--snap-dir DIR] [--reporter text|json]   list all saved snapshots")
+	_, _ = fmt.Fprintln(os.Stderr, "  view <id|tag|file>                     [--snap-dir DIR] [--reporter text|json]   view a single snapshot")
+	_, _ = fmt.Fprintln(os.Stderr, "  diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR] [--reporter text|json]   diff two snapshots")
 	_, _ = fmt.Fprintln(os.Stderr, "  assert --baseline <id|tag|file> --current <id|tag|file> [flags] [--snap-dir DIR]   CI regression gate (exits 1 on failure)")
 	_, _ = fmt.Fprintln(os.Stderr, "  prune  [--keep-last N] [--older-than DURATION] [--tag TAG] [--ids 1,3,5] [--dry-run] [--yes] [--reporter text|json] [--snap-dir DIR]   delete old snapshots")
 }
