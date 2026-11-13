@@ -25,14 +25,20 @@ type CaptureInput struct {
 	SessionID    string `json:"session_id,omitempty" jsonschema:"a simulation started with snap: true; it must have ended. Give either session_id or snapshot"`
 	Snapshot     string `json:"snapshot,omitempty" jsonschema:"a snapshot file path (.snap) or a tag; a tag means the newest snapshot with it. Numeric ids are not accepted. Give either session_id or snapshot"`
 	MaxEndpoints int    `json:"max_endpoints,omitempty" jsonschema:"endpoints to list, busiest first; default 20, max 50"`
+	Report       string `json:"report,omitempty" jsonschema:"md or html: also write a shareable mission report (headline numbers, timeline of marks and steering by source, top failing endpoints, autopilot result) beside the snapshot and return its report_path"`
 }
 
 // CaptureOutput is the result of snap_capture.
 type CaptureOutput struct {
-	Source    string     `json:"source"`
-	SessionID string     `json:"session_id,omitempty"`
-	Snapshot  SnapHeader `json:"snapshot"`
-	Note      string     `json:"note,omitempty"`
+	Source    string         `json:"source"`
+	SessionID string         `json:"session_id,omitempty"`
+	Origin    session.Origin `json:"origin,omitempty"`
+	Snapshot  SnapHeader     `json:"snapshot"`
+	Note      string         `json:"note,omitempty"`
+	// Autopilot is the built-in controller's recorded result, absent when none ran.
+	Autopilot *AutopilotSummary `json:"autopilot,omitempty"`
+	// ReportPath is the mission report written for the report option.
+	ReportPath string `json:"report_path,omitempty"`
 
 	FinalBias        int            `json:"final_bias"`
 	BiasEvents       int            `json:"bias_events"`
@@ -124,11 +130,14 @@ func registerSnapTools(s *sdk.Server, mgr *session.Manager) {
 
 	capAnn := *ro
 	capAnn.Title = "Snapshot summary"
+	capAnn.ReadOnlyHint = false // the report option writes a file beside the snapshot
+	capAnn.DestructiveHint = boolPtr(false)
 	sdk.AddTool(s, &sdk.Tool{
 		Name: "snap_capture",
 		Description: "Summarise a behavioural snapshot: pass session_id of a simulation that ran with snap: true and has ended, or a snapshot path/tag. " +
 			"Returns when and how the run went (profile, peak RPS, total requests, marks you dropped, manual rate changes) and, per endpoint, request count, error rate, p50/p95/p99/max latency, " +
-			"top status codes, average payload and response-schema field counts, busiest first and capped. Use it to confirm a new snapshot recorded the endpoints you expected before comparing it.",
+			"top status codes, average payload and response-schema field counts, busiest first and capped, plus the autopilot's result when one ran. Use it to confirm a new snapshot recorded the endpoints you expected before comparing it. " +
+			"Set report to md or html to also write a shareable mission report beside the snapshot (nothing else is written) and get its report_path, so you can hand the user a file instead of retyping numbers.",
 		Annotations: &capAnn,
 	}, func(_ context.Context, _ *sdk.CallToolRequest, in CaptureInput) (*sdk.CallToolResult, CaptureOutput, error) {
 		out, err := snapCapture(mgr, in)
@@ -167,6 +176,10 @@ func snapCapture(mgr *session.Manager, in CaptureInput) (CaptureOutput, error) {
 	if err != nil {
 		return CaptureOutput{}, err
 	}
+	reportFormat, wantReport, err := parseReportOption(in.Report)
+	if err != nil {
+		return CaptureOutput{}, err
+	}
 	out := CaptureOutput{Source: "file"}
 	ref := in.Snapshot
 	switch {
@@ -183,7 +196,7 @@ func snapCapture(mgr *session.Manager, in CaptureInput) (CaptureOutput, error) {
 		if ref, err = sessionSnapshot(tel); err != nil {
 			return out, err
 		}
-		out.Source, out.SessionID = "session", tel.SessionID
+		out.Source, out.SessionID, out.Origin = "session", tel.SessionID, tel.Origin
 		out.Note = tel.Message
 	}
 
@@ -192,6 +205,12 @@ func snapCapture(mgr *session.Manager, in CaptureInput) (CaptureOutput, error) {
 		return out, err
 	}
 	out.Snapshot = headerOf(path, s)
+	out.Autopilot = autopilotSummary(s)
+	if wantReport {
+		if out.ReportPath, err = writeReport(s, path, reportFormat); err != nil {
+			return out, err
+		}
+	}
 	out.FinalBias, out.BiasEvents = s.Meta.FinalBias, len(s.Meta.BiasEvents)
 	out.Marks, out.MarksOmitted = marksView(s)
 	out.Endpoints, out.EndpointsOmitted = endpointViews(s.Endpoints, limit)

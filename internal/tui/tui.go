@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shyam-s00/gopher-glide/internal/autopilot"
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
@@ -88,6 +89,9 @@ type model struct {
 	// bias reaches main.go's onRunComplete closure, which can't reach a live
 	// model. nil in tests that build a model directly.
 	biasEventsOut *[]snap.BiasEvent
+
+	// ap is the attached autopilot, nil for a plain run.
+	ap *Autopilot
 }
 
 type tickMsg time.Time
@@ -860,20 +864,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "f":
 			m.showFailures = !m.showFailures
-		case "up":
-			if m.running {
-				m.engine.ApplyBias(5)
-				m.recordBiasEvent(5)
-				m.directorMsg = "▲  +5 RPS"
-				m.directorMsgTime = time.Now()
+		case "up", "down":
+			if !m.running {
+				break
 			}
-		case "down":
-			if m.running {
-				m.engine.ApplyBias(-5)
-				m.recordBiasEvent(-5)
-				m.directorMsg = "▼  -5 RPS"
+			if m.ap.active() {
+				m.directorMsg = "🤖 autopilot owns the rate"
 				m.directorMsgTime = time.Now()
+				break
 			}
+			delta, label := 5, "▲  +5 RPS"
+			if msg.String() == "down" {
+				delta, label = -5, "▼  -5 RPS"
+			}
+			m.engine.ApplyBias(delta)
+			m.recordBiasEvent(delta)
+			m.directorMsg = label
+			m.directorMsgTime = time.Now()
 		}
 
 	case tea.WindowSizeMsg:
@@ -890,11 +897,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		wasRunning := m.running
 		m.running = m.engine.IsRunning()
 		m.metrics = m.engine.GetMetrics()
+		if m.ap.poll(m.engine) {
+			m.cancel()
+		}
 
 		// Engine finished all stages naturally — dispatch post-run work
 		// (e.g. write snapshot) as a background tea.Cmd so the update
 		// loop is never blocked and alt-screen rendering stays clean.
 		if wasRunning && !m.running && m.onRunComplete != nil {
+			m.ap.finish(m.engine, m.ctx.Err() == nil)
 			fn := m.onRunComplete
 			m.onRunComplete = nil
 			cmds = append(cmds, func() tea.Msg {
@@ -1027,6 +1038,9 @@ func (m model) View() string {
 		biasStr = "  " + bs.Render(fmt.Sprintf("BIAS %+d RPS", bias))
 	}
 	feedbackStr := ""
+	if m.ap != nil && m.ap.status != "" {
+		feedbackStr = "  " + styles.Highlight.Render(m.ap.status)
+	}
 	if m.directorMsg != "" {
 		feedbackStr = "  " + styles.Highlight.Render(m.directorMsg)
 	}
@@ -1082,8 +1096,18 @@ func (m model) View() string {
 //   - biasEvents           → arrow-key bias nudges are appended here as they
 //     happen, so the caller's onRunComplete (already running by the time the
 //     model would otherwise report them) sees them live. nil is safe (no-op).
-func Start(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec, snapping bool, snapDir string, onRunComplete func() string, tickInterval time.Duration, biasEvents *[]snap.BiasEvent) error {
+//   - ap                   → attaches the built-in autopilot; its marks and
+//     result are filled in on ap. nil runs without one.
+func Start(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec, snapping bool, snapDir string, onRunComplete func() string, tickInterval time.Duration, biasEvents *[]snap.BiasEvent, ap *Autopilot) error {
 	m := initialModel(eng, cfg, specs)
+	if ap != nil {
+		host, err := autopilot.StartHost(eng, cfg, ap.Params)
+		if err != nil {
+			return fmt.Errorf("autopilot: %w", err)
+		}
+		ap.host = host
+		m.ap = ap
+	}
 	m.snapping = snapping
 	m.snapDir = snapDir
 	m.onRunComplete = onRunComplete
@@ -1099,6 +1123,7 @@ func Start(eng engine.Runner, cfg *config.Config, specs []httpreader.RequestSpec
 	// Wait for the engine goroutine to exit, so no worker is still calling
 	// recorder.Record() when the caller finalizes the snapshot (also on [q]).
 	<-m.engineDone
+	ap.finish(eng, m.ctx.Err() == nil)
 
 	return err
 }

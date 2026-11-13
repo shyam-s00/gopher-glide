@@ -499,7 +499,7 @@ func TestSessionSnapshot_ExplainsEachMissingCase(t *testing.T) {
 	}
 }
 
-func TestSnapTools_ListedReadOnlyAndDescribed(t *testing.T) {
+func TestSnapTools_ListedWithHonestAnnotations(t *testing.T) {
 	cs, _ := simClient(t, "normal", nil)
 	list, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
@@ -511,8 +511,10 @@ func TestSnapTools_ListedReadOnlyAndDescribed(t *testing.T) {
 			continue
 		}
 		seen++
-		if len(tl.Description) < 150 || tl.Annotations == nil || !tl.Annotations.ReadOnlyHint {
-			t.Errorf("%s must be read-only and well described: %+v", tl.Name, tl.Annotations)
+		// snap_capture alone can write: its report option saves a file beside the snapshot.
+		wantReadOnly := tl.Name != "snap_capture"
+		if len(tl.Description) < 150 || tl.Annotations == nil || tl.Annotations.ReadOnlyHint != wantReadOnly {
+			t.Errorf("%s must be described and read-only=%v: %+v", tl.Name, wantReadOnly, tl.Annotations)
 		}
 	}
 	if seen != 4 || len(list.Tools) != len(toolNames) {

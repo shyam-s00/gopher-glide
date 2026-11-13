@@ -42,6 +42,10 @@ type Final struct {
 type Telemetry struct {
 	SessionID string `json:"session_id"`
 	State     State  `json:"state"`
+	// Origin is who started the run: "user" (the IDE plugin) or "agent".
+	Origin Origin `json:"origin"`
+	// AgentSteerAllowed is set on a user run: whether the user opened it to agent steering.
+	AgentSteerAllowed *bool `json:"agent_steer_allowed,omitempty"`
 	// ElapsedS counts from the moment gg reported "started", the same zero
 	// point a steering mark's elapsed offset uses.
 	ElapsedS float64          `json:"elapsed_s"`
@@ -53,15 +57,21 @@ type Telemetry struct {
 	// before it shows in the cumulative metrics.
 	Window  *engine.HealthWindow `json:"window,omitempty"`
 	HoldRPS int                  `json:"hold_rps,omitempty"`
-	Final   *Final               `json:"final,omitempty"`
+	// Autopilot is the built-in controller's state while one runs, and its
+	// outcome once it has finished.
+	Autopilot *AutopilotInfo `json:"autopilot,omitempty"`
+	Final     *Final         `json:"final,omitempty"`
 	// WindowSummary is set when the caller waited for a reading.
 	WindowSummary *WindowSummary `json:"window_summary,omitempty"`
 	Marks         []MarkInfo     `json:"recent_marks,omitempty"`
 	Steers        []SteerInfo    `json:"recent_steers,omitempty"`
 
 	SnapshotPath string `json:"snapshot_path,omitempty"`
-	Message      string `json:"message,omitempty"`
-	StderrTail   string `json:"stderr_tail,omitempty"`
+	// ReportPath and ReportError are set by stop_simulation's report option.
+	ReportPath  string `json:"report_path,omitempty"`
+	ReportError string `json:"report_error,omitempty"`
+	Message     string `json:"message,omitempty"`
+	StderrTail  string `json:"stderr_tail,omitempty"`
 }
 
 const (
@@ -74,12 +84,19 @@ func (s *Session) Telemetry() Telemetry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	t := Telemetry{SessionID: s.ID, State: s.state, SnapshotPath: s.snapPath}
+	t := Telemetry{SessionID: s.ID, State: s.state, Origin: s.origin, SnapshotPath: s.snapPath}
+	if s.origin == OriginUser {
+		t.AgentSteerAllowed = &s.agentSteer
+	}
 	if len(s.marks) > 0 {
 		t.Marks = append([]MarkInfo(nil), s.marks...)
 	}
 	if len(s.steers) > 0 {
 		t.Steers = append([]SteerInfo(nil), s.steers...)
+	}
+	if s.ap != nil {
+		ap := *s.ap
+		t.Autopilot = &ap
 	}
 	t.PlannedS = round2(s.spec.Planned.Seconds())
 	if !s.t0.IsZero() {

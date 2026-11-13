@@ -21,8 +21,10 @@ func emit(v map[string]any) {
 }
 
 func emitStarted(scenario string) {
-	caps := []string{"control.bias", "control.mark", "control.mark.elapsed", "control.stop", "control.hold"}
+	caps := []string{"control.bias", "control.mark", "control.mark.elapsed", "control.stop", "control.hold", "control.autopilot"}
 	switch scenario {
+	case "no-autopilot-cap":
+		caps = []string{"control.bias", "control.mark", "control.mark.elapsed", "control.stop", "control.hold"}
 	case "no-elapsed-cap":
 		caps = []string{"control.bias", "control.mark", "control.stop"}
 	case "no-hold-cap":
@@ -71,12 +73,18 @@ func emitBeat(scenario string, n, applied, live, pinned int) {
 	if pinned > 0 {
 		beat["hold_rps"] = pinned
 	}
+	if apMode != "" {
+		beat["autopilot"] = map[string]any{"mode": apMode, "state": "watching"}
+	}
 	if failing > 0 {
 		beat["error_mix"] = map[string]any{"window_s": 10, "sampled": failing, "http_5xx": failing, "capped": false,
 			"top_codes": []map[string]any{{"code": 503, "n": failing}}}
 	}
 	emit(beat)
 }
+
+// apMode is the controller the fake is running ("" when none); heartbeats carry it.
+var apMode string
 
 // SnapEnv, when set, is the snapshot path the fake reports in its final event.
 const SnapEnv = "GG_FAKE_SNAP"
@@ -138,6 +146,10 @@ func Run(scenario string) {
 	}
 
 	emitStarted(scenario)
+	apMode = ""
+	if scenario == "autopilot-ceiling" {
+		apMode = "find-ceiling"
+	}
 	start := time.Now()
 	applied, live, pinned := 0, 0, 0
 	lines := stdinLines()
@@ -149,6 +161,14 @@ func Run(scenario string) {
 			applied = live
 			emitBeat(scenario, n, applied, live, pinned)
 			n++
+			if scenario == "autopilot-ceiling" && n == 8 {
+				emit(map[string]any{"event": "mark", "label": "Autopilot: ceiling breached at 110 RPS", "elapsed_s": 3.0, "source": "autopilot"})
+				emit(map[string]any{"event": "autopilot", "mode": "find-ceiling", "state": "done", "hold_rps": 95, "ceiling_rps": 95,
+					"outcome": "ceiling_found", "reason": "ceiling confirmed at 95 RPS"})
+				emit(map[string]any{"event": "finished", "total_requests": 50, "success_count": 50, "error_rate": 0,
+					"mode": "find-ceiling", "outcome": "ceiling_found", "ceiling_rps": 95, "message": "Load test completed"})
+				return
+			}
 		case line, ok := <-lines:
 			if !ok { // stdin closed: the parent is gone
 				if scenario == "eof-exit" {
@@ -160,6 +180,7 @@ func Run(scenario string) {
 			}
 			var cmd struct {
 				ID, Command, Label string
+				Action, Mode       string
 				Amount, RPS        int
 				Source             string
 				ElapsedS           *float64 `json:"elapsed_s"`
@@ -167,10 +188,22 @@ func Run(scenario string) {
 			_ = json.Unmarshal([]byte(line), &cmd)
 			needsAgent := cmd.Command == "bias" || cmd.Command == "mark" || cmd.Command == "hold" || cmd.Command == "release"
 			switch {
+			case apMode != "" && (cmd.Command == "bias" || cmd.Command == "hold" || cmd.Command == "release"):
+				emit(map[string]any{"event": "error", "id": cmd.ID, "command": cmd.Command, "reason": "autopilot_active", "message": "autopilot owns the rate"})
+			case cmd.Command == "autopilot" && cmd.Action == "start":
+				apMode = cmd.Mode
+				pinned = 7
+				emit(map[string]any{"event": "ack", "id": cmd.ID, "command": "autopilot", "mode": cmd.Mode})
+				emit(map[string]any{"event": "autopilot", "mode": cmd.Mode, "state": "watching", "reason": "watching"})
+			case cmd.Command == "autopilot" && cmd.Action == "stop":
+				emit(map[string]any{"event": "autopilot", "mode": apMode, "state": "done", "outcome": "stopped", "hold_rps": pinned})
+				apMode = ""
+				emit(map[string]any{"event": "ack", "id": cmd.ID, "command": "autopilot"})
 			case needsAgent && scenario == "require-agent-source" && cmd.Source != "agent":
 				emit(map[string]any{"event": "error", "id": cmd.ID, "command": cmd.Command, "reason": "invalid_argument", "message": "source must be agent"})
 			case cmd.Command == "stop" && (scenario == "ignore-stop" || scenario == "ignore-term"):
 			case cmd.Command == "stop":
+				emit(map[string]any{"event": "ack", "id": cmd.ID, "command": "stop", "message": "stop received"})
 				emitStopped()
 				return
 			case (cmd.Command == "mark" || cmd.Command == "bias" || cmd.Command == "hold") && scenario == "no-reply":

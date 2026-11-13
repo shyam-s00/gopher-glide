@@ -22,8 +22,10 @@ const (
 
 // ManagerOptions configures a Manager.
 type ManagerOptions struct {
-	// MaxSessions bounds simulations that are not yet over.
+	// MaxSessions bounds agent simulations that are not yet over.
 	MaxSessions int
+	// MaxUserSessions bounds the same for user simulations; zero means one.
+	MaxUserSessions int
 	// Retention is how long a finished session stays queryable.
 	Retention    time.Duration
 	StartTimeout time.Duration
@@ -57,13 +59,18 @@ func (e *NotFoundError) Error() string {
 
 // LimitError is returned when too many simulations are already running.
 type LimitError struct {
+	Origin  Origin
 	Max     int
 	Running []string
 }
 
 func (e *LimitError) Error() string {
-	return fmt.Sprintf("%d simulation(s) already running (limit %d: --max-sessions); stop one first: %s",
-		len(e.Running), e.Max, strings.Join(e.Running, ", "))
+	flag, who := "--max-sessions", "agent "
+	if e.Origin == OriginUser {
+		flag, who = "--max-user-sessions", "user "
+	}
+	return fmt.Sprintf("%d %ssimulation(s) already running (limit %d: %s); stop one first: %s",
+		len(e.Running), who, e.Max, flag, strings.Join(e.Running, ", "))
 }
 
 // Manager owns the sessions of one server.
@@ -72,6 +79,7 @@ type Manager struct {
 
 	mu       sync.Mutex
 	sessions map[string]*Session
+	subs     map[*Subscription]struct{}
 	closed   bool
 }
 
@@ -95,7 +103,10 @@ func NewManager(o ManagerOptions) *Manager {
 	if o.Stop.Term <= 0 {
 		o.Stop.Term = DefaultTermGrace
 	}
-	return &Manager{opts: o, sessions: map[string]*Session{}}
+	if o.MaxUserSessions <= 0 {
+		o.MaxUserSessions = 1
+	}
+	return &Manager{opts: o, sessions: map[string]*Session{}, subs: map[*Subscription]struct{}{}}
 }
 
 // Start launches spec and returns once the child reports "started". The
@@ -107,13 +118,20 @@ func (m *Manager) Start(ctx context.Context, spec Spec) (*Session, error) {
 		return nil, fmt.Errorf("server is shutting down")
 	}
 	m.purgeLocked()
-	if running := m.runningLocked(); m.opts.MaxSessions > 0 && len(running) >= m.opts.MaxSessions {
+	origin, limit := OriginAgent, m.opts.MaxSessions
+	if spec.Origin == OriginUser {
+		origin, limit = OriginUser, m.opts.MaxUserSessions
+	}
+	if running := m.runningLocked(origin); limit > 0 && len(running) >= limit {
 		m.mu.Unlock()
-		return nil, &LimitError{Max: m.opts.MaxSessions, Running: running}
+		return nil, &LimitError{Origin: origin, Max: limit, Running: running}
 	}
 	s := newSession(newID(), spec)
 	s.replyTimeout, s.settle = m.opts.ReplyTimeout, m.opts.SteerSettle
 	m.sessions[s.ID] = s
+	for sub := range m.subs {
+		s.attach(sub)
+	}
 	m.mu.Unlock()
 
 	if err := s.launch(); err != nil {
@@ -140,18 +158,31 @@ func (m *Manager) Get(id string) (*Session, error) {
 	return nil, m.notFoundLocked(id)
 }
 
-// Resolve is Get, except that an empty id selects the only session there is
-// (the only running one, or failing that the only one kept).
-func (m *Manager) Resolve(id string) (*Session, error) {
+// Resolve is Get, except that an empty id selects the agent's own run: the
+// only running agent session, else the only running user session, else the
+// only one kept.
+func (m *Manager) Resolve(id string) (*Session, error) { return m.ResolveFor(id, OriginAgent) }
+
+// ResolveFor is Resolve with the caller's own origin tried first, so a plugin
+// with an empty id gets its run and an agent gets its own.
+func (m *Manager) ResolveFor(id string, prefer Origin) (*Session, error) {
 	if id != "" {
 		return m.Get(id)
+	}
+	other := OriginUser
+	if prefer == OriginUser {
+		other = OriginAgent
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.purgeLocked()
-	if running := m.runningLocked(); len(running) == 1 {
-		return m.sessions[running[0]], nil
-	} else if len(running) == 0 && len(m.sessions) == 1 {
+	mine, theirs := m.runningLocked(prefer), m.runningLocked(other)
+	switch {
+	case len(mine) == 1:
+		return m.sessions[mine[0]], nil
+	case len(mine) == 0 && len(theirs) == 1:
+		return m.sessions[theirs[0]], nil
+	case len(mine)+len(theirs) == 0 && len(m.sessions) == 1:
 		for _, s := range m.sessions {
 			return s, nil
 		}
@@ -188,6 +219,7 @@ func (m *Manager) Shutdown(ctx context.Context) {
 		}(s)
 	}
 	wg.Wait()
+	m.closeSubscriptions()
 }
 
 // StopOptions returns the escalation timings sessions use.
@@ -205,12 +237,14 @@ func cleanup(spec Spec) {
 	}
 }
 
-func (m *Manager) runningLocked() []string {
+// runningLocked lists the ids of simulations not yet over; origin "" means any.
+func (m *Manager) runningLocked(origin ...Origin) []string {
 	var ids []string
 	for id, s := range m.sessions {
-		if !s.State().Terminal() {
-			ids = append(ids, id)
+		if s.State().Terminal() || (len(origin) > 0 && s.origin != origin[0]) {
+			continue
 		}
+		ids = append(ids, id)
 	}
 	sort.Strings(ids)
 	return ids
@@ -226,7 +260,14 @@ func (m *Manager) idsLocked() []string {
 }
 
 func (m *Manager) notFoundLocked(id string) error {
-	return &NotFoundError{ID: id, Active: m.idsLocked(), Retention: m.opts.Retention}
+	active := m.idsLocked()
+	if id == "" {
+		for i, sid := range active {
+			s := m.sessions[sid]
+			active[i] = fmt.Sprintf("%s (%s, %s)", sid, s.origin, s.State())
+		}
+	}
+	return &NotFoundError{ID: id, Active: active, Retention: m.opts.Retention}
 }
 
 // purgeLocked forgets finished sessions older than the retention period.

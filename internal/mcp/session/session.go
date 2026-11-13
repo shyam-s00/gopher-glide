@@ -54,6 +54,8 @@ type Spec struct {
 	Planned time.Duration
 	// PeakRPS is the highest rate the plan reaches; zero if unknown.
 	PeakRPS int
+	// Origin is who started the run; empty means an agent.
+	Origin Origin
 }
 
 // Session is one running (or finished) gg child process.
@@ -61,6 +63,7 @@ type Session struct {
 	ID string
 
 	spec    Spec
+	origin  Origin
 	cmd     *exec.Cmd
 	stdin   io.WriteCloser
 	writeMu sync.Mutex
@@ -81,10 +84,17 @@ type Session struct {
 	snapPath    string
 	bias        int // latest cumulative bias reported by the child
 	hold        int // pinned rate the child last reported; 0 when none
+	ap          *AutopilotInfo
 	subs        map[chan *ui.HeartbeatPayload]struct{}
+	plug        map[*Subscription]struct{}
+	startedRaw  json.RawMessage
+	beatRaw     json.RawMessage
+	apRaw       json.RawMessage
+	markRaws    []json.RawMessage
+	agentSteer  bool
 	biasAckAt   time.Time // when the child last confirmed a bias change
 	steers      []SteerInfo
-	pending     map[string]chan *ui.HeartbeatPayload
+	pending     map[string]chan *reply
 	seq         int
 	failure     string
 	endedAt     time.Time
@@ -102,15 +112,20 @@ type MarkInfo struct {
 }
 
 func newSession(id string, spec Spec) *Session {
+	if spec.Origin == "" {
+		spec.Origin = OriginAgent
+	}
 	return &Session{
 		ID:        id,
 		spec:      spec,
+		origin:    spec.Origin,
 		state:     Starting,
 		stderr:    &tailBuffer{max: stderrTailBytes},
 		startedCh: make(chan struct{}),
 		done:      make(chan struct{}),
-		pending:   map[string]chan *ui.HeartbeatPayload{},
+		pending:   map[string]chan *reply{},
 		subs:      map[chan *ui.HeartbeatPayload]struct{}{},
+		plug:      map[*Subscription]struct{}{},
 
 		replyTimeout: DefaultReplyTimeout,
 		settle:       DefaultSteerSettle,
@@ -147,7 +162,7 @@ func (s *Session) pump(stdout io.Reader) {
 		if err := json.Unmarshal(sc.Bytes(), &ev); err != nil {
 			continue
 		}
-		s.handle(&ev)
+		s.handle(&ev, append(json.RawMessage(nil), sc.Bytes()...))
 	}
 	// An over-long line stops the scanner; keep draining so the child never blocks.
 	_, _ = io.Copy(io.Discard, stdout)
@@ -157,18 +172,19 @@ func (s *Session) pump(stdout io.Reader) {
 	close(s.done)
 }
 
-func (s *Session) handle(ev *ui.HeartbeatPayload) {
+func (s *Session) handle(ev *ui.HeartbeatPayload, raw json.RawMessage) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.deliverReply(ev)
+	s.deliverReply(ev, raw)
+	defer s.broadcastLocked(ev.Event, raw)
 	switch ev.Event {
 	case "started":
 		if s.started == nil {
-			s.started, s.t0 = ev, time.Now()
+			s.started, s.t0, s.startedRaw = ev, time.Now(), raw
 			close(s.startedCh)
 		}
 	case "heartbeat":
-		s.lastBeat, s.lastBeatAt = ev, time.Now()
+		s.lastBeat, s.lastBeatAt, s.beatRaw = ev, time.Now(), raw
 		if ev.Bias != nil {
 			s.bias = *ev.Bias
 		}
@@ -176,12 +192,20 @@ func (s *Session) handle(ev *ui.HeartbeatPayload) {
 		if ev.HoldRPS != nil {
 			s.hold = *ev.HoldRPS
 		}
+		s.noteAutopilotBeat(ev)
 		if s.state == Starting {
 			s.state = Running
 		}
 		s.publishLocked(ev)
+	case "autopilot":
+		s.noteAutopilotEvent(ev)
+		s.apRaw = raw
 	case "mark":
 		if ev.ElapsedS != nil {
+			s.markRaws = append(s.markRaws, raw)
+			if len(s.markRaws) > maxReplay {
+				s.markRaws = s.markRaws[len(s.markRaws)-maxReplay:]
+			}
 			s.marks = append(s.marks, MarkInfo{Label: clip(ev.Label, 80), ElapsedS: round2(*ev.ElapsedS)})
 			if len(s.marks) > maxRecentMarks {
 				s.marks = s.marks[len(s.marks)-maxRecentMarks:]
@@ -200,6 +224,7 @@ func (s *Session) handle(ev *ui.HeartbeatPayload) {
 		s.interrupted = true
 	case "stopped", "finished":
 		s.terminal = ev
+		s.noteAutopilotFinal(ev)
 		s.snapPath = snapshotPath(ev.Message)
 		s.endedAt = time.Now()
 		switch {
@@ -222,6 +247,7 @@ func (s *Session) finish(waitErr error) {
 	if s.terminal == nil {
 		s.state = Failed
 		s.failure = exitReason(waitErr)
+		s.synthLocked("failed", map[string]any{"message": clip(s.failure, maxMessageBytes)})
 	}
 	if s.spec.Dir != "" {
 		_ = os.RemoveAll(s.spec.Dir)

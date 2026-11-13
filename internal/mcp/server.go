@@ -50,6 +50,8 @@ type Server struct {
 	// SDK is the underlying protocol server.
 	SDK      *sdk.Server
 	sessions *session.Manager
+	limits   Limits
+	exe      string
 }
 
 // NewServer builds a server with all resources, prompts and tools registered.
@@ -72,7 +74,7 @@ func NewServer(o Options) (*Server, error) {
 			return nil, fmt.Errorf("locate the gg executable: %w", err)
 		}
 	}
-	o.Sessions.MaxSessions = o.Limits.MaxSessions
+	o.Sessions.MaxSessions, o.Sessions.MaxUserSessions = o.Limits.MaxSessions, o.Limits.MaxUserSessions
 	mgr := session.NewManager(o.Sessions)
 
 	s := sdk.NewServer(
@@ -86,7 +88,7 @@ func NewServer(o Options) (*Server, error) {
 	registerSimTools(s, mgr, o.Limits, exe)
 	registerSnapTools(s, mgr)
 	registerPrompts(s)
-	return &Server{SDK: s, sessions: mgr}, nil
+	return &Server{SDK: s, sessions: mgr, limits: o.Limits, exe: exe}, nil
 }
 
 // Serve runs the server over newline-delimited JSON-RPC on in/out until the

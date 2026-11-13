@@ -161,7 +161,14 @@ func startMCPChild(t *testing.T, args ...string) *mcpChild {
 
 func startMCPChildEnv(t *testing.T, env []string, args ...string) *mcpChild {
 	t.Helper()
+	return startMCPChildIn(t, "", env, args...)
+}
+
+// startMCPChildIn is startMCPChildEnv with a working directory.
+func startMCPChildIn(t *testing.T, dir string, env []string, args ...string) *mcpChild {
+	t.Helper()
 	cmd := exec.Command(os.Args[0], append([]string{"mcp"}, args...)...)
+	cmd.Dir = dir
 	cmd.Env = append(append(os.Environ(), "GG_TEST_RUN_AS_GG=1"), env...)
 	stderr := &bytes.Buffer{}
 	cmd.Stderr = stderr

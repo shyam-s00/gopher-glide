@@ -53,6 +53,8 @@ Do not call start_simulation until the user has confirmed the file and the targe
 				}
 				return fmt.Sprintf(`Find the capacity ceiling of the service described by %s, without going above %s.
 
+The quickest route is gg's built-in autopilot: call start_simulation with autopilot {mode: "find-ceiling", max_rps: ...} and no profile. It steps the rate up, marks the breach with the failing endpoints, backs off, confirms, stops the run and reports the ceiling in get_live_telemetry (autopilot.outcome and ceiling_rps) with no per-second cost to you. Use the manual steps below when you want to judge each step yourself.
+
 1. Read gg://profiles/catalog and start a gentle run with start_simulation (a low-RPS profile or a short ramp).
 2. Watch with get_live_telemetry using wait_s (for example 5) and wake_on_p99_ms or wake_on_error_rate, so each call returns as soon as something changes instead of polling. Judge health on the window figures: p99 stable and error rate below 1%%.
 3. While healthy, call steer_traffic with adjust_rps to raise traffic by about 20%%, and wait for the change to show in telemetry (it applies within about a second). To judge a rate on its own, hold_rps pins it flat until release_hold.

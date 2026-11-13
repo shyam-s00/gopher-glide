@@ -3,6 +3,7 @@ package mcp
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"strings"
 	"time"
@@ -13,6 +14,8 @@ type Limits struct {
 	MaxRPS      int
 	MaxDuration time.Duration
 	MaxSessions int
+	// MaxUserSessions bounds runs started by the IDE plugin; zero means one.
+	MaxUserSessions int
 	// AllowHosts restricts targets to these hosts; empty means any host.
 	AllowHosts []string
 }
@@ -20,9 +23,10 @@ type Limits struct {
 // DefaultLimits returns the caps used when no flag overrides them.
 func DefaultLimits() Limits {
 	return Limits{
-		MaxRPS:      1000,
-		MaxDuration: 10 * time.Minute,
-		MaxSessions: 2,
+		MaxRPS:          1000,
+		MaxDuration:     10 * time.Minute,
+		MaxSessions:     2,
+		MaxUserSessions: 1,
 	}
 }
 
@@ -38,12 +42,21 @@ func (l Limits) Validate() error {
 	if l.MaxSessions < 1 {
 		errs = append(errs, fmt.Errorf("max-sessions must be at least 1, got %d", l.MaxSessions))
 	}
+	if l.MaxUserSessions < 0 {
+		errs = append(errs, fmt.Errorf("max-user-sessions must not be negative, got %d", l.MaxUserSessions))
+	}
 	for _, h := range l.AllowHosts {
 		if strings.TrimSpace(h) == "" || strings.ContainsAny(h, "/ \t") {
 			errs = append(errs, fmt.Errorf("allow-host %q must be a bare host or host:port", h))
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// ForUser returns the caps for a run the user started: none, as with a plain
+// headless run. The server's own caps only bound what an agent does unattended.
+func (l Limits) ForUser() Limits {
+	return Limits{MaxRPS: math.MaxInt32, MaxDuration: 100 * 365 * 24 * time.Hour, MaxSessions: l.MaxSessions, MaxUserSessions: l.MaxUserSessions}
 }
 
 // CheckURL rejects a target whose host is not on the allowlist. An empty

@@ -47,6 +47,7 @@ type SteerInfo struct {
 	Delta     int     `json:"delta"`
 	BiasTotal int     `json:"bias_total"`
 	HoldRPS   int     `json:"hold_rps,omitempty"`
+	Mode      string  `json:"mode,omitempty"`
 	AtS       float64 `json:"at_s"`
 }
 
@@ -68,6 +69,8 @@ type Reading struct {
 	PeakRPS int
 	// HoldRPS is the rate pinned by a hold; zero when none.
 	HoldRPS int
+	// Autopilot is true while a built-in controller owns the rate.
+	Autopilot bool
 }
 
 // Planner turns a reading into the bias delta to send. A zero delta sends nothing.
@@ -96,7 +99,7 @@ type MarkResult struct {
 func (s *Session) reading() Reading {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	r := Reading{Bias: s.bias, PeakRPS: s.spec.PeakRPS, HoldRPS: s.hold, Settled: true}
+	r := Reading{Bias: s.bias, PeakRPS: s.spec.PeakRPS, HoldRPS: s.hold, Settled: true, Autopilot: s.autopilotActive()}
 	if s.lastBeat == nil {
 		return r
 	}
@@ -115,7 +118,7 @@ func (s *Session) reading() Reading {
 func (s *Session) SteerBias(ctx context.Context, action string, plan Planner) (BiasResult, error) {
 	s.steerMu.Lock()
 	defer s.steerMu.Unlock()
-	if err := s.checkRunning(); err != nil {
+	if err := s.checkAgentRunning(); err != nil {
 		return BiasResult{}, err
 	}
 
@@ -160,7 +163,7 @@ var ErrNoHold = errors.New("this gg build cannot hold the rate (it does not adve
 func (s *Session) Hold(ctx context.Context, rps int) (HoldResult, error) {
 	s.steerMu.Lock()
 	defer s.steerMu.Unlock()
-	if err := s.checkRunning(); err != nil {
+	if err := s.checkAgentRunning(); err != nil {
 		return HoldResult{}, err
 	}
 	if !s.hasCapability("control.hold") {
@@ -182,7 +185,7 @@ func (s *Session) Hold(ctx context.Context, rps int) (HoldResult, error) {
 func (s *Session) Release(ctx context.Context) error {
 	s.steerMu.Lock()
 	defer s.steerMu.Unlock()
-	if err := s.checkRunning(); err != nil {
+	if err := s.checkAgentRunning(); err != nil {
 		return err
 	}
 	if !s.hasCapability("control.hold") {
@@ -204,7 +207,7 @@ func (s *Session) Mark(ctx context.Context, label string, atElapsed *float64) (M
 	if atElapsed != nil && (*atElapsed < 0 || math.IsNaN(*atElapsed) || math.IsInf(*atElapsed, 0)) {
 		return MarkResult{}, errors.New("at_elapsed_s must be zero or more")
 	}
-	if err := s.checkRunning(); err != nil {
+	if err := s.checkAgentRunning(); err != nil {
 		return MarkResult{}, err
 	}
 
@@ -264,7 +267,7 @@ func (s *Session) recordSteer(st SteerInfo) {
 // request sends one command with a fresh id and waits for the reply carrying
 // that id. Writes are serialized; replies are matched by id, so concurrent
 // callers each get their own.
-func (s *Session) request(ctx context.Context, cmd map[string]any) (*ui.HeartbeatPayload, error) {
+func (s *Session) request(ctx context.Context, cmd map[string]any) (*reply, error) {
 	s.mu.Lock()
 	if err := s.runningErrLocked(); err != nil {
 		s.mu.Unlock()
@@ -272,7 +275,7 @@ func (s *Session) request(ctx context.Context, cmd map[string]any) (*ui.Heartbea
 	}
 	s.seq++
 	id := "c" + strconv.Itoa(s.seq)
-	ch := make(chan *ui.HeartbeatPayload, 1)
+	ch := make(chan *reply, 1)
 	s.pending[id] = ch
 	s.mu.Unlock()
 	defer s.forget(id)
@@ -289,12 +292,12 @@ func (s *Session) request(ctx context.Context, cmd map[string]any) (*ui.Heartbea
 	timer := time.NewTimer(s.replyTimeout)
 	defer timer.Stop()
 	select {
-	case reply := <-ch:
-		return reply, replyErr(reply)
+	case r := <-ch:
+		return r, replyErr(r.HeartbeatPayload)
 	case <-s.done:
 		select {
-		case reply := <-ch:
-			return reply, replyErr(reply)
+		case r := <-ch:
+			return r, replyErr(r.HeartbeatPayload)
 		default:
 			return nil, &NotRunningError{ID: s.ID, State: s.State()}
 		}
@@ -335,14 +338,20 @@ func (s *Session) forget(id string) {
 	s.mu.Unlock()
 }
 
+// reply is gg's answer to a command, parsed and as received.
+type reply struct {
+	*ui.HeartbeatPayload
+	Raw json.RawMessage
+}
+
 // deliverReply hands a reply to the caller waiting on its id; the caller holds s.mu.
-func (s *Session) deliverReply(ev *ui.HeartbeatPayload) {
+func (s *Session) deliverReply(ev *ui.HeartbeatPayload, raw json.RawMessage) {
 	if ev.ID == "" || (ev.Event != "ack" && ev.Event != "mark" && ev.Event != "error") {
 		return
 	}
 	if ch, ok := s.pending[ev.ID]; ok {
 		select {
-		case ch <- ev:
+		case ch <- &reply{ev, raw}:
 		default:
 		}
 	}

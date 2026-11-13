@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/shyam-s00/gopher-glide/internal/autopilot"
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
@@ -55,6 +56,17 @@ type HeadlessRenderer struct {
 	// command, so a supervised run stops gracefully (and keeps its snapshot)
 	// when its parent exits. Off by default: EOF is otherwise not a stop.
 	ControlExitOnEOF bool
+
+	// Autopilot, when set, starts this controller with the run. find-ceiling
+	// started this way owns the schedule; slo-guard rides the configured plan.
+	Autopilot *autopilot.Params
+
+	// ap is the running controller; apResult and apPrior are what earlier or
+	// finished controllers reported, for the snapshot.
+	ap         *autopilot.Host
+	apResult   *autopilot.Result
+	apPrior    []autopilot.Event
+	holdEvents []snap.HoldEvent
 
 	// biasEvents records every bias command applied this run, for
 	// SnapMeta.BiasEvents at finalize. Exposed via BiasEvents().
@@ -109,6 +121,9 @@ func (r *HeadlessRenderer) capabilities(eng engine.Runner) *[]string {
 		if _, ok := eng.(engine.Holder); ok {
 			caps = append(caps, "control.hold")
 		}
+		if _, ok := eng.(autopilot.Target); ok {
+			caps = append(caps, "control.autopilot")
+		}
 	}
 	return &caps
 }
@@ -124,6 +139,17 @@ func (r *HeadlessRenderer) Marks() []snap.Mark {
 // convention as Marks.
 func (r *HeadlessRenderer) BiasEvents() []snap.BiasEvent {
 	return r.biasEvents
+}
+
+// HoldEvents returns every hold and release applied this run. Same calling
+// convention as Marks.
+func (r *HeadlessRenderer) HoldEvents() []snap.HoldEvent {
+	return r.holdEvents
+}
+
+// AutopilotMeta is the autopilot's record for the snapshot, nil when none ran.
+func (r *HeadlessRenderer) AutopilotMeta() *snap.AutopilotMeta {
+	return autopilotMeta(r.apResult, r.apPrior)
 }
 
 // protocolVersion is the LCP wire version emitted on every "started" event.
@@ -144,7 +170,7 @@ type StageInfo struct {
 // human-readable line when Reporter == "text".
 type HeartbeatPayload struct {
 	Time         string      `json:"time"`
-	Event        string      `json:"event"` // "heartbeat" | "started" | "finished" | "interrupted" | "snap" | "error" | "ack" | "mark" | "stopped"
+	Event        string      `json:"event"` // "heartbeat" | "started" | "finished" | "interrupted" | "snap" | "error" | "ack" | "mark" | "stopped" | "autopilot"
 	Stage        int         `json:"stage"` // 1-based
 	TotalStages  int         `json:"total_stages"`
 	Stages       []StageInfo `json:"stages,omitempty"`        // set on "started" only
@@ -171,6 +197,14 @@ type HeartbeatPayload struct {
 	Label           string    `json:"label,omitempty"`            // mark replies only
 	ElapsedS        *float64  `json:"elapsed_s,omitempty"`        // run-relative seconds; on heartbeat, ack, mark, stopped and finished. Pointer so a real 0 is still emitted
 	Clamped         bool      `json:"clamped,omitempty"`          // mark replies only: client elapsed_s was ahead of the run and got capped
+
+	// Autopilot controller fields: Mode/State/Outcome/CeilingRPS on "autopilot" events
+	// and the terminal event; Autopilot (compact status) on heartbeats while one runs.
+	Mode       string           `json:"mode,omitempty"`
+	State      string           `json:"state,omitempty"`
+	Outcome    string           `json:"outcome,omitempty"`
+	CeilingRPS *int             `json:"ceiling_rps,omitempty"`
+	Autopilot  *AutopilotStatus `json:"autopilot,omitempty"`
 
 	// ErrorMix is set on heartbeats only, and only when failures occurred in the recent window.
 	ErrorMix *engine.ErrorMix `json:"error_mix,omitempty"`
@@ -258,6 +292,15 @@ func (r *HeadlessRenderer) Run(eng engine.Runner, cfg *config.Config, specs []ht
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
+
+	r.ap, r.apResult, r.apPrior, r.holdEvents = nil, nil, nil, nil
+	if r.Autopilot != nil {
+		run, err := autopilot.StartHost(eng, cfg, *r.Autopilot)
+		if err != nil {
+			return fmt.Errorf("autopilot: %w", err)
+		}
+		r.ap = run
+	}
 
 	// Start the engine in a background goroutine (mirrors what tui.go does).
 	engineDone := make(chan error, 1)
@@ -356,6 +399,13 @@ loop:
 				})
 				continue
 			}
+			if r.ap.Active() && (cmd.Command == "bias" || cmd.Command == "hold" || cmd.Command == "release") {
+				r.emit(HeartbeatPayload{
+					Time: now(), Event: "error", ID: cmd.ID, Command: cmd.Command, Reason: "autopilot_active",
+					Message: "autopilot owns the rate; stop it first with the autopilot stop command",
+				})
+				continue
+			}
 			switch cmd.Command {
 			case cmdInputClosed:
 				stopRequested = true
@@ -388,6 +438,7 @@ loop:
 				}
 				h.HoldRPS(cmd.RPS)
 				rps := h.GetHoldRPS()
+				r.holdEvents = append(r.holdEvents, snap.HoldEvent{RPS: rps, ElapsedS: elapsedSince(eng.GetStartTime()), Source: cmd.Source})
 				r.emit(HeartbeatPayload{
 					Time:     now(),
 					Event:    "ack",
@@ -405,6 +456,7 @@ loop:
 					continue
 				}
 				h.ReleaseHold()
+				r.holdEvents = append(r.holdEvents, snap.HoldEvent{Released: true, ElapsedS: elapsedSince(eng.GetStartTime()), Source: cmd.Source})
 				r.emit(HeartbeatPayload{
 					Time:     now(),
 					Event:    "ack",
@@ -427,6 +479,8 @@ loop:
 					Clamped:  clamped,
 					Source:   cmd.Source,
 				})
+			case "autopilot":
+				r.handleAutopilotCommand(eng, cfg, cmd)
 			case "stop":
 				r.emit(HeartbeatPayload{
 					Time:     now(),
@@ -437,6 +491,12 @@ loop:
 					Message:  "stop received",
 				})
 				stopRequested = true
+				cancel()
+				break loop
+			}
+
+		case m := <-r.ap.In():
+			if r.handleAutopilotMsg(eng, m) {
 				cancel()
 				break loop
 			}
@@ -474,6 +534,7 @@ loop:
 				ErrorMix:     recentErrorMix(eng),
 				Window:       recentWindow(eng),
 				HoldRPS:      activeHold(eng),
+				Autopilot:    apStatus(r.ap),
 			})
 		}
 	}
@@ -496,6 +557,8 @@ loop:
 			}
 		}
 	}
+
+	r.endAutopilot(eng, !stopRequested && !interrupted)
 
 	// Run the post-run hook (e.g. write the snapshot) synchronously; printing is
 	// safe in headless mode. A stop-ended run emits a single "stopped" instead of
@@ -526,6 +589,9 @@ loop:
 			P99Ms:        m.P99Latency,
 			ElapsedS:     finalElapsed(eng),
 			Message:      message,
+			Mode:         apMode(r.apResult),
+			Outcome:      apOutcome(r.apResult),
+			CeilingRPS:   apCeiling(r.apResult),
 		})
 	}
 

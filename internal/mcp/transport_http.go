@@ -14,6 +14,8 @@ import (
 	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/shyam-s00/gopher-glide/internal/controlhttp"
 )
 
 // EndpointPath is where the Streamable HTTP endpoint is served.
@@ -62,8 +64,12 @@ func CheckBind(bind, token string) error {
 func (s *Server) HTTPHandler(loopback bool, o HTTPOptions) http.Handler {
 	inner := sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return s.SDK }, &sdk.StreamableHTTPOptions{Logger: o.Logger})
 
+	target := pluginTarget{s.sessions}
 	mux := http.NewServeMux()
 	mux.Handle(EndpointPath, guard(inner, loopback, o))
+	mux.Handle(PluginEventsPath, guard(controlhttp.Events(target), loopback, o))
+	mux.Handle(PluginControlPath, guard(controlhttp.Control(target), loopback, o))
+	mux.Handle(PluginStartPath, guard(s.pluginStart(), loopback, o))
 	return mux
 }
 

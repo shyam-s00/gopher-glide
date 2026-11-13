@@ -141,9 +141,14 @@ func TestGuard_BearerToken(t *testing.T) {
 // httpServer runs the fake-child server on a loopback port and returns its URL.
 func httpServer(t *testing.T, scenario string, o HTTPOptions) (url string, srv *Server, stop func() error) {
 	t.Helper()
+	return httpServerLimits(t, scenario, o, DefaultLimits())
+}
+
+func httpServerLimits(t *testing.T, scenario string, o HTTPOptions, l Limits) (url string, srv *Server, stop func() error) {
+	t.Helper()
 	t.Setenv(fakegg.Env, scenario)
 	srv, err := NewServer(Options{
-		Limits: DefaultLimits(), Version: "test", Exe: osArgs0(),
+		Limits: l, Version: "test", Exe: osArgs0(),
 		Sessions: session.ManagerOptions{StartTimeout: 5 * time.Second, Stop: session.StopOptions{Graceful: 2 * time.Second, Term: time.Second}},
 	})
 	if err != nil {
