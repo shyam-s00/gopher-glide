@@ -190,7 +190,7 @@ func TestRunStages_HealthWindowTracksTarget(t *testing.T) {
 	e := New()
 	done := make(chan error, 1)
 	go func() {
-		done <- e.RunStages(context.Background(), singleStageCfg(5*time.Second, 40), specsFor(srv.URL))
+		done <- e.RunStages(context.Background(), singleStageCfg(6*time.Second, 40), specsFor(srv.URL))
 	}()
 
 	time.Sleep(1500 * time.Millisecond)
@@ -198,8 +198,10 @@ func TestRunStages_HealthWindowTracksTarget(t *testing.T) {
 		t.Errorf("healthy phase window = %+v ok=%v", w, ok)
 	}
 	fail.Store(true)
-	time.Sleep(2500 * time.Millisecond)
-	if w, ok := e.HealthSince(2 * time.Second); !ok || w.ErrorRate < 0.9 {
+	// A window covers its length plus up to a second of sampling slack, so ask for
+	// one second and wait long enough that even the widest span starts after the flip.
+	time.Sleep(3 * time.Second)
+	if w, ok := e.HealthSince(time.Second); !ok || w.ErrorRate < 0.9 {
 		t.Errorf("failing phase window = %+v ok=%v, want ~all failing", w, ok)
 	}
 	if err := <-done; err != nil {
