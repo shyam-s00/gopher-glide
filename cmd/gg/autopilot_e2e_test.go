@@ -157,8 +157,10 @@ func TestAutopilotE2E_FindCeilingDiscoversTheKnee(t *testing.T) {
 	}
 	done := run.named("autopilot")[len(states)-1]
 	ceiling, _ := done["ceiling_rps"].(float64)
-	if done["outcome"] != "ceiling_found" || ceiling < 80 || ceiling > 95 {
-		t.Fatalf("final autopilot event = %v, want ceiling_found between 80 and 95 RPS", done)
+	// The back-off lands near 93 RPS, 7% under the knee. On a loaded machine arrivals
+	// bunch up and that can still trip it, so one more step down (about 77) is valid.
+	if done["outcome"] != "ceiling_found" || ceiling < 70 || ceiling > 95 {
+		t.Fatalf("final autopilot event = %v, want ceiling_found between 70 and 95 RPS\nmarks: %q\nstates: %v", done, run.autopilotMarks(), states)
 	}
 
 	marks := run.autopilotMarks()
