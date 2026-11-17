@@ -61,7 +61,7 @@ func parseMCPFlags(args []string, out io.Writer) (mcpOptions, error) {
 	fs := flag.NewFlagSet("gg mcp", flag.ContinueOnError)
 	fs.SetOutput(out)
 	fs.Usage = func() {
-		_, _ = fmt.Fprint(out, "Usage: gg mcp [flags]\n       gg mcp --attach [url]\n\nServe gg to AI agents over the Model Context Protocol.\nStdio by default; --port serves Streamable HTTP at /mcp (and the IDE plugin bridge at /plugin/) instead.\n--attach connects a stdio client to a running daemon, found by working directory when no url is given,\nand serves in-process when there is none.\n\nFlags:\n")
+		_, _ = fmt.Fprint(out, "Usage: gg mcp [flags]\n       gg mcp --attach [url]\n       gg mcp init [flags]   (writes IDE agent config; see gg mcp init -h)\n\nServe gg to AI agents over the Model Context Protocol.\nStdio by default; --port serves Streamable HTTP at /mcp (and the IDE plugin bridge at /plugin/) instead.\n--attach connects a stdio client to a running daemon, found by working directory when no url is given,\nand serves in-process when there is none.\n\nFlags:\n")
 		fs.PrintDefaults()
 	}
 
@@ -155,6 +155,9 @@ func claimStdout() *os.File {
 // with --port, over Streamable HTTP. With --attach it bridges stdio to a
 // running daemon instead.
 func runMCPCmd(args []string) {
+	if len(args) > 0 && args[0] == "init" {
+		os.Exit(runMCPInit(args[1:], os.Stdout, os.Stderr))
+	}
 	opts, err := parseMCPFlags(args, os.Stderr)
 	if errors.Is(err, flag.ErrHelp) {
 		return
