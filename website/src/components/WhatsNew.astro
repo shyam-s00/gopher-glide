@@ -1,45 +1,79 @@
 ---
-// Bump `release` and edit `items` for each release.
-const release = 'v1.4';
-const tagline = 'AI agents can now run load tests — with limits you set.';
+// Bump `release` and edit `featured` / `items` for each gg release (gg only; plugin releases do not go here).
+const release = 'v1.5';
+const tagline = 'gg can now run the test for you: find your ceiling, defend your SLO, and take direction from an AI agent.';
+
+const featured = {
+  icon: '🎯',
+  title: 'Autopilot finds your ceiling in one command',
+  desc: 'Point gg at your .http file and it steps the load up, judges every step on fresh data, backs off the moment your latency or error limit breaks, confirms the rate it settled on and reports it. No scripts, no tokens, no babysitting.',
+  code: 'gg --http-file api.http --autopilot find-ceiling',
+  href: '/autopilot',
+  cta: 'How the autopilot works',
+};
 
 const items = [
   {
-    icon: '🤖',
-    title: 'gg mcp for AI agents',
-    desc: 'Claude Code, Cursor, VS Code and JetBrains agents can validate a .http file, dry-run it, start a load test, read live telemetry, steer the rate and stop — all through ten MCP tools.',
-    href: '/mcp',
-    cta: 'Set it up',
-  },
-  {
     icon: '🛡',
-    title: 'Safe by default',
-    desc: 'Hard caps on RPS, duration and concurrent runs, an optional host allowlist, secrets masked in dry runs, and HTTP mode that refuses to listen beyond loopback without a token.',
-    href: '/mcp#safety',
-    cta: 'Read the safety rules',
+    title: 'slo-guard',
+    desc: 'Run a traffic profile with a guard on it. When p99 or errors breach, gg clamps the rate within a second, then releases in steps once health recovers.',
+    href: '/autopilot#slo-guard-hold-the-line-during-a-known-traffic-shape',
+    cta: 'Guard an SLO',
   },
   {
-    icon: '🔍',
-    title: 'Judge the result',
-    desc: 'Agents compare a run with a baseline snapshot using the same thresholds as gg snap assert, and the result says when traffic was steered by hand.',
-    href: '/mcp-tools#snap_diff',
-    cta: 'See snap_diff',
+    icon: '🤖',
+    title: 'AI agents, built in',
+    desc: 'gg autopilot generate, run and triage write and verify your .http file, plan a mission from a sentence and explain a regression. Gemini, or a local model through Ollama.',
+    href: '/autopilot#ai-agents-gg-autopilot',
+    cta: 'Meet the agents',
   },
   {
-    icon: '⏱',
-    title: 'Marks keep their true time',
-    desc: 'A mark can carry the moment it happened (elapsed_s), so a snapshot timeline stays accurate even when the command arrives late. Older clients keep working unchanged.',
-    href: '/control-protocol',
-    cta: 'Protocol reference',
+    icon: '🧩',
+    title: 'An agent for JetBrains and Zed',
+    desc: 'gg autopilot --acp plugs into any ACP client. Its slash commands, /find-ceiling and /dry-run among them, work before you configure a single API key.',
+    href: '/autopilot#in-your-ide-the-acp-agent',
+    cta: 'Add it to your IDE',
+  },
+  {
+    icon: '⚡',
+    title: 'One command setup',
+    desc: 'gg mcp init wires up Claude Code, Cursor, VS Code Copilot and JetBrains in the current project, and running it twice changes nothing.',
+    href: '/mcp#one-command',
+    cta: 'Run gg mcp init',
+  },
+  {
+    icon: '📄',
+    title: 'Mission reports',
+    desc: 'Turn any snapshot into a Markdown or single-file HTML report, with a timeline that shows who did what: you, an agent or the autopilot.',
+    href: '/snap#mission-reports',
+    cta: 'See a report',
+  },
+  {
+    icon: '🔭',
+    title: 'Telemetry agents can afford',
+    desc: 'Windowed health, the worst failing endpoints, a wait that returns the moment something changes, and 11 MCP tools with hard safety caps.',
+    href: '/mcp#watching-without-polling',
+    cta: 'Read the details',
   },
 ];
 ---
-<section class="whats-new-section" aria-labelledby="whats-new-title">
+<section class="whats-new-section" id="whats-new" aria-labelledby="whats-new-title">
   <div class="whats-new-header">
     <span class="whats-new-badge">New in {release}</span>
-    <h2 class="whats-new-title" id="whats-new-title">What's new</h2>
+    <h2 class="whats-new-title" id="whats-new-title">Meet <span class="gg-gradient-text">autopilot</span></h2>
     <p class="whats-new-subtitle">{tagline}</p>
   </div>
+
+  <a href={featured.href} class="featured-card">
+    <div class="featured-text">
+      <div class="whats-new-icon" aria-hidden="true">{featured.icon}</div>
+      <h3 class="featured-title">{featured.title}</h3>
+      <p class="featured-desc">{featured.desc}</p>
+      <code class="featured-code">{featured.code}</code>
+      <span class="whats-new-cta">{featured.cta} &rarr;</span>
+    </div>
+  </a>
+
   <div class="whats-new-grid">
     {items.map((item) => (
       <a href={item.href} class="whats-new-card">
@@ -54,9 +88,10 @@ const items = [
 
 <style>
   .whats-new-section {
-    max-width: 900px;
-    margin: 0 auto 2.5rem auto;
+    max-width: 1000px;
+    margin: 0 auto 3.5rem auto;
     padding: 0 1.5rem;
+    scroll-margin-top: 5rem;
   }
   .whats-new-header {
     text-align: center;
@@ -64,7 +99,7 @@ const items = [
   }
   .whats-new-badge {
     display: inline-block;
-    padding: 0.2rem 0.75rem;
+    padding: 0.2rem 0.85rem;
     margin-bottom: 0.75rem;
     border: 1px solid var(--sl-color-accent);
     border-radius: 999px;
@@ -76,31 +111,79 @@ const items = [
     text-transform: uppercase;
   }
   .whats-new-title {
-    font-size: 1.75rem;
-    font-weight: 700;
+    font-size: 2.1rem;
+    font-weight: 800;
     color: var(--sl-color-text);
     margin: 0 0 0.5rem 0;
   }
   .whats-new-subtitle {
     color: var(--sl-color-gray-2);
-    font-size: 1rem;
-    max-width: 520px;
+    font-size: 1.05rem;
+    max-width: 600px;
     margin: 0 auto;
   }
+
+  .featured-card {
+    display: block;
+    position: relative;
+    margin-bottom: 1rem;
+    padding: 2rem 2rem 1.75rem;
+    border-radius: 18px;
+    text-decoration: none;
+    color: inherit;
+    background:
+      linear-gradient(var(--gg-glass-bg), var(--gg-glass-bg)) padding-box,
+      linear-gradient(var(--sl-color-bg), var(--sl-color-bg)) padding-box,
+      var(--gg-grad) border-box;
+    border: 1.5px solid transparent;
+    box-shadow: 0 10px 40px var(--gg-glass-shadow-hover);
+    backdrop-filter: blur(12px);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .featured-card:hover,
+  .featured-card:focus-visible {
+    transform: translateY(-4px);
+    box-shadow: 0 18px 55px var(--gg-glass-shadow-hover);
+  }
+  .featured-text { display: flex; flex-direction: column; gap: 0.6rem; align-items: flex-start; }
+  .featured-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--sl-color-text);
+    margin: 0;
+  }
+  .featured-desc {
+    font-size: 0.98rem;
+    line-height: 1.6;
+    color: var(--sl-color-gray-2);
+    margin: 0;
+    max-width: 720px;
+  }
+  .featured-code {
+    padding: 0.5rem 0.85rem;
+    border-radius: 8px;
+    background: var(--gg-term-bg);
+    color: var(--gg-term-text);
+    font-size: 0.85rem;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .featured-code::before { content: '$ '; color: var(--gg-term-dim); }
+
   .whats-new-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
   }
   .whats-new-card {
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
-    padding: 1.4rem 1.25rem;
+    padding: 1.3rem 1.2rem;
     background: var(--gg-glass-bg);
     backdrop-filter: blur(12px);
     border: 1px solid var(--gg-glass-border);
-    border-radius: 14px;
+    border-radius: var(--gg-radius);
     text-decoration: none;
     color: inherit;
     transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
@@ -113,18 +196,18 @@ const items = [
     border-color: var(--sl-color-accent);
   }
   .whats-new-icon {
-    font-size: 1.75rem;
+    font-size: 1.7rem;
     line-height: 1;
   }
   .whats-new-card-title {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     font-weight: 700;
     color: var(--sl-color-text);
     margin: 0.25rem 0 0 0;
   }
   .whats-new-card-desc {
-    font-size: 0.88rem;
-    line-height: 1.5;
+    font-size: 0.86rem;
+    line-height: 1.55;
     color: var(--sl-color-gray-2);
     margin: 0 0 0.75rem 0;
   }
@@ -134,9 +217,12 @@ const items = [
     color: var(--sl-color-accent);
     margin-top: auto;
   }
-  @media (max-width: 640px) {
-    .whats-new-grid {
-      grid-template-columns: 1fr;
-    }
+  @media (max-width: 860px) {
+    .whats-new-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 560px) {
+    .whats-new-grid { grid-template-columns: 1fr; }
+    .featured-card { padding: 1.5rem 1.25rem; }
+    .whats-new-title { font-size: 1.7rem; }
   }
 </style>

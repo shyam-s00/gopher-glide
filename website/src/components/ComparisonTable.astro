@@ -8,9 +8,21 @@ const rows = [
   },
   {
     feature: 'Traffic Control',
-    gg: 'Live Interactive TUI',
+    gg: 'Live TUI, IDE panel, scripted commands',
     k6: 'Requires configs',
     wrk: 'Fixed concurrency only',
+  },
+  {
+    feature: 'Finding the limit',
+    gg: 'One command: --autopilot find-ceiling',
+    k6: 'Write a ramp script and read the graphs',
+    wrk: 'Rerun at higher settings by hand',
+  },
+  {
+    feature: 'AI agents',
+    gg: 'Built-in MCP server and ACP agent, with safety caps',
+    k6: 'Not built in',
+    wrk: 'Not built in',
   },
   {
     feature: 'CI/CD Assertions',
@@ -26,7 +38,7 @@ const rows = [
   },
 ];
 ---
-<div class="compare-section">
+<div class="compare-section" id="compare">
   <h2>How does gg compare?</h2>
   <div class="compare-wrap">
     <table>

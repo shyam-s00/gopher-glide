@@ -1,7 +1,6 @@
 ---
 title: "IDE Plugins"
 ---
-# IDE Integration
 
 Gopher Glide ships official plugins for both **JetBrains** and **VS Code** (including Open VSX-compatible editors). Both plugins bring the complete `gg` workflow — running traffic simulations, recording and comparing Snapshots, gating CI on regressions — directly into your editor with a native run dashboard and a full Snap Explorer, no terminal required.
 
@@ -49,7 +48,7 @@ While a simulation runs, the **Run** tab of the **Gopher Glide** tool window upd
 - **Mark…** — drop a named marker at the current point of the run. A mark is stamped when you confirm its label.
 - Bias changes and marks are drawn on the RPS chart, and both are recorded in the snapshot.
 
-**Failure breakdown** (`gg` v1.4.0+): each heartbeat can carry an `error_mix` object saying what kind of failures are happening right now — connection errors, 4xx, 5xx, extraction failures and the top status codes. The plugins don't display it yet; they ignore it safely. See the [Live Control Protocol](/control-protocol#-heartbeat-additions).
+**Failure breakdown** (`gg` v1.5.0+): each heartbeat can carry an `error_mix` object saying what kind of failures are happening right now — connection errors, 4xx, 5xx, extraction failures and the top status codes. The plugins don't display it yet; they ignore it safely. See the [Live Control Protocol](/control-protocol#-heartbeat-additions).
 
 With an older `gg`, the strip is replaced by a short notice that names the installed version and offers to install or upgrade it. The run itself works as before.
 
@@ -178,7 +177,9 @@ The **Snaps** tree view in the panel sidebar lets you:
 
 Both plugins already talk to `gg` over its headless heartbeat stream. As of v1.3, that stream is two-way: `gg --headless` accepts commands over stdin — `bias`, `mark`, `stop` — and replies inline, without killing the process. See [Driving a Run Live](/live-control) to try it by hand and the [Live Control Protocol](/control-protocol) for the full spec. Both the JetBrains plugin (7.0+) and the VS Code extension (3.0+) are built on it: the run dashboard drives `bias`, `mark` and `stop` live, and a clean Stop keeps the snapshot.
 
-**Marks with a confirm step:** a `mark` can carry the offset captured when the user clicked (`elapsed_s`, `gg` v1.4.0+), so a slow label dialog doesn't shift the mark later in the run. Send it only when the `started` event's `capabilities` contains `control.mark.elapsed`; otherwise send the mark without it. Details in [For plugin authors: marks with a confirm step](/control-protocol#-for-plugin-authors-marks-with-a-confirm-step).
+**Coming next: agents and the IDE share one run.** gg v1.5 adds a daemon mode (`gg mcp --port`) that streams every run, including ones an AI agent starts, to a plugin over server-sent events, with Stop and bias controls staying in the plugin. The plugin releases that use it follow gg v1.5. The protocol is documented now for tool builders: [The IDE bridge](/control-protocol#the-ide-bridge). Until then, [`gg mcp init`](/mcp#one-command) and [`gg autopilot`](/autopilot) work alongside the plugins.
+
+**Marks with a confirm step:** a `mark` can carry the offset captured when the user clicked (`elapsed_s`, `gg` v1.5.0+), so a slow label dialog doesn't shift the mark later in the run. Send it only when the `started` event's `capabilities` contains `control.mark.elapsed`; otherwise send the mark without it. Details in [For plugin authors: marks with a confirm step](/control-protocol#-for-plugin-authors-marks-with-a-confirm-step).
 
 **A note for anyone building their own tooling on the protocol:** it carries a generic signed `amount` for bias, not a fixed ±5 step — the widget is a UI decision, not a protocol one. Both plugins use a **stepper (± buttons)** for parity with the TUI's `↑`/`↓` feel; a slider is a reasonable alternative using the exact same command, just **debounce drag events** (throttle to a few per second) — the request rate only changes once a second, so one command per pixel of drag adds noise without adding precision.
 

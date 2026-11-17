@@ -1,7 +1,6 @@
 ---
 title: "The TUI"
 ---
-# The Terminal UI (TUI)
 
 Gopher Glide features a highly polished, interactive Terminal UI designed for real-time observability. Our latest revamp introduces a premium aesthetic powered by a semantic color palette, delivering a clean, modern experience directly in your terminal.
 

@@ -4,22 +4,25 @@ import HeroVisual from './HeroVisual.astro';
 <div class="hero-container">
   <div class="hero-content">
     <h1 class="hero-title">Simulate real traffic against any backend.</h1>
-    <p class="hero-subtitle">Gopher-Glide (gg) is an open-source HTTP traffic and regression simulator for any API: Node, Python, Java, .NET, Rails, Rust, Go and more. Reuse your <code>.http</code> files, run from your IDE or CI, and steer the load live. No scripts, no SDK, no changes to your code.</p>
+    <p class="hero-subtitle">Gopher-Glide (gg) is an open-source HTTP traffic and regression simulator for any API: Node, Python, Java, .NET, Rails, Rust, Go and more. Reuse your <code>.http</code> files, let the built-in autopilot find your capacity ceiling, and drive it from your terminal, IDE, CI or an AI agent. No scripts, no SDK, no changes to your code.</p>
 
     <div class="hero-stats">
       <span class="stat-chip">⚡ 30,000+ RPS</span>
-      <span class="stat-chip">✦ Zero Scripting</span>
-      <span class="stat-chip">🌐 Any Backend</span>
+      <span class="stat-chip">🎯 Finds your ceiling</span>
+      <span class="stat-chip">🤖 AI-agent ready</span>
+      <span class="stat-chip">✦ Zero scripting</span>
     </div>
 
     <div class="hero-install">
-      <code>brew install shyam-s00/tap/gg</code>
+      <code id="install-cmd">brew install shyam-s00/tap/gg</code>
+      <button type="button" class="copy-btn" id="copy-install" aria-label="Copy install command">Copy</button>
       <a href="/getting-started/#1-install" class="hero-install-alt">other install options &rarr;</a>
     </div>
 
     <div class="hero-buttons">
       <a href="/getting-started" class="btn btn-primary">Get Started &rarr;</a>
-      <a href="https://github.com/shyam-s00/gopher-glide" class="btn btn-secondary">View on GitHub</a>
+      <a href="/autopilot" class="btn btn-secondary">See the autopilot</a>
+      <a href="https://github.com/shyam-s00/gopher-glide" class="btn btn-secondary">GitHub</a>
     </div>
 
     <div class="github-stats" id="gh-stats" style="visibility:hidden">
@@ -68,7 +71,8 @@ import HeroVisual from './HeroVisual.astro';
     font-weight: 800;
     line-height: 1.2;
     margin-bottom: 1.5rem;
-    background: -webkit-linear-gradient(45deg, var(--sl-color-text), var(--sl-color-accent));
+    background: linear-gradient(100deg, var(--sl-color-text) 10%, var(--sl-color-accent) 60%, var(--gg-info) 100%);
+    background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
@@ -126,6 +130,21 @@ import HeroVisual from './HeroVisual.astro';
     content: '$ ';
     color: var(--sl-color-gray-2);
   }
+  .copy-btn {
+    padding: 0.2rem 0.65rem;
+    border-radius: 6px;
+    border: 1px solid var(--gg-glass-border);
+    background: transparent;
+    color: var(--sl-color-gray-2);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .copy-btn:hover {
+    color: var(--sl-color-accent);
+    border-color: var(--sl-color-accent);
+  }
   .hero-install-alt {
     font-size: 0.8rem;
     color: var(--sl-color-gray-2);
@@ -138,7 +157,8 @@ import HeroVisual from './HeroVisual.astro';
 
   .hero-buttons {
     display: flex;
-    gap: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
     justify-content: center;
     margin-bottom: 1.25rem;
   }
@@ -205,6 +225,20 @@ import HeroVisual from './HeroVisual.astro';
     }
   }
 </style>
+
+<script>
+  const copyBtn = document.getElementById('copy-install');
+  copyBtn?.addEventListener('click', async () => {
+    const text = document.getElementById('install-cmd')?.textContent ?? '';
+    try {
+      await navigator.clipboard.writeText(text);
+      copyBtn.textContent = 'Copied';
+      setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1600);
+    } catch {
+      copyBtn.textContent = 'Press Ctrl+C';
+    }
+  });
+</script>
 
 <script>
   const CACHE_KEY = 'gg_gh_stats';

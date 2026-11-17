@@ -58,7 +58,7 @@ Expect something like this (timings will differ):
 
 ### 🕒 Marking a moment that has already passed
 
-A mark is normally stamped the moment `gg` receives it. If your tooling noticed the moment earlier — a dialog that asks for a label after a click, say — send the offset it captured as `elapsed_s` (seconds since the run started; `gg` v1.4.0+):
+A mark is normally stamped the moment `gg` receives it. If your tooling noticed the moment earlier — a dialog that asks for a label after a click, say — send the offset it captured as `elapsed_s` (seconds since the run started; `gg` v1.5.0+):
 
 ```json
 {"id":"m2","command":"mark","label":"cache cleared","elapsed_s":12.5}

@@ -1,7 +1,6 @@
 ---
 title: "Snapshots (gg snap)"
 ---
-# Gopher Glide Snapshots (`gg snap`)
 
 Typical load testing tools report basic metrics at the end of a run (e.g., P99 latency, RPS) and then discard the underlying data. **Gopher Glide (gg)** takes a radically different approach with its **Snap** feature.
 
@@ -83,6 +82,8 @@ If a run was manually nudged — a live RPS bias via `↑`/`↓` in the TUI, or 
 - `bias_events` — the full timeline of manual RPS nudges: each entry's `amount`, the `cumulative` value at that point, and `elapsed_s`.
 - `final_bias` — the cumulative bias in effect when the run ended (`0` if nobody touched it).
 
+From v1.5, every mark and bias event can also carry a `source` (`user`, `agent` or `autopilot`), recorded when the command said who issued it; the TUI's arrow keys count as `user`. Pinned rates (`hold` and `release`) are saved as `hold_events`, and a run that used the built-in [autopilot](/autopilot) stores its mode, outcome, ceiling, settings and decisions under `autopilot`. Older snapshots simply lack these fields and still load.
+
 All three are additive — only present when `--snap` was set for that run — and today they're written to the file but not yet rendered by `gg snap view` or `gg snap diff`. Until that lands, `jq '.meta.bias_events, .meta.final_bias' your.snap` is the way to check whether a run was manually biased. A run that got `+30` at 8 s and `-20` at 19 s with a mark in between looks like:
 
 ```json
@@ -154,6 +155,27 @@ gg snap assert --baseline main --current pr-123 \
 ```
 
 The `--reporter` flag supports `text`, `json`, and `md`. When generating Markdown reports, `gg` produces beautiful, actionable summaries perfect for injecting directly as a GitHub or GitLab Pull Request comment!
+
+---
+
+## Mission reports
+
+A snapshot also renders into a report you can paste into a pull request, attach to a ticket or send to a colleague, without them installing anything:
+
+```bash
+gg snap report my-tag                          # Markdown to stdout
+gg snap report my-tag --out mission.html       # one self-contained HTML file
+gg --http-file api.http --autopilot find-ceiling --report mission.md   # write it as the run ends
+```
+
+It contains:
+
+- **Headline numbers**: requests, error rate and latency. Latency is the slowest endpoint's percentile, because percentiles from different endpoints cannot be merged into one honest figure.
+- **Timeline**: marks, rate changes, holds and autopilot decisions in time order, each badged by `source` so you can tell what a human did from what the autopilot or an agent did.
+- **Rate chart**: the pinned-rate timeline with numbered marks (a snapshot stores per-endpoint statistics and control events, not a per-second traffic series, so it shows what was commanded, not measured RPS).
+- **Top failing endpoints**, and the **autopilot result** when one ran (a snapshot from before v1.5 renders without that section).
+
+Markdown is sized for a PR comment. The HTML report is a single file with inline styles and an inline SVG chart: no scripts, no external requests. Agents can ask for the same file through the MCP [`stop_simulation`](/mcp-tools#stop_simulation) and [`snap_capture`](/mcp-tools#snap_capture) tools with `report`.
 
 ---
 

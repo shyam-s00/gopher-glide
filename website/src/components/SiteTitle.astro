@@ -5,6 +5,8 @@ import type { Props } from '@astrojs/starlight/props';
 <div class="custom-site-title">
   <Default {...Astro.props} />
   <nav class="top-nav">
+    <a href="/autopilot" class="nav-link">Autopilot</a>
+    <a href="/mcp" class="nav-link">AI Agents</a>
     <a href="/snap" class="nav-link">Snap</a>
     <a href="/plugin" class="nav-link">Plugins</a>
     <a href="/benchmarks" class="nav-link">Benchmarks</a>
@@ -36,9 +38,9 @@ import type { Props } from '@astrojs/starlight/props';
   .nav-link:hover {
     color: var(--sl-color-text);
   }
-  @media (max-width: 768px) {
+  @media (max-width: 1100px) {
     .top-nav {
-      display: none; /* Hide on extremely small screens to prevent pushing search off screen */
+      display: none; /* Five links no longer fit beside the search box */
     }
   }
 </style>

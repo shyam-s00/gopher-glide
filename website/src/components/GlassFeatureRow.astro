@@ -2,18 +2,25 @@
 export interface Props {
   title: string;
   reverse?: boolean;
+  // Drop the glass frame when the visual brings its own (terminals, panes).
+  flush?: boolean;
+  id?: string;
+  eyebrow?: string;
+  // Text on top, visual full width below: for wide terminal output.
+  stacked?: boolean;
 }
-const { title, reverse = false } = Astro.props;
+const { title, reverse = false, flush = false, id, eyebrow, stacked = false } = Astro.props;
 ---
-<div class={`glass-feature-row ${reverse ? 'reverse' : ''}`}>
+<div class={`glass-feature-row ${reverse ? 'reverse' : ''} ${stacked ? 'stacked' : ''}`} id={id}>
   <div class="feature-text">
+    {eyebrow && <span class="gg-eyebrow">{eyebrow}</span>}
     <h2>{title}</h2>
     <div class="text-content">
       <slot name="text" />
     </div>
   </div>
   <div class="feature-visual">
-    <div class="glass-panel">
+    <div class={flush ? 'flush-panel' : 'glass-panel'}>
       <slot name="visual" />
     </div>
   </div>
@@ -31,14 +38,24 @@ const { title, reverse = false } = Astro.props;
   .glass-feature-row.reverse {
     flex-direction: row-reverse;
   }
+  .glass-feature-row.stacked {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2rem;
+  }
+  .glass-feature-row.stacked .feature-text {
+    max-width: 780px;
+  }
   .feature-text {
     flex: 1;
+    min-width: 0;
   }
   .feature-text h2 {
     font-size: 2.25rem;
     margin-bottom: 1.5rem;
     color: var(--sl-color-text);
     font-weight: 700;
+    line-height: 1.2;
   }
   .text-content :global(p) {
     font-size: 1.1rem;
@@ -52,6 +69,39 @@ const { title, reverse = false } = Astro.props;
   .feature-visual {
     flex: 1;
     width: 100%;
+    min-width: 0;
+  }
+  .flush-panel {
+    width: 100%;
+  }
+  .text-content :global(.feature-points) {
+    list-style: none;
+    margin: 0 0 1.25rem;
+    padding: 0;
+  }
+  .text-content :global(.feature-points li) {
+    position: relative;
+    margin: 0 0 0.55rem;
+    padding-left: 1.6rem;
+    color: var(--sl-color-gray-2);
+    line-height: 1.55;
+  }
+  .text-content :global(.feature-points li::before) {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    color: var(--gg-ok);
+    font-weight: 800;
+  }
+  .text-content :global(.feature-link) {
+    display: inline-block;
+    margin-right: 1.25rem;
+    color: var(--sl-color-accent);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .text-content :global(.feature-link:hover) {
+    text-decoration: underline;
   }
   .glass-panel {
     background: var(--gg-glass-bg);

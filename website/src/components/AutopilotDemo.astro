@@ -1,0 +1,84 @@
+---
+import Terminal from './Terminal.astro';
+
+// Captured from a real run of the command below against a local service that slows down past ~120 RPS.
+// Lines are verbatim gg output; "…" marks lines left out. Only the snapshot path is shortened.
+const command = 'gg --headless --http-file api.http --autopilot find-ceiling --max-p99 200ms --start-rps 30 --step-interval 3s --confirm-hold 6s --snap';
+
+type L = { t: string; text: string; kind?: 'ap' | 'bad' | 'ok' | 'gap' | 'mark' };
+const lines: L[] = [
+  { t: '01:47:28Z', text: 'Load test started — 1 stage(s)' },
+  { t: '01:47:28Z', text: 'autopilot stepping: starting at 30 RPS', kind: 'ap' },
+  { t: '01:47:30Z', text: 'stage=1/1  target=30 rps  actual=30.0 rps  reqs=60  errors=0.00%  p50=9.3ms  p95=9.7ms  p99=10.3ms' },
+  { t: '01:47:31Z', text: 'autopilot stepping: healthy at 30 RPS (p99=10ms, errors=0.00%); stepping to 38', kind: 'ap' },
+  { t: '01:47:34Z', text: 'autopilot stepping: healthy at 38 RPS (p99=10ms, errors=0.00%); stepping to 48', kind: 'ap' },
+  { t: '…', text: '', kind: 'gap' },
+  { t: '01:47:49Z', text: 'autopilot stepping: healthy at 94 RPS (p99=9ms, errors=0.00%); stepping to 118', kind: 'ap' },
+  { t: '01:47:52Z', text: 'autopilot stepping: healthy at 118 RPS (p99=10ms, errors=0.00%); stepping to 148', kind: 'ap' },
+  { t: '01:47:56Z', text: 'stage=1/1  target=148 rps  actual=148.0 rps  reqs=2197  errors=0.00%  p50=9.3ms  p95=401.0ms  p99=401.4ms' },
+  { t: '01:47:56Z', text: 'autopilot breached: Autopilot: ceiling breached at 148 RPS (p99=401ms > 200ms); backing off to 118 RPS', kind: 'bad' },
+  { t: '01:47:56Z', text: 'autopilot confirming: confirming 118 RPS for 6s', kind: 'ap' },
+  { t: '01:48:02Z', text: 'stage=1/1  target=118 rps  actual=118.0 rps  reqs=2905  errors=0.00%  p50=9.3ms  p95=401.0ms  p99=401.4ms' },
+  { t: '01:48:03Z', text: 'autopilot done: ceiling confirmed at 118 RPS', kind: 'ok' },
+  { t: '01:48:03Z', text: '✓ Snapshot saved → …/docs-demo-20261117-014803.snap' },
+];
+let i = 0;
+---
+<div class="ap-demo" data-ap-demo>
+  <Terminal title="headless output of a real run" label="Real headless output of gg finding a capacity ceiling of 118 requests per second">
+    <div class="cmd"><span class="dim">$ </span>{command}</div>
+    <div class="log">
+      {lines.map((l) => (
+        l.kind === 'gap'
+          ? <div class="line gap dim" style={`--i:${i++}`}>…</div>
+          : (
+            <div class={`line ${l.kind ?? ''}`} style={`--i:${i++}`}>
+              <span class="dim">[2026-11-17T{l.t}]</span>{' '}{l.text}
+            </div>
+          )
+      ))}
+    </div>
+  </Terminal>
+  <p class="caption">What <code>gg --headless</code> prints, abridged: the real run found 118 RPS in 37 seconds. In a terminal you get the live TUI instead; in the IDE, a dashboard.</p>
+</div>
+
+<style>
+  .ap-demo { width: 100%; }
+  .cmd { white-space: pre-wrap; word-break: break-all; margin-bottom: 0.8rem; color: #f5f7ff; }
+  .log { display: flex; flex-direction: column; }
+  .line { white-space: pre; }
+  .line.gap { margin: 0.1rem 0; }
+  .line.ap { color: #8aadf4; }
+  .line.bad { color: #ed8796; font-weight: 700; }
+  .line.ok { color: #a6da95; font-weight: 700; }
+  .line.ap :global(.dim), .line.bad :global(.dim), .line.ok :global(.dim) { color: var(--gg-term-dim); font-weight: 400; }
+  .ap-demo :global(.term-body) { font-size: 0.74rem; }
+  .caption {
+    margin: 0.75rem 0 0;
+    font-size: 0.85rem;
+    color: var(--sl-color-gray-3);
+    text-align: center;
+  }
+
+  /* Reveal line by line once on screen. Without JS everything is simply visible. */
+  .ap-demo[data-armed] .line { opacity: 0; }
+  .ap-demo[data-play] .line {
+    animation: ap-in 0.3s ease forwards;
+    animation-delay: calc(var(--i) * 0.22s);
+  }
+  @keyframes ap-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+</style>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-ap-demo]').forEach((el) => {
+    if (!('IntersectionObserver' in window)) return;
+    el.setAttribute('data-armed', '');
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        el.setAttribute('data-play', '');
+        io.disconnect();
+      }
+    }, { threshold: 0.3 });
+    io.observe(el);
+  });
+</script>

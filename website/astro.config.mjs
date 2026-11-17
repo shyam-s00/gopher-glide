@@ -16,13 +16,14 @@ export default defineConfig({
 		sitemap(),
 		starlight({
 			title: 'Gopher Glide',
-			description: 'HTTP traffic and regression simulator for any backend: Node, Python, Java, .NET, Rust, Go and more. Reuse your .http files, run from your IDE or CI.',
+			description: 'Open-source HTTP traffic and regression simulator for any backend. Reuse your .http files, let the autopilot find your capacity ceiling, and drive it from your terminal, IDE, CI or an AI agent.',
 			logo: {
 				light: './public/assets/ggToolIcon.svg',
 				dark: './public/assets/ggToolIcon_dark.svg',
 			},
 			components: {
 				Footer: './src/components/Footer.astro',
+				SocialIcons: './src/components/SocialIcons.astro',
 				SiteTitle: './src/components/SiteTitle.astro',
 				PageTitle: './src/components/PageTitle.astro'
 			},
@@ -41,6 +42,25 @@ export default defineConfig({
 					tag: 'meta',
 					attrs: { name: 'twitter:card', content: 'summary_large_image' },
 				},
+				{
+					tag: 'meta',
+					attrs: { name: 'theme-color', content: '#24273a' },
+				},
+				{
+					tag: 'script',
+					attrs: { type: 'application/ld+json' },
+					content: JSON.stringify({
+						'@context': 'https://schema.org',
+						'@type': 'SoftwareApplication',
+						name: 'Gopher-Glide (gg)',
+						applicationCategory: 'DeveloperApplication',
+						operatingSystem: 'macOS, Linux, Windows',
+						description: 'Open-source HTTP traffic and regression simulator for any backend, with a built-in autopilot, IDE plugins and an MCP server for AI agents.',
+						url: 'https://gopherglide.dev',
+						license: 'https://github.com/shyam-s00/gopher-glide/blob/main/LICENSE',
+						offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+					}),
+				},
 			],
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/shyam-s00/gopher-glide' }
@@ -58,6 +78,7 @@ export default defineConfig({
 					label: 'Run & shape traffic',
 					items: [
 						{ label: 'Load Profiles', slug: 'profiles' },
+						{ label: 'Autopilot', slug: 'autopilot' },
 						{ label: 'Driving a Run Live', slug: 'live-control' },
 						{ label: 'Configuration', slug: 'configuration' },
 					],

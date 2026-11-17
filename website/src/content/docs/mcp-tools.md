@@ -3,7 +3,7 @@ title: "MCP Tool Reference"
 description: "Arguments, example calls and results for every tool the gg MCP server offers."
 ---
 
-Reference for the ten tools served by [`gg mcp`](/mcp). For installing the server, the safety caps and HTTP mode, see [AI Agents (MCP)](/mcp). Every call below sends real traffic where marked, so read [Safety](/mcp#safety) first.
+Reference for the eleven tools served by [`gg mcp`](/mcp). For installing the server, the safety caps and HTTP mode, see [AI Agents (MCP)](/mcp). Every call below sends real traffic where marked, so read [Safety](/mcp#safety) first.
 
 Each example shows the arguments the agent sends and the abbreviated result.
 
@@ -16,6 +16,7 @@ Each example shows the arguments the agent sends and the abbreviated result.
 | [`get_live_telemetry`](#get_live_telemetry) | No |
 | [`steer_traffic`](#steer_traffic) | Changes load |
 | [`stop_simulation`](#stop_simulation) | No |
+| [`snap_list`](#snap_list) | No |
 | [`snap_capture`](#snap_capture) | No |
 | [`snap_diff`](#snap_diff) | No |
 | [`snap_assert`](#snap_assert) | No |
@@ -96,6 +97,7 @@ Starts a real load test and returns immediately; the run continues in the backgr
 | `profile`, `peak_rps`, `duration` | A built-in profile, optionally scaled. |
 | `config_yaml` | A full gg config instead of a profile; its `httpFile` is replaced by the file you supplied. |
 | `snap`, `snap_tag` | Record a [snapshot](/snap) when the run ends, with an optional tag (letters, digits, `.` `_` `-`). |
+| `autopilot` | Start gg's built-in [autopilot](/autopilot) with the run: `mode` (`find-ceiling` or `slo-guard`), `max_p99_ms`, `max_error_rate`, and for `find-ceiling` also `start_rps`, `max_rps`, `max_duration`. |
 
 ```json
 { "http_path": "journey.http", "profile": "canary", "peak_rps": 20, "duration": "20s", "snap": true, "snap_tag": "agent-demo" }
@@ -109,12 +111,25 @@ Starts a real load test and returns immediately; the run continues in the backgr
 
 Only built-in profiles can be named; custom shapes go through `config_yaml`.
 
-## `get_live_telemetry`
-
-Reads the current state of a run without waiting. `session_id` may be omitted when only one simulation exists.
+With `autopilot.mode` of `find-ceiling`, give **no** profile, `config_yaml`, `peak_rps` or `duration`: the autopilot sets its own schedule. `max_rps` defaults to, and may not exceed, the server's `--max-rps`; `max_duration` defaults to the smaller of 5 minutes and the server's `--max-duration` less a 15-second margin. Asking for more is refused with the flag that raises the limit. With `slo-guard`, the profile or config runs as planned and the guard clamps it on a breach.
 
 ```json
-{ "session_id": "sim_b6f013af50e6" }
+{ "http_path": "journey.http", "snap": true, "autopilot": { "mode": "find-ceiling", "max_p99_ms": 200, "max_rps": 300 } }
+```
+
+## `get_live_telemetry`
+
+Reads the current state of a run, optionally waiting for news first. `session_id` may be omitted when only one simulation exists.
+
+| Argument | Meaning |
+|---|---|
+| `wait_s` | Seconds to wait for a new reading before answering, 0 to 30. Default 0 answers at once. The wait ends early if the run ends or a `wake_on_*` threshold is met. |
+| `wake_on_p99_ms` | End the wait when a new reading's **windowed** p99 is at or above this many milliseconds. Needs `wait_s`. |
+| `wake_on_error_rate` | End the wait when a new reading's windowed error rate (0 to 1) is at or above this. Needs `wait_s`. |
+| `wake_on_any_error` | End the wait when a new reading shows any failure in `error_mix`. Needs `wait_s`. |
+
+```json
+{ "session_id": "sim_b6f013af50e6", "wait_s": 5, "wake_on_p99_ms": 250 }
 ```
 
 ```json
@@ -124,6 +139,17 @@ Reads the current state of a run without waiting. `session_id` may be omitted wh
 ```
 
 States are `starting` (no reading yet), `running`, `stopping`, `finished`, `stopped` and `failed`. Numbers are the latest once-per-second reading, and `age_s` says how old it is. When failures occur, an `error_mix` object breaks down the last 10 seconds (transport, 4xx, 5xx, extraction failures, top status codes); it is a rolling window, so its counts are not comparable to the cumulative totals. A finished run includes final statistics and `snapshot_path`; a failed one includes the reason and the tail of gg's stderr. `recent_marks` and `recent_steers` list what `steer_traffic` already did.
+
+Beyond the totals, a reading can carry:
+
+- **`window`**: health over the last few seconds (`seconds`, `p99_ms`, `error_rate`, `samples`). Judge a change on this, not on the run totals, because it shows a recovery or a breach as it happens.
+- **`error_mix.top_endpoints`**: the endpoints failing most in the window, as `METHOD /path/{{var}}` with the count, dominant status code and failure kind. Requests to `/users/1` through `/users/500` from one `GET /users/{{id}}` spec count as one endpoint.
+- **`hold_rps`**: the pinned rate, while a hold is active.
+- **`autopilot`**: the built-in controller's state while it runs (`mode`, `state`, `hold_rps`, `reason`), and its `outcome` and `ceiling_rps` once finished.
+- **`window_summary`**: present when you waited. `waited_s`, `wake_reason` (`timer`, `p99_threshold`, `error_threshold` or `run_ended`), the number of readings (`beats`), the ranges of `actual_rps` and p99 seen, and a `basis` of `window` (or `cumulative` when the gg build reports no window).
+- **`origin`** and, on a run started from the IDE, **`agent_steer_allowed`**.
+
+A wait only counts readings that arrive during it, so a breach already visible in the latest reading does not end a new wait at once; a reading lands within a second anyway. Autopilot events do not wake a wait.
 
 > `actual_rps` can exceed the target when a journey has several requests, because each iteration sends all of them.
 
@@ -135,7 +161,11 @@ Changes a running simulation or annotates it. Only works while the run is `runni
 |---|---|---|
 | `adjust_rps` | `delta` (signed, not zero) | Change the rate by `delta`. |
 | `set_rps` | `target_rps` (1 up to `--max-rps`) | Aim for an absolute rate. |
+| `hold_rps` | `target_rps` (1 up to `--max-rps`) | Pin the rate flat, ignoring the profile's ramp. The run still ends on schedule. Use it to judge one rate on its own. |
+| `release_hold` | none | Return to the profile. |
 | `mark` | `label`, optional `at_elapsed_s` | Label the current moment, or a time the agent saw in telemetry. |
+| `autopilot_start` | `autopilot.mode` = `slo-guard`, optional `max_p99_ms`, `max_error_rate` | Hand the rate to the built-in guard, which clamps within a second of a breach and releases in steps. `find-ceiling` owns the run's schedule, so it can only be given to `start_simulation`. |
+| `autopilot_stop` | none | Take the rate back. It stays where the autopilot left it, so `release_hold` or `hold_rps` next. |
 
 ```json
 { "session_id": "sim_b6f013af50e6", "action": "adjust_rps", "delta": 10 }
@@ -154,14 +184,18 @@ Changes a running simulation or annotates it. Only works while the run is `runni
 { "action": "mark", "applied": true, "label": "bumped to 30", "elapsed_s": 6.36 }
 ```
 
+While a hold is active, `adjust_rps` and `set_rps` are refused (a bias would not move a pinned rate) and the error names `hold_rps` and `release_hold`. While the autopilot runs, all four rate actions are refused until `autopilot_stop`. Steers and marks made through MCP are recorded with `source: "agent"`, so a snapshot and a [mission report](/snap#mission-reports) show who did what. On a run started from the IDE, steering answers `user_session_locked` unless the user has allowed it.
+
 Rate changes are offsets on top of the profile (the same [bias](/live-control) as in the TUI), take effect within about a second, and are limited by `--max-rps`. Marks and rate changes are saved in the snapshot, so a later diff can tell a regression from a human leaning on the throttle.
 
 ## `stop_simulation`
 
 Stops a run cleanly and returns its final statistics. gg finishes writing the snapshot before exiting. Safe to call again, or on a run that already ended.
 
+Add `report` (`md` or `html`) to also write a shareable [mission report](/snap#mission-reports) beside the snapshot; the result gains `report_path`. The run must have used `snap: true`. If the report cannot be written, `report_error` says why and the stop itself still succeeds.
+
 ```json
-{ "session_id": "sim_b6f013af50e6" }
+{ "session_id": "sim_b6f013af50e6", "report": "md" }
 ```
 
 ```json
@@ -173,9 +207,26 @@ Stops a run cleanly and returns its final statistics. gg finishes writing the sn
 
 A run that does not stop in time is terminated; if it was cut short, the result says the statistics and snapshot cover only that part.
 
+## `snap_list`
+
+Lists saved snapshots in the snapshot directory, newest first. Optional `tag_glob` (for example `release-*`) filters by tag and `limit` (default 20, max 100) bounds the list.
+
+```json
+{ "tag_glob": "release-*", "limit": 3 }
+```
+
+```json
+{ "dir": "/home/you/.config/gg/snapshots", "total": 7,
+  "snapshots": [ { "tag": "release-1.5", "path": "/home/you/.config/gg/snapshots/release-1.5-20261112-101500.snap",
+    "created_at": "2026-11-12T10:15:00Z", "duration_s": 90, "total_requests": 41210, "error_rate": 0.002,
+    "p95_ms": 38.1, "p99_ms": 64.7, "endpoints_count": 6, "has_marks": true, "has_bias": false } ], "omitted": 4 }
+```
+
+`p95_ms` and `p99_ms` are the **worst endpoint's** values, because per-endpoint percentiles cannot be merged into a run-wide one; `error_rate` is weighted by request count. A file that cannot be read is listed with an `error` instead of being dropped. Use it to find a baseline, then pass a path or tag to `snap_diff` or `snap_assert`.
+
 ## `snap_capture`
 
-Summarises a snapshot: when and how the run went (profile, peak RPS, total requests, marks, manual rate changes) and, per endpoint, request count, error rate, latency percentiles, top status codes and response-schema field counts, busiest first. Give a `session_id` of a finished run that used `snap: true`, or a `snapshot` (a `.snap` path, or a tag meaning the newest snapshot with it). `max_endpoints` defaults to 20, max 50.
+Summarises a snapshot: when and how the run went (profile, peak RPS, total requests, marks, manual rate changes) and, per endpoint, request count, error rate, latency percentiles, top status codes and response-schema field counts, busiest first. Give a `session_id` of a finished run that used `snap: true`, or a `snapshot` (a `.snap` path, or a tag meaning the newest snapshot with it). `max_endpoints` defaults to 20, max 50. Add `report` (`md` or `html`) to also write a shareable [mission report](/snap#mission-reports) and get its `report_path`. When the run used the built-in autopilot, the result includes an `autopilot` summary (mode, outcome, ceiling).
 
 ```json
 { "snapshot": "agent-demo" }
