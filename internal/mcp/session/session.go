@@ -427,7 +427,7 @@ func lastLines(s string, n int) string {
 func dropBanner(stderr string) string {
 	var keep []string
 	for _, l := range strings.Split(stderr, "\n") {
-		if strings.HasPrefix(l, "gg (Gopher Glide)") || strings.TrimSpace(l) == "Starting..." {
+		if strings.HasPrefix(l, "Gopher Glide (gg)") || strings.TrimSpace(l) == "Starting..." {
 			continue
 		}
 		keep = append(keep, l)

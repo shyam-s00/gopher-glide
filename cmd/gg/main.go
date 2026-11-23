@@ -31,7 +31,7 @@ func main() {
 	if len(os.Args) >= 2 {
 		a := os.Args[1]
 		if a == "--version" || a == "-version" || a == "-v" || a == "version" {
-			fmt.Printf("gg (Gopher Glide)\n")
+			fmt.Printf("Gopher Glide (gg)\n")
 			fmt.Printf("  Version:    %s\n", version.Version)
 			fmt.Printf("  Commit:     %s\n", version.GitCommit)
 			fmt.Printf("  Built:      %s\n", version.GetBuildDate())
@@ -41,7 +41,7 @@ func main() {
 
 	// Printed to stderr (not stdout) so it doesn't pollute headless JSON output,
 	// which CI tools and log aggregators expect to be pure JSON-lines on stdout.
-	_, _ = fmt.Fprintf(os.Stderr, "gg (Gopher Glide) %s (commit:%s) built %s\n",
+	_, _ = fmt.Fprintf(os.Stderr, "Gopher Glide (gg) %s (commit:%s) built %s\n",
 		version.Version, version.GitCommit, version.GetBuildDate())
 
 	// Dispatched before the config load so `gg snap` works without a config file.

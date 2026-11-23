@@ -20,7 +20,7 @@ const (
 )
 
 // ACPAgentName is the key gg registers under in JetBrains' acp.json.
-const ACPAgentName = "GopherGlide Autopilot"
+const ACPAgentName = "gg autopilot"
 
 // InitOptions say what `gg mcp init` writes.
 type InitOptions struct {
@@ -291,8 +291,8 @@ func skillMarkdown() string {
 	tools := append([]string(nil), toolNames...)
 	sort.Strings(tools)
 	var b strings.Builder
-	b.WriteString("---\nname: gg\ndescription: Load-test an HTTP API with gg (Gopher Glide): write and verify .http journeys, run and steer simulations, find the capacity ceiling, and compare snapshots for regressions. Use when asked to load test, stress test, benchmark an endpoint or check for performance regressions.\n---\n\n")
-	b.WriteString("# gg\n\nGopher Glide's `gg mcp` server must be configured (see `.mcp.json`). Its tools:\n\n")
+	b.WriteString("---\nname: gg\ndescription: Load-test an HTTP API with Gopher Glide (gg): write and verify .http journeys, run and steer simulations, find the capacity ceiling, and compare snapshots for regressions. Use when asked to load test, stress test, benchmark an endpoint or check for performance regressions.\n---\n\n")
+	b.WriteString("# gg\n\nThe `gg mcp` server must be configured (see `.mcp.json`). Its tools:\n\n")
 	for _, t := range tools {
 		b.WriteString("- `" + t + "`\n")
 	}

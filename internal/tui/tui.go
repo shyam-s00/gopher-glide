@@ -395,7 +395,7 @@ func (m model) renderHeader() string {
 	panels = append(panels, renderPanel(latencyRows))
 
 	return lipgloss.JoinVertical(lipgloss.Left,
-		styles.TitleBar.Render("Gopher Glide (GG)"),
+		styles.TitleBar.Render("Gopher Glide (gg)"),
 		lipgloss.JoinHorizontal(lipgloss.Top, panels...),
 	)
 }

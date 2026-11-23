@@ -132,7 +132,7 @@ func TestMCPInitCLI(t *testing.T) {
 		}
 	}
 	b, err := os.ReadFile(acp)
-	if err != nil || !strings.Contains(string(b), "GopherGlide Autopilot") || !strings.Contains(string(b), "use_custom_mcp") {
+	if err != nil || !strings.Contains(string(b), "gg autopilot") || !strings.Contains(string(b), "use_custom_mcp") {
 		t.Fatalf("acp.json = %s (%v)", b, err)
 	}
 	if !strings.Contains(out.String(), "restart the IDE") || !strings.Contains(out.String(), "created") {

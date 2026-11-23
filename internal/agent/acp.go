@@ -109,7 +109,7 @@ func (a *acpAgent) shutdown() {
 }
 
 func (a *acpAgent) Initialize(_ context.Context, p acp.InitializeRequest) (acp.InitializeResponse, error) {
-	title := "GopherGlide Autopilot"
+	title := "gg autopilot"
 	return acp.InitializeResponse{
 		ProtocolVersion:   acp.ProtocolVersionNumber,
 		AgentInfo:         &acp.Implementation{Name: "gg-autopilot", Title: &title, Version: a.opts.Version},

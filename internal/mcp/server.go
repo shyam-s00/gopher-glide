@@ -78,7 +78,7 @@ func NewServer(o Options) (*Server, error) {
 	mgr := session.NewManager(o.Sessions)
 
 	s := sdk.NewServer(
-		&sdk.Implementation{Name: "gg", Title: "Gopher Glide", Version: version},
+		&sdk.Implementation{Name: "gg", Title: "Gopher Glide (gg)", Version: version},
 		&sdk.ServerOptions{Instructions: instructions, Logger: logger},
 	)
 	if err := registerResources(s); err != nil {

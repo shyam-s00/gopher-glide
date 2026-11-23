@@ -7,7 +7,7 @@ FROM gcr.io/distroless/static-debian12:nonroot
 
 # OCI labels (also stamped by GoReleaser build_flag_templates)
 LABEL org.opencontainers.image.title="gg" \
-      org.opencontainers.image.description="Gopher Glide — HTTP load-testing tool" \
+      org.opencontainers.image.description="Gopher Glide (gg) — HTTP load-testing tool" \
       org.opencontainers.image.url="https://github.com/shyam-s00/gopher-glide" \
       org.opencontainers.image.source="https://github.com/shyam-s00/gopher-glide" \
       org.opencontainers.image.licenses="MIT"

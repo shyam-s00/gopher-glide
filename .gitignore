@@ -48,3 +48,4 @@ website/.astro/
 website/npm-debug.log*
 website/.env
 website/.env.production
+/.mcp.json

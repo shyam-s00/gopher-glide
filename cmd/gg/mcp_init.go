@@ -35,7 +35,7 @@ Write the files that connect an IDE agent to gg, in the current directory:
   claude     .mcp.json and .claude/skills/gg/SKILL.md (Claude Code, Cursor)
 Existing files are never overwritten without --force, and running it twice changes nothing.
 
---register-acp also lists "GopherGlide Autopilot" in the user-wide ~/.jetbrains/acp.json so JetBrains
+--register-acp also lists "gg autopilot" in the user-wide ~/.jetbrains/acp.json so JetBrains
 can pick it as an agent. That file is shared by every project, so it is only touched when you ask.
 
 Flags:
