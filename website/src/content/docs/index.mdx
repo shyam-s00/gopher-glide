@@ -1,6 +1,6 @@
 ---
-title: Simulate Real Traffic Against Any Backend
-description: Gopher-Glide (gg) is an open-source HTTP traffic and regression simulator for any API, built with Node, Python, Java, .NET, Rails, Rust or Go. Reuse your .http files, let the autopilot find your capacity ceiling, and drive it from your terminal, IDE, CI or an AI agent.
+title: Find Your API's Breaking Point from Terminal, IDE, or AI Agent
+description: Gopher-Glide (gg) is an open-source HTTP traffic and regression simulator for any backend. Reuse your .http files, let the autopilot find your capacity ceiling, and drive it from your terminal, IDE, CI or an AI agent.
 template: splash
 ---
 import Hero from '../../components/Hero.astro';
@@ -15,22 +15,23 @@ import WhatsNew from '../../components/WhatsNew.astro';
 import AnyStack from '../../components/AnyStack.astro';
 import AutopilotDemo from '../../components/AutopilotDemo.astro';
 import AgentDemo from '../../components/AgentDemo.astro';
+import HiveBenchmark from '../../components/HiveBenchmark.astro';
 
 <Hero />
 
 <ContentWrapper>
 
-<WhatsNew />
-
 <AnyStack />
 
-<GlassFeatureRow id="autopilot-demo" eyebrow="New in v1.5" title="Find your ceiling while you make coffee." flush={true} stacked={true}>
+<WhatsNew />
+
+<GlassFeatureRow id="autopilot-demo" eyebrow="Built-in Autopilot" title="Find your ceiling while you make coffee." flush={true} stacked={true}>
   <div slot="text">
     <p><strong>Stop guessing how much traffic your service can take.</strong> Run one command and <code>gg</code> ramps the load up step by step, judges every step on fresh data instead of run-long averages, and backs off the instant your latency or error limit breaks.</p>
     <ul class="feature-points">
-      <li>It names what broke and at what rate, then <strong>confirms</strong> the rate it settled on before it reports.</li>
+      <li>Names what broke and at what rate, then <strong>confirms</strong> the rate it settled on before reporting.</li>
       <li><code>--autopilot slo-guard</code> defends an SLO during a traffic profile and releases the clamp in steps.</li>
-      <li>Deterministic Go, no model involved: <strong>free</strong>, and it reacts in about a second.</li>
+      <li>Deterministic Go, no LLM involved: <strong>free</strong>, and reacts in about a second.</li>
     </ul>
     <p><a class="feature-link" href="/autopilot">How the autopilot works &rarr;</a><a class="feature-link" href="/snap#mission-reports">Shareable reports &rarr;</a></p>
   </div>
@@ -39,12 +40,52 @@ import AgentDemo from '../../components/AgentDemo.astro';
   </div>
 </GlassFeatureRow>
 
+<GlassFeatureRow id="agents-demo" eyebrow="MCP and ACP" title="Give your AI agent a load tester, with a leash." flush={true}>
+  <div slot="text">
+    <p><strong>One command wires <code>gg</code> into Claude Code, Cursor, VS Code Copilot and JetBrains.</strong> <code>gg mcp init</code> writes the config, a skill and three ready-made agents; running it twice changes nothing.</p>
+    <ul class="feature-points">
+      <li>Agents validate, dry-run, run, steer and judge load tests through <strong>11 MCP tools</strong>, with hard caps on RPS, duration, concurrency and target hosts.</li>
+      <li><code>gg autopilot</code> adds agents that write and verify your <code>.http</code> file, run a mission from a sentence and triage a regression, on Gemini or a <strong>local model through Ollama</strong>.</li>
+      <li>The JetBrains and Zed ACP agent's slash commands work <strong>before you configure an API key</strong>.</li>
+    </ul>
+    <p><a class="feature-link" href="/mcp">AI Agents (MCP) &rarr;</a><a class="feature-link" href="/autopilot#ai-agents-gg-autopilot">gg autopilot &rarr;</a></p>
+  </div>
+  <div slot="visual">
+    <AgentDemo />
+  </div>
+</GlassFeatureRow>
+
+<GlassFeatureRow id="ide-cockpit" eyebrow="IDE Cockpit" title="Run From Your IDE, Not a Terminal">
+  <div slot="text">
+    <p><strong>Official plugins for <a href="https://plugins.jetbrains.com/plugin/30983-gopher-glide">JetBrains</a> and <a href="https://marketplace.visualstudio.com/items?itemName=gopherglide.gg-plugin">VS Code</a> bring the entire workflow into IntelliJ IDEA, PyCharm, WebStorm, Rider, GoLand, VS Code, and more.</strong> Click a gutter icon on any <code>.http</code> file, pick a built-in load profile, and watch live RPS, error rate, and latency percentiles update in a native run dashboard.</p>
+    <p>Steer the run right from the panel: nudge target RPS up or down, drop named markers, and stop cleanly, all recorded in the snapshot. Fed by <code>gg</code>'s headless JSON heartbeat, so the editor stays responsive no matter how heavy the run.</p>
+  </div>
+  <div slot="visual">
+    <CodeCompare filename="Gopher Glide: Run">
+      <img src="/assets/plugin-run-view.png" alt="Native run dashboard in the Gopher Glide JetBrains plugin, showing live RPS chart, metrics, and stage timeline" loading="lazy" />
+    </CodeCompare>
+  </div>
+</GlassFeatureRow>
+
+<GlassFeatureRow id="snap-xray" eyebrow="Behavioral Snapshots" title="X-Ray Vision for APIs, Natively in your IDE 🔬" reverse={true}>
+  <div slot="text">
+    <p><strong>Know exactly why you broke production, not just when.</strong> Traditional tools tell you P99 latency spiked. Gopher-Glide's semantic diffing tells you it spiked because a developer accidentally injected a 2MB blob into the JSON payload.</p>
+    <p>Select any two snapshots in the plugin's Snap Explorer to visually compare metric shifts, payload growth, and schema drift side-by-side. Pair it with <code>gg snap assert</code> to gate regressions in CI/CD, and <code>gg snap report</code> to export a Markdown or single-file HTML report.</p>
+    <p><strong>Array Bloat Detection.</strong> A missing pagination limit shouldn't take down your API in prod. Set <code>--max-array-bloat 30</code> and <code>gg</code> fails the build the moment an array field's average length balloons past your threshold, before it ships.</p>
+  </div>
+  <div slot="visual">
+    <CodeCompare filename="Gopher Glide: Snap Diff">
+      <img src="/assets/plugin-diff-view.png" alt="Native snapshot diff view in the Gopher Glide JetBrains plugin" loading="lazy" />
+    </CodeCompare>
+  </div>
+</GlassFeatureRow>
+
 <IDEPlugins />
 
-<GlassFeatureRow title="Zero Scripting Required" reverse={true}>
+<GlassFeatureRow eyebrow="Zero Scripting" title="Reuse the .http Files You Already Have" reverse={true}>
   <div slot="text">
-    <p>Stop rewriting your API calls in JavaScript or Python just to run a quick load test. <strong>Reuse your existing <code>.http</code> REST Client files directly.</strong></p>
-    <p>Point <code>gg</code> at your IDE scratch files and go. Your API can be written in anything; <code>gg</code> only needs its URL. Chain requests into a stateful journey instantly by exporting values with <code>@gg-export</code> and referencing them natively as <code>\{\{token\}\}</code>.</p>
+    <p>Stop rewriting your API calls in JavaScript or Python just to run a load test. <strong>Point <code>gg</code> at your existing <code>.http</code> REST Client files and go.</strong></p>
+    <p>Chain requests into a stateful user journey instantly by exporting values with <code>@gg-export</code> (or IntelliJ script blocks) and referencing them natively as <code>\{\{token\}\}</code>.</p>
   </div>
   <div slot="visual">
     <CodeCompare filename="checkout.http">
@@ -69,25 +110,10 @@ import AgentDemo from '../../components/AgentDemo.astro';
   </div>
 </GlassFeatureRow>
 
-<GlassFeatureRow id="agents-demo" eyebrow="MCP and ACP" title="Give your AI agent a load tester, with a leash." flush={true}>
+<GlassFeatureRow eyebrow="Live TUI" title="Interactive Chaos TUI">
   <div slot="text">
-    <p><strong>One command wires <code>gg</code> into Claude Code, Cursor, VS Code Copilot and JetBrains.</strong> <code>gg mcp init</code> writes the config, a skill and three ready-made agents; running it twice changes nothing.</p>
-    <ul class="feature-points">
-      <li>Agents validate, dry-run, run, steer and judge load tests through <strong>11 MCP tools</strong>, with hard caps on RPS, duration, concurrency and target hosts.</li>
-      <li><code>gg autopilot</code> adds agents that write and verify your <code>.http</code> file, run a mission from a sentence and triage a regression, on Gemini or a <strong>local model through Ollama</strong>.</li>
-      <li>The JetBrains and Zed agent's slash commands work <strong>before you configure an API key</strong>.</li>
-    </ul>
-    <p><a class="feature-link" href="/mcp">AI Agents (MCP) &rarr;</a><a class="feature-link" href="/autopilot#ai-agents-gg-autopilot">gg autopilot &rarr;</a></p>
-  </div>
-  <div slot="visual">
-    <AgentDemo />
-  </div>
-</GlassFeatureRow>
-
-<GlassFeatureRow title="Interactive Chaos TUI" reverse={true}>
-  <div slot="text">
-    <p>Watch your backend burn in high-definition. The premium interactive TUI runs at a buttery-smooth <strong>~24 FPS</strong>, giving you real-time observability.</p>
-    <p>Play chaos engineer: use your arrow keys to aggressively bias RPS up or down in real-time, and watch how your system reacts without ever touching a config file. Running headless or in CI? The <a href="/live-control">Live Control Protocol</a> gives you the same bias, plus pinned rates, markers and a clean stop, over stdin.</p>
+    <p>Watch your backend react in high-definition. The interactive TUI runs at a buttery-smooth <strong>~24 FPS</strong>, giving you real-time observability right in your terminal.</p>
+    <p>Play chaos engineer: use your arrow keys to aggressively bias RPS up or down mid-flight without ever touching a config file. Running headless or in CI? The <a href="/live-control">Live Control Protocol</a> gives you the same bias, plus pinned rates, markers and a clean stop over stdin.</p>
   </div>
   <div slot="visual">
     <CodeCompare filename="gg --profile ddos">
@@ -96,48 +122,14 @@ import AgentDemo from '../../components/AgentDemo.astro';
   </div>
 </GlassFeatureRow>
 
-<GlassFeatureRow title="Run From Your IDE, Not a Terminal">
+<GlassFeatureRow eyebrow="Performance" title="Destroy your servers, not your RAM." reverse={true} flush={true}>
   <div slot="text">
-    <p><strong>Official plugins for <a href="https://plugins.jetbrains.com/plugin/30983-gopher-glide">JetBrains</a> and <a href="https://marketplace.visualstudio.com/items?itemName=gopherglide.gg-plugin">VS Code</a> bring the entire workflow into IntelliJ IDEA, PyCharm, WebStorm, Rider, GoLand, VS Code, and more.</strong> Click a gutter icon on any <code>.http</code> file, pick a built-in load profile, and watch live RPS, error rate, and latency percentiles update in a native run dashboard.</p>
-    <p>Both plugins also let you steer the run from the panel: nudge the target RPS up or down, drop named markers, and stop cleanly, all recorded in the snapshot.</p>
-    <p>No interactive terminal UI involved: just a lightweight panel fed by <code>gg</code>'s headless JSON heartbeat, so it stays responsive no matter how long or heavy the run is.</p>
+    <p><strong>A modern architecture built for massive scale.</strong> Legacy tools rely on heavy OS threads or embedded JS VMs that choke your machine before they choke your API. <code>gg</code> runs on a lock-free Actor Model.</p>
+    <p>By isolating connections into ultra-lightweight workers, a single static binary effortlessly generates <strong>over 30,000 RPS</strong> with zero-garbage (<code>0 allocs/op</code>) overhead and no runtime to install.</p>
+    <p><a class="feature-link" href="/benchmarks">Read the full benchmark breakdown &rarr;</a></p>
   </div>
   <div slot="visual">
-    <CodeCompare filename="Gopher Glide — Run">
-      <img src="/assets/plugin-run-view.png" alt="Native run dashboard in the Gopher Glide JetBrains plugin, showing live RPS chart, metrics, and stage timeline" loading="lazy" />
-    </CodeCompare>
-  </div>
-</GlassFeatureRow>
-
-<GlassFeatureRow title="X-Ray Vision for APIs, Natively in your IDE 🔬" reverse={true}>
-  <div slot="text">
-    <p><strong>Know exactly why you broke production, not just when.</strong> Traditional tools tell you P99 latency spiked. Gopher-Glide's semantic diffing tells you it spiked because a developer accidentally injected a 2MB blob into the JSON payload.</p>
-    <p>Select any two snapshots in the plugin's Snap Explorer to visually compare metric shifts, payload growth, and schema drift side-by-side. Pair it with <code>gg snap assert</code> to gate regressions directly from your editor or in your CI/CD pipelines, and <code>gg snap report</code> to share the result as a Markdown or HTML report.</p>
-    <p><strong>Array Bloat Detection.</strong> A missing pagination limit shouldn't take down your API in prod. Set <code>--max-array-bloat 30</code> and `gg` fails the build the moment an array field's average length balloons past your threshold, before it ships.</p>
-  </div>
-  <div slot="visual">
-    <CodeCompare filename="Gopher Glide — Snap Diff">
-      <img src="/assets/plugin-diff-view.png" alt="Native snapshot diff view in the Gopher Glide JetBrains plugin" loading="lazy" />
-    </CodeCompare>
-  </div>
-</GlassFeatureRow>
-
-<GlassFeatureRow title="Unleash The Hive. Destroy your servers, not your RAM.">
-  <div slot="text">
-    <p><strong>A modern architecture built for massive scale.</strong> Legacy tools rely on heavy OS threads that choke your machine before they choke your API. The Hive Engine uses a lock-free Actor Model.</p>
-    <p>By isolating connections into ultra-lightweight workers, a single instance effortlessly generates <strong>over 30,000 RPS</strong> with zero-garbage (<code>0 allocs/op</code>) overhead. It happens to be written in Go, which is why <code>gg</code> is one static binary with no runtime to install. The API you test can be written in anything.</p>
-
-    > **⚔️ Benchmark:** At 30,000 RPS target load, `gg` consumes **40% less memory** (1.42 GB vs 2.38 GB) and delivers **3x more successful requests** than `k6`. [Read the full breakdown &rarr;](/benchmarks)
-  </div>
-  <div slot="visual">
-    ```mermaid
-    graph TD
-        Queen[👑 The Queen] -->|Micro-batches| Hatchery[🥚 The Hatchery]
-        Hatchery --> Actor1[🐝 Actor]
-        Hatchery --> Actor2[🐝 Actor]
-        Actor1 -. API Request .-> API
-        Actor2 -. API Request .-> API
-    ```
+    <HiveBenchmark />
   </div>
 </GlassFeatureRow>
 

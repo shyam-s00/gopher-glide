@@ -107,7 +107,7 @@ A typical request: *"Validate `api.http`, dry-run it, run it for 20 seconds at 2
 | [`snap_diff`](/mcp-tools#snap_diff) | Compare two snapshots endpoint by endpoint. | No |
 | [`snap_assert`](/mcp-tools#snap_assert) | Pass/fail check against a baseline, with the thresholds of `gg snap assert`. | No |
 
-The server also offers three **resources** the agent can read for reference — `gg://docs/http-syntax`, `gg://schema/gg-yaml` and `gg://profiles/catalog` (the built-in [load profiles](/profiles)) — and three **prompts**: `author_journey` (write and verify a journey), `find_ceiling` (ramp load to find the capacity limit) and `regression_check` (compare a run against a baseline).
+The server also offers three **resources** the agent can read for reference (`gg://docs/http-syntax`, `gg://schema/gg-yaml` and `gg://profiles/catalog` (the built-in [load profiles](/profiles))) and three **prompts**: `author_journey` (write and verify a journey), `find_ceiling` (ramp load to find the capacity limit) and `regression_check` (compare a run against a baseline).
 
 ### Watching without polling
 
@@ -215,4 +215,4 @@ gg mcp --attach http://127.0.0.1:8765/mcp
 | "the autopilot owns the rate right now" | The built-in autopilot is running. Call `steer_traffic` with `autopilot_stop` first, then steer. |
 | A garbled stream in a custom client | Read stdout only for JSON-RPC frames; everything else is on stderr. |
 
-See also: [Autopilot](/autopilot), [CLI Reference](/cli-reference#gg-mcp--serve-gg-to-ai-agents), [Snapshots](/snap), [Driving a Run Live](/live-control).
+See also: [Autopilot](/autopilot), [CLI Reference](/cli-reference#gg-mcp-serve-gg-to-ai-agents), [Snapshots](/snap), [Driving a Run Live](/live-control).

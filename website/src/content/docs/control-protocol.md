@@ -3,9 +3,9 @@ title: "Live Control Protocol"
 description: "Drive a running gg process from stdin: bias, hold, mark, start an autopilot and stop a headless load test without killing it. The reference for plugin authors, scripts and the IDE bridge."
 ---
 
-Headless mode used to be a one-way radio: `gg --headless` gave you a live heartbeat stream, but the only way to touch it was `Ctrl+C`. The **Live Control Protocol (LCP)** turns that into a two-way conversation — send commands in over stdin, get replies interleaved with the heartbeats out.
+Headless mode used to be a one-way radio: `gg --headless` gave you a live heartbeat stream, but the only way to touch it was `Ctrl+C`. The **Live Control Protocol (LCP)** turns that into a two-way conversation: send commands in over stdin, get replies interleaved with the heartbeats out.
 
-This is what the live bias/mark/stop controls in the [JetBrains plugin](/plugin#-native-run-dashboard) (7.0+) and the [VS Code extension](/plugin#live-control-in-vs-code) (3.0+) are built on. It's also directly usable,  no IDE required — type commands into a headless run, or script them. **New to this? Start with [Driving a Run Live](/live-control)**, a hands-on guide with a copy-paste example, the multi-terminal and container recipes, and troubleshooting. This page is the reference.
+This is what the live bias/mark/stop controls in the [JetBrains plugin](/plugin#-native-run-dashboard) (7.0+) and the [VS Code extension](/plugin#live-control-in-vs-code) (3.0+) are built on. It's also directly usable,  no IDE required: type commands into a headless run, or script them. **New to this? Start with [Driving a Run Live](/live-control)**, a hands-on guide with a copy-paste example, the multi-terminal and container recipes, and troubleshooting. This page is the reference.
 
 > **Commands today:** `bias`, `mark`, `stop`, plus `hold`, `release` and `autopilot` from gg v1.5. The protocol is versioned and capability-based, so newer commands never break older binaries and plugins (see [Versioning & capabilities](#versioning--capabilities) below).
 
@@ -19,7 +19,7 @@ The listener is on by default in headless mode:
 gg config.yaml --headless --reporter json
 ```
 
-Type (or pipe) a command as a single line of JSON and press enter. Commands are read from **the standard input of the `gg` process itself** — the terminal or pipe it was started in — so a command typed in a different terminal tab doesn't reach it (see [Where do commands go?](/live-control#-where-do-commands-go)). If stdin closes, the run is not affected: end-of-input is not a `stop`. To disable the listener entirely — locked-down CI, or a shell that forwards stdin somewhere else — pass `--control none`:
+Type (or pipe) a command as a single line of JSON and press enter. Commands are read from **the standard input of the `gg` process itself** (the terminal or pipe it was started in) so a command typed in a different terminal tab doesn't reach it (see [Where do commands go?](/live-control#-where-do-commands-go)). If stdin closes, the run is not affected: end-of-input is not a `stop`. To disable the listener entirely (locked-down CI, or a shell that forwards stdin somewhere else) pass `--control none`:
 
 ```bash
 gg config.yaml --headless --control none
@@ -29,7 +29,7 @@ gg config.yaml --headless --control none
 |---|---|---|
 | `--control <stdin\|none>` | `stdin` | `stdin` listens for commands on stdin. `none` disables the listener; the run stays fully read-only, same as pre-v1.3 behavior. |
 
-TUI mode is unaffected — the TUI already has `↑`/`↓` for bias (see [Director Mode](/tui#director-mode)); it doesn't gain a stdin listener.
+TUI mode is unaffected: the TUI already has `↑`/`↓` for bias (see [Director Mode](/tui#director-mode)); it doesn't gain a stdin listener.
 
 ---
 
@@ -52,19 +52,19 @@ One JSON object per line (NDJSON):
 
 ### `bias`
 
-Applies a signed delta on top of the current stage's target RPS — the same mechanism as the TUI's `↑`/`↓` keys, just with an arbitrary amount instead of a fixed ±5.
+Applies a signed delta on top of the current stage's target RPS: the same mechanism as the TUI's `↑`/`↓` keys, just with an arbitrary amount instead of a fixed ±5.
 
 ```json
 {"id":"c1","command":"bias","amount":5}
 ```
 
-`amount` must be a non-zero integer (positive or negative). The bias is cumulative — three `+5` commands add up to `+15`, exactly like pressing `↑` three times — and it rides on top of whatever the load profile is doing at that moment. No upper or lower bound is enforced by the protocol, but the effective rate never drops below 1 RPS.
+`amount` must be a non-zero integer (positive or negative). The bias is cumulative (three `+5` commands add up to `+15`, exactly like pressing `↑` three times) and it rides on top of whatever the load profile is doing at that moment. No upper or lower bound is enforced by the protocol, but the effective rate never drops below 1 RPS.
 
 The `ack` comes back immediately and already includes the new cumulative value. The request rate itself changes at the next one-second window, so the next heartbeat or two shows the effect.
 
 ### `mark`
 
-Drops a labeled, timestamped annotation into the run — useful for narrating a game day ("canary deploy started here") so it shows up later when you diff the resulting snapshot.
+Drops a labeled, timestamped annotation into the run: useful for narrating a game day ("canary deploy started here") so it shows up later when you diff the resulting snapshot.
 
 ```json
 {"id":"c3","command":"mark","label":"deploy-v2-canary"}
@@ -72,15 +72,15 @@ Drops a labeled, timestamped annotation into the run — useful for narrating a 
 
 `label` must be a non-empty string.
 
-**`elapsed_s`** (optional, `gg` v1.5.0+) — the moment, in seconds since the run started, that the mark belongs to:
+**`elapsed_s`** (optional, `gg` v1.5.0+): the moment, in seconds since the run started, that the mark belongs to:
 
 ```json
 {"id":"c3","command":"mark","label":"deploy-v2-canary","elapsed_s":12.4}
 ```
 
-Use it when the moment was captured earlier than the command is sent — a UI that pops up a label dialog after a click, say. Without it, the mark is stamped when `gg` receives the command. It must be a non-negative number (`null` counts as omitted); anything else is an `invalid_argument` error and no mark is recorded. A value later than the run's current time is capped to it, and the reply says `"clamped":true`. Measure the offset from when your client received the `started` event; `gg`'s own clock starts slightly earlier, so expect a difference of milliseconds.
+Use it when the moment was captured earlier than the command is sent: a UI that pops up a label dialog after a click, say. Without it, the mark is stamped when `gg` receives the command. It must be a non-negative number (`null` counts as omitted); anything else is an `invalid_argument` error and no mark is recorded. A value later than the run's current time is capped to it, and the reply says `"clamped":true`. Measure the offset from when your client received the `started` event; `gg`'s own clock starts slightly earlier, so expect a difference of milliseconds.
 
-Only a `gg` that lists the `control.mark.elapsed` [capability](#versioning--capabilities) honors the field. Older versions ignore it and stamp the mark with the receive time — no error — so check first and, if it's missing, send the mark without `elapsed_s`.
+Only a `gg` that lists the `control.mark.elapsed` [capability](#versioning--capabilities) honors the field. Older versions ignore it and stamp the mark with the receive time (no error) so check first and, if it's missing, send the mark without `elapsed_s`.
 
 ### `hold`
 
@@ -117,7 +117,7 @@ Takes no arguments. A `gg` that does not list `control.hold` answers both with `
 
 ### `stop`
 
-Ends the run cleanly — the snapshot is finalized exactly as for a run that completed on its own, and the process exits with status `0`. (`Ctrl+C` is different: it ends a run with an `interrupted` event.) If `--snap` is set, the snapshot is still written, including any marks and bias applied before the stop.
+Ends the run cleanly: the snapshot is finalized exactly as for a run that completed on its own, and the process exits with status `0`. (`Ctrl+C` is different: it ends a run with an `interrupted` event.) If `--snap` is set, the snapshot is still written, including any marks and bias applied before the stop.
 
 ```json
 {"id":"c4","command":"stop"}
@@ -138,12 +138,12 @@ Every command produces exactly one reply, interleaved with the regular heartbeat
 ```
 
 - **`bias`** → `ack` on success (carries the cumulative value in the `bias` field, not just in `message`), `error` on a bad `amount`.
-- **`mark`** → the `mark` event **is** the reply — there's no separate `ack`. Its `elapsed_s` is the offset the mark was recorded at (always present, including `0`), and `"clamped":true` appears only if your `elapsed_s` was capped.
+- **`mark`** → the `mark` event **is** the reply: there's no separate `ack`. Its `elapsed_s` is the offset the mark was recorded at (always present, including `0`), and `"clamped":true` appears only if your `elapsed_s` was capped.
 - **`hold`**, **`release`** → `ack` (a hold's `ack` carries `hold_rps`; both echo `source`). A `bias`, `hold` or `release` sent while the built-in autopilot owns the rate is an `error` with the reason `autopilot_active`.
 - **`autopilot`** → `ack` on success, then `autopilot` events as the controller works (see [Autopilot](#autopilot) below).
-- **`stop`** → an immediate `ack` confirming receipt, then the run's terminal event fires once finalize completes: `stopped` (replacing `finished`) rather than a second reply. Like `finished`, it carries the final run statistics — also when `--snap` is on, in which case its `message` is the snapshot status line.
+- **`stop`** → an immediate `ack` confirming receipt, then the run's terminal event fires once finalize completes: `stopped` (replacing `finished`) rather than a second reply. Like `finished`, it carries the final run statistics: also when `--snap` is on, in which case its `message` is the snapshot status line.
 
-A malformed or unparseable line still gets a reply — with no `id`/`command`, since neither could be recovered:
+A malformed or unparseable line still gets a reply: with no `id`/`command`, since neither could be recovered:
 
 ```json
 {"event":"error","reason":"parse_error","message":"invalid command line: …"}
@@ -156,7 +156,7 @@ A malformed or unparseable line still gets a reply — with no `id`/`command`, s
 | `invalid_argument` | Missing/zero `amount` on `bias`, `rps` below 1 on `hold`, empty `label` or a bad `elapsed_s` on `mark`, a bad `source`, or a bad `autopilot` field. |
 | `autopilot_active` | A rate command arrived while the built-in autopilot owns the rate. |
 
-Unrecognized extra fields on a command are ignored, not rejected — send whatever your plugin's data model already has lying around.
+Unrecognized extra fields on a command are ignored, not rejected: send whatever your plugin's data model already has lying around.
 
 In `--reporter text` mode the same replies print as a human-readable line instead of JSON, e.g. `[time] mark "deploy-v2-canary" (t+12.4s)`.
 
@@ -227,10 +227,10 @@ The `started` event gains two fields so old and new binaries/plugins can talk to
 ```
 
 - **`protocol_version`** bumps only on a breaking change (the goal is to never need this).
-- **`capabilities`** lists what this run's listener actually accepts. Any command added in the future would show up as a new capability string — check for the string, not the version number, before showing a control in your own tooling.
+- **`capabilities`** lists what this run's listener actually accepts. Any command added in the future would show up as a new capability string: check for the string, not the version number, before showing a control in your own tooling.
 - **`control.mark.elapsed`** means `mark` honors its optional `elapsed_s`. Check that the list *contains* the string; don't compare the whole list, since it grows over time.
 - **`control.hold`** means `hold` and `release` work. **`control.autopilot`** means the `autopilot` command works. Neither is advertised by an older `gg`.
-- With `--control none`, `capabilities` is an explicit empty array (`[]`) — distinct from an older `gg` binary that has no `capabilities` field at all.
+- With `--control none`, `capabilities` is an explicit empty array (`[]`): distinct from an older `gg` binary that has no `capabilities` field at all.
 
 A tool built against v1.3 that talks to a newer `gg` with extra capabilities keeps working unchanged; it just won't offer controls for capabilities it doesn't recognize.
 
@@ -238,15 +238,15 @@ A tool built against v1.3 that talks to a newer `gg` with extra capabilities kee
 
 ## 🖱 For plugin authors: button vs. slider
 
-The protocol carries a generic signed `amount` on purpose — the widget is a plugin decision, not a protocol one. Our recommendation: build a **stepper (± buttons)**, matching the TUI's feel and giving users exact parity with what they already know from the terminal. The JetBrains plugin does this, with −10 / −5 / +5 / +10 steps and a Reset.
+The protocol carries a generic signed `amount` on purpose: the widget is a plugin decision, not a protocol one. Our recommendation: build a **stepper (± buttons)**, matching the TUI's feel and giving users exact parity with what they already know from the terminal. The JetBrains plugin does this, with −10 / −5 / +5 / +10 steps and a Reset.
 
-A slider is a perfectly reasonable follow-up using the exact same `bias` command — just **debounce drag events**. Every command is applied and none are dropped, but the request rate only changes once a second, so one command per pixel of drag adds noise (and a long reply stream) without adding precision. Emit on drag-end, or throttle to a few times a second.
+A slider is a perfectly reasonable follow-up using the exact same `bias` command: just **debounce drag events**. Every command is applied and none are dropped, but the request rate only changes once a second, so one command per pixel of drag adds noise (and a long reply stream) without adding precision. Emit on drag-end, or throttle to a few times a second.
 
 ---
 
 ## 🕒 For plugin authors: marks with a confirm step
 
-If your UI asks for a label after the user clicks "mark", the moment that matters is the click, not the confirm. Record the offset at click time (seconds since you received `started`, from a monotonic clock), hold it while the dialog is open, and send it as `elapsed_s` with the command — but only when `capabilities` contains `control.mark.elapsed`; otherwise send the mark without it. Marks can then arrive out of order (an early click confirmed after a later one); the snapshot lists them by `elapsed_s`, so the order in the file is chronological. If the run ends while the dialog is open there's nothing left to receive the command, so tell the user the mark wasn't saved.
+If your UI asks for a label after the user clicks "mark", the moment that matters is the click, not the confirm. Record the offset at click time (seconds since you received `started`, from a monotonic clock), hold it while the dialog is open, and send it as `elapsed_s` with the command: but only when `capabilities` contains `control.mark.elapsed`; otherwise send the mark without it. Marks can then arrive out of order (an early click confirmed after a later one); the snapshot lists them by `elapsed_s`, so the order in the file is chronological. If the run ends while the dialog is open there's nothing left to receive the command, so tell the user the mark wasn't saved.
 
 ---
 
@@ -298,7 +298,7 @@ When the built-in [autopilot](/autopilot) runs, gg emits an `autopilot` event at
 
 ## 🎬 Scripted game days
 
-Because the listener just reads NDJSON off stdin, you don't need a plugin to script a run. One thing to know first: **a file piped with `<` is consumed immediately**, so every line is applied at the start of the run — the format has no timestamps.
+Because the listener just reads NDJSON off stdin, you don't need a plugin to script a run. One thing to know first: **a file piped with `<` is consumed immediately**, so every line is applied at the start of the run: the format has no timestamps.
 
 ```bash
 gg config.yaml --headless < gameday-script.jsonl     # all commands at t=0

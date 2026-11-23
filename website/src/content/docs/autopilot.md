@@ -145,7 +145,7 @@ Anything the agent starts is stopped if you cancel or it exits, whether the serv
 
 ## In your IDE: the ACP agent
 
-`gg autopilot --acp` serves the [Agent Client Protocol](https://agentclientprotocol.com) (v1) over stdio, so an ACP-capable client can list **GopherGlide Autopilot** as an agent. It streams its reasoning, a step plan, a card for every tool call and the final answer.
+`gg autopilot --acp` serves the [Agent Client Protocol](https://agentclientprotocol.com) (v1) over stdio, so an ACP-capable client can list **gg autopilot** as an agent. It streams its reasoning, a step plan, a card for every tool call and the final answer.
 
 ### Slash commands that need no API key
 
@@ -174,7 +174,7 @@ Prefer to do it by hand? Add an entry to `acp.json` (the `command` must be an ab
 ```json
 {
   "agent_servers": {
-    "GopherGlide Autopilot": {
+    "gg autopilot": {
       "command": "/usr/local/bin/gg",
       "args": ["autopilot", "--acp"],
       "use_custom_mcp": true
@@ -185,4 +185,4 @@ Prefer to do it by hand? Add an entry to `acp.json` (the `command` must be an ab
 
 For Zed, add the same command and args under `agent_servers` in its settings. Set `GEMINI_API_KEY` (or the `GG_AUTOPILOT_*` variables) in the environment the IDE starts the agent with to enable open-ended requests.
 
-See also: [AI Agents (MCP)](/mcp), [MCP Tool Reference](/mcp-tools), [CLI Reference](/cli-reference#gg-autopilot--ai-agents), [Snapshots](/snap).
+See also: [AI Agents (MCP)](/mcp), [MCP Tool Reference](/mcp-tools), [CLI Reference](/cli-reference#gg-autopilot-ai-agents), [Snapshots](/snap).

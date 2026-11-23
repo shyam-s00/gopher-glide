@@ -1,86 +1,64 @@
 ---
-// Bump `release` and edit `featured` / `items` for each gg release (gg only; plugin releases do not go here).
 const release = 'v1.5';
-const tagline = 'gg can now run the test for you: find your ceiling, defend your SLO, and take direction from an AI agent.';
+const tagline = 'Whether you are preparing for a launch, letting an AI agent verify its own code, or gating a PR in CI, gg fits the workflow you already have.';
 
-const featured = {
-  icon: '🎯',
-  title: 'Autopilot finds your ceiling in one command',
-  desc: 'Point gg at your .http file and it steps the load up, judges every step on fresh data, backs off the moment your latency or error limit breaks, confirms the rate it settled on and reports it. No scripts, no tokens, no babysitting.',
-  code: 'gg --http-file api.http --autopilot find-ceiling',
-  href: '/autopilot',
-  cta: 'How the autopilot works',
-};
-
-const items = [
+const workflows = [
   {
-    icon: '🛡',
-    title: 'slo-guard',
-    desc: 'Run a traffic profile with a guard on it. When p99 or errors breach, gg clamps the rate within a second, then releases in steps once health recovers.',
-    href: '/autopilot#slo-guard-hold-the-line-during-a-known-traffic-shape',
-    cta: 'Guard an SLO',
+    icon: '🎯',
+    eyebrow: 'Autopilot',
+    title: 'Find your breaking point automatically',
+    desc: 'Stop hand-tuning ramp scripts. --autopilot find-ceiling steps load up, backs off the second p99 or error limits trip, confirms the rate that held, and writes a shareable HTML or Markdown report. Deterministic Go, zero LLM cost.',
+    code: 'gg --http-file api.http --autopilot find-ceiling --max-p99 200ms',
+    href: '#autopilot-demo',
+    cta: 'See autopilot in action',
   },
   {
     icon: '🤖',
-    title: 'AI agents, built in',
-    desc: 'gg autopilot generate, run and triage write and verify your .http file, plan a mission from a sentence and explain a regression. Gemini, or a local model through Ollama.',
-    href: '/autopilot#ai-agents-gg-autopilot',
-    cta: 'Meet the agents',
+    eyebrow: 'MCP & ACP Agents',
+    title: 'Let your AI agent load-test safely',
+    desc: 'One command wires gg into Claude Code, Cursor, VS Code Copilot, JetBrains Air, and Zed. Agents dry-run, steer, and triage regressions through 11 MCP tools, bounded by hard caps on RPS, duration, and target hosts.',
+    code: 'gg mcp init',
+    href: '#agents-demo',
+    cta: 'See AI agent workflows',
   },
   {
-    icon: '🧩',
-    title: 'An agent for JetBrains and Zed',
-    desc: 'gg autopilot --acp plugs into any ACP client. Its slash commands, /find-ceiling and /dry-run among them, work before you configure a single API key.',
-    href: '/autopilot#in-your-ide-the-acp-agent',
-    cta: 'Add it to your IDE',
+    icon: '🖥️',
+    eyebrow: 'IDE Cockpit',
+    title: 'Run, steer & diff inside your editor',
+    desc: 'Click a gutter icon on any .http file in IntelliJ, GoLand, PyCharm, WebStorm, Rider, or VS Code. Watch live RPS and latency curves, nudge load up or down, drop timeline markers, and diff snapshots side-by-side.',
+    code: 'JetBrains Marketplace · VS Code · Open VSX',
+    href: '#ide-cockpit',
+    cta: 'Explore IDE plugins',
   },
   {
-    icon: '⚡',
-    title: 'One command setup',
-    desc: 'gg mcp init wires up Claude Code, Cursor, VS Code Copilot and JetBrains in the current project, and running it twice changes nothing.',
-    href: '/mcp#one-command',
-    cta: 'Run gg mcp init',
-  },
-  {
-    icon: '📄',
-    title: 'Mission reports',
-    desc: 'Turn any snapshot into a Markdown or single-file HTML report, with a timeline that shows who did what: you, an agent or the autopilot.',
-    href: '/snap#mission-reports',
-    cta: 'See a report',
-  },
-  {
-    icon: '🔭',
-    title: 'Telemetry agents can afford',
-    desc: 'Windowed health, the worst failing endpoints, a wait that returns the moment something changes, and 11 MCP tools with hard safety caps.',
-    href: '/mcp#watching-without-polling',
-    cta: 'Read the details',
+    icon: '🔬',
+    eyebrow: 'Semantic X-Ray',
+    title: 'Catch payload & schema drift in CI',
+    desc: 'Know why p99 spiked, not just when. gg snap catches silent JSON schema drift, missing pagination (array bloat), and latency regressions before they hit production, and exports single-file HTML Mission Reports.',
+    code: 'gg snap assert baseline current --max-array-bloat 30',
+    href: '#snap-xray',
+    cta: 'See snapshot diffing',
   },
 ];
 ---
 <section class="whats-new-section" id="whats-new" aria-labelledby="whats-new-title">
   <div class="whats-new-header">
-    <span class="whats-new-badge">New in {release}</span>
-    <h2 class="whats-new-title" id="whats-new-title">Meet <span class="gg-gradient-text">autopilot</span></h2>
+    <span class="whats-new-badge">What you can do with gg {release}</span>
+    <h2 class="whats-new-title" id="whats-new-title">Four workflows. <span class="gg-gradient-text">One binary.</span></h2>
     <p class="whats-new-subtitle">{tagline}</p>
   </div>
 
-  <a href={featured.href} class="featured-card">
-    <div class="featured-text">
-      <div class="whats-new-icon" aria-hidden="true">{featured.icon}</div>
-      <h3 class="featured-title">{featured.title}</h3>
-      <p class="featured-desc">{featured.desc}</p>
-      <code class="featured-code">{featured.code}</code>
-      <span class="whats-new-cta">{featured.cta} &rarr;</span>
-    </div>
-  </a>
-
-  <div class="whats-new-grid">
-    {items.map((item) => (
-      <a href={item.href} class="whats-new-card">
-        <div class="whats-new-icon" aria-hidden="true">{item.icon}</div>
-        <h3 class="whats-new-card-title">{item.title}</h3>
-        <p class="whats-new-card-desc">{item.desc}</p>
-        <span class="whats-new-cta">{item.cta} &rarr;</span>
+  <div class="workflows-grid">
+    {workflows.map((w) => (
+      <a href={w.href} class="workflow-card">
+        <div class="workflow-top">
+          <span class="workflow-icon" aria-hidden="true">{w.icon}</span>
+          <span class="workflow-eyebrow">{w.eyebrow}</span>
+        </div>
+        <h3 class="workflow-title">{w.title}</h3>
+        <p class="workflow-desc">{w.desc}</p>
+        <code class="workflow-code">{w.code}</code>
+        <span class="workflow-cta">{w.cta} &rarr;</span>
       </a>
     ))}
   </div>
@@ -88,14 +66,14 @@ const items = [
 
 <style>
   .whats-new-section {
-    max-width: 1000px;
-    margin: 0 auto 3.5rem auto;
+    max-width: 1040px;
+    margin: 0 auto 2rem auto;
     padding: 0 1.5rem;
     scroll-margin-top: 5rem;
   }
   .whats-new-header {
     text-align: center;
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
   }
   .whats-new-badge {
     display: inline-block;
@@ -105,81 +83,35 @@ const items = [
     border-radius: 999px;
     background: var(--gg-glass-bg);
     color: var(--sl-color-accent);
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
   }
   .whats-new-title {
-    font-size: 2.1rem;
+    font-size: 2.05rem;
     font-weight: 800;
     color: var(--sl-color-text);
-    margin: 0 0 0.5rem 0;
+    margin: 0 0 0.5rem 0 !important;
   }
   .whats-new-subtitle {
     color: var(--sl-color-gray-2);
-    font-size: 1.05rem;
-    max-width: 600px;
+    font-size: 1.03rem;
+    line-height: 1.55;
+    max-width: 640px;
     margin: 0 auto;
   }
 
-  .featured-card {
-    display: block;
-    position: relative;
-    margin-bottom: 1rem;
-    padding: 2rem 2rem 1.75rem;
-    border-radius: 18px;
-    text-decoration: none;
-    color: inherit;
-    background:
-      linear-gradient(var(--gg-glass-bg), var(--gg-glass-bg)) padding-box,
-      linear-gradient(var(--sl-color-bg), var(--sl-color-bg)) padding-box,
-      var(--gg-grad) border-box;
-    border: 1.5px solid transparent;
-    box-shadow: 0 10px 40px var(--gg-glass-shadow-hover);
-    backdrop-filter: blur(12px);
-    transition: transform 0.2s, box-shadow 0.2s;
-  }
-  .featured-card:hover,
-  .featured-card:focus-visible {
-    transform: translateY(-4px);
-    box-shadow: 0 18px 55px var(--gg-glass-shadow-hover);
-  }
-  .featured-text { display: flex; flex-direction: column; gap: 0.6rem; align-items: flex-start; }
-  .featured-title {
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: var(--sl-color-text);
-    margin: 0;
-  }
-  .featured-desc {
-    font-size: 0.98rem;
-    line-height: 1.6;
-    color: var(--sl-color-gray-2);
-    margin: 0;
-    max-width: 720px;
-  }
-  .featured-code {
-    padding: 0.5rem 0.85rem;
-    border-radius: 8px;
-    background: var(--gg-term-bg);
-    color: var(--gg-term-text);
-    font-size: 0.85rem;
-    max-width: 100%;
-    overflow-x: auto;
-  }
-  .featured-code::before { content: '$ '; color: var(--gg-term-dim); }
-
-  .whats-new-grid {
+  .workflows-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.15rem;
   }
-  .whats-new-card {
+  .workflow-card {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
-    padding: 1.3rem 1.2rem;
+    gap: 0.55rem;
+    padding: 1.5rem;
     background: var(--gg-glass-bg);
     backdrop-filter: blur(12px);
     border: 1px solid var(--gg-glass-border);
@@ -189,40 +121,61 @@ const items = [
     transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
     box-shadow: 0 4px 20px var(--gg-glass-shadow);
   }
-  .whats-new-card:hover,
-  .whats-new-card:focus-visible {
-    transform: translateY(-5px);
-    box-shadow: 0 12px 40px var(--gg-glass-shadow-hover);
+  .workflow-card:hover,
+  .workflow-card:focus-visible {
+    transform: translateY(-4px);
+    box-shadow: 0 14px 40px var(--gg-glass-shadow-hover);
     border-color: var(--sl-color-accent);
   }
-  .whats-new-icon {
-    font-size: 1.7rem;
+  .workflow-top {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .workflow-icon {
+    font-size: 1.45rem;
     line-height: 1;
   }
-  .whats-new-card-title {
-    font-size: 1.05rem;
+  .workflow-eyebrow {
+    font-size: 0.74rem;
     font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--sl-color-accent);
+  }
+  .workflow-title {
+    font-size: 1.2rem;
+    font-weight: 800;
     color: var(--sl-color-text);
-    margin: 0.25rem 0 0 0;
+    margin: 0.15rem 0 0 0;
+    line-height: 1.3;
   }
-  .whats-new-card-desc {
-    font-size: 0.86rem;
-    line-height: 1.55;
+  .workflow-desc {
+    font-size: 0.91rem;
+    line-height: 1.58;
     color: var(--sl-color-gray-2);
-    margin: 0 0 0.75rem 0;
+    margin: 0 0 0.45rem 0;
   }
-  .whats-new-cta {
+  .workflow-code {
+    display: block;
+    padding: 0.45rem 0.75rem;
+    margin-top: auto;
+    border-radius: 8px;
+    background: var(--gg-term-bg);
+    color: var(--gg-term-text);
+    font-size: 0.78rem;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .workflow-cta {
     font-size: 0.88rem;
     font-weight: 600;
     color: var(--sl-color-accent);
-    margin-top: auto;
+    margin-top: 0.35rem;
   }
-  @media (max-width: 860px) {
-    .whats-new-grid { grid-template-columns: repeat(2, 1fr); }
-  }
-  @media (max-width: 560px) {
-    .whats-new-grid { grid-template-columns: 1fr; }
-    .featured-card { padding: 1.5rem 1.25rem; }
-    .whats-new-title { font-size: 1.7rem; }
+
+  @media (max-width: 760px) {
+    .workflows-grid { grid-template-columns: minmax(0, 1fr); }
+    .whats-new-title { font-size: 1.75rem; }
   }
 </style>

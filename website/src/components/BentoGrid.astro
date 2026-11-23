@@ -1,102 +1,151 @@
 ---
 ---
-<div class="bento-container">
-  <a href="https://github.com/shyam-s00/gopher-glide" class="bento-card bento-large">
-    <div class="bento-content">
-      <div class="bento-icon">⭐</div>
-      <h3>Open Source & Free</h3>
-      <p>Gopher-Glide is built for the community. Drop us a star on GitHub to support the project!</p>
-      <span class="bento-link">View Repository &rarr;</span>
+<section class="closing-cta-wrap" aria-labelledby="closing-cta-title">
+  <div class="closing-cta">
+    <span class="closing-eyebrow">Open Source &amp; Free Forever</span>
+    <h2 class="closing-title" id="closing-cta-title">Ready to see where your API breaks?</h2>
+    <p class="closing-subtitle">Install the single binary, point it at an existing <code>.http</code> file, and find your capacity ceiling in under 60 seconds.</p>
+
+    <div class="closing-cmd">
+      <code>brew install shyam-s00/tap/gg</code>
+      <button type="button" class="closing-copy" id="closing-copy-btn" aria-label="Copy install command">Copy</button>
     </div>
-  </a>
-  <div class="bento-column">
-    <div class="bento-card bento-small">
-      <div class="bento-content">
-        <div class="bento-icon">🌐</div>
-        <h3>Any backend</h3>
-        <p>Node, Python, Java, .NET, Rust, Go. If it speaks HTTP, gg can test it.</p>
-      </div>
+
+    <div class="closing-actions">
+      <a href="/getting-started" class="cta-btn cta-primary">Get Started &rarr;</a>
+      <a href="#ide-plugins" class="cta-btn cta-secondary">Install IDE Plugin</a>
+      <a href="https://github.com/shyam-s00/gopher-glide" class="cta-btn cta-secondary" target="_blank" rel="noopener noreferrer">⭐ Star on GitHub</a>
     </div>
-    <a href="/getting-started" class="bento-card bento-small bento-accent">
-      <div class="bento-content">
-        <div class="bento-icon">📚</div>
-        <h3>Read the Docs</h3>
-        <p>Zero to your first load test in under 30 seconds.</p>
-        <span class="bento-link">Get Started &rarr;</span>
-      </div>
-    </a>
   </div>
-</div>
+</section>
 
 <style>
-  .bento-container {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 1rem;
-    max-width: 650px;
-    margin: 1.5rem auto 3rem auto;
+  .closing-cta-wrap {
+    max-width: 960px;
+    margin: 0 auto 3rem auto;
     padding: 0 1.5rem;
   }
-  .bento-column {
+  .closing-cta {
     display: flex;
     flex-direction: column;
+    align-items: center;
+    text-align: center;
     gap: 1rem;
-  }
-  .bento-card {
-    background: var(--gg-glass-bg);
+    padding: 2.25rem 2rem;
+    border-radius: 20px;
+    background:
+      linear-gradient(var(--gg-glass-bg), var(--gg-glass-bg)) padding-box,
+      linear-gradient(var(--sl-color-bg), var(--sl-color-bg)) padding-box,
+      var(--gg-grad) border-box;
+    border: 1.5px solid transparent;
+    box-shadow: 0 12px 44px var(--gg-glass-shadow-hover);
     backdrop-filter: blur(12px);
-    border: 1px solid var(--gg-glass-border);
-    border-radius: 12px;
-    padding: 1.25rem;
-    text-decoration: none;
-    color: inherit;
-    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    box-shadow: 0 4px 20px var(--gg-glass-shadow);
   }
-  .bento-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 12px 40px var(--gg-glass-shadow-hover);
-    border-color: var(--sl-color-accent);
-  }
-  .bento-large {
-    background: linear-gradient(135deg, var(--gg-glass-bg), var(--gg-glass-bg));
-  }
-  .bento-accent {
-    background: linear-gradient(135deg, rgba(198, 160, 246, 0.1), var(--gg-glass-bg));
-    border-color: rgba(198, 160, 246, 0.3);
-  }
-  .bento-icon {
-    font-size: 1.75rem;
-    margin-bottom: 0.5rem;
-  }
-  .bento-content h3 {
-    font-size: 1.25rem;
-    margin-bottom: 0.5rem;
-    color: var(--sl-color-text);
-  }
-  .bento-small .bento-content h3 {
-    font-size: 1rem;
-    margin-bottom: 0.25rem;
-  }
-  .bento-content p {
-    color: var(--sl-color-gray-2);
-    line-height: 1.4;
-    margin-bottom: 1rem;
-    font-size: 0.9rem;
-  }
-  .bento-link {
-    font-size: 0.9rem;
+  .closing-eyebrow {
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     color: var(--sl-color-accent);
-    font-weight: 600;
-    margin-top: auto;
-    display: inline-block;
   }
-  @media (max-width: 768px) {
-    .bento-container {
-      grid-template-columns: 1fr;
-    }
+  .closing-title {
+    margin: 0 !important;
+    font-size: 2.05rem;
+    font-weight: 800;
+    color: var(--sl-color-text);
+    line-height: 1.2;
+  }
+  .closing-subtitle {
+    margin: 0;
+    max-width: 560px;
+    font-size: 1.05rem;
+    line-height: 1.6;
+    color: var(--sl-color-gray-2);
+  }
+  .closing-cmd {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.65rem 1.1rem;
+    border-radius: 10px;
+    background: var(--gg-term-bg);
+    border: 1px solid var(--gg-glass-border);
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .closing-cmd code {
+    font-family: var(--__sl-font-mono, monospace);
+    font-size: 0.9rem;
+    color: var(--gg-term-text);
+    background: none;
+    padding: 0;
+    white-space: nowrap;
+  }
+  .closing-cmd code::before {
+    content: '$ ';
+    color: var(--gg-term-dim);
+  }
+  .closing-copy {
+    padding: 0.22rem 0.65rem;
+    border-radius: 6px;
+    border: 1px solid #494d64;
+    background: transparent;
+    color: #a5adcb;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .closing-copy:hover {
+    color: #c6a0f6;
+    border-color: #c6a0f6;
+  }
+  .closing-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 0.25rem;
+  }
+  .cta-btn {
+    padding: 0.75rem 1.45rem;
+    border-radius: 8px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: transform 0.2s, background 0.2s;
+  }
+  .cta-primary {
+    background: var(--sl-color-accent);
+    color: var(--sl-color-bg);
+  }
+  .cta-primary:hover {
+    background: var(--sl-color-accent-high);
+    transform: translateY(-2px);
+  }
+  .cta-secondary {
+    background: var(--sl-color-bg-nav);
+    color: var(--sl-color-text);
+    border: 1px solid var(--sl-color-hairline);
+  }
+  .cta-secondary:hover {
+    background: var(--sl-color-hairline);
+    transform: translateY(-2px);
+  }
+  @media (max-width: 600px) {
+    .closing-cta { padding: 2.25rem 1.25rem; }
+    .closing-title { font-size: 1.7rem; }
   }
 </style>
+
+<script>
+  const btn = document.getElementById('closing-copy-btn');
+  btn?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText('brew install shyam-s00/tap/gg');
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1600);
+    } catch {
+      btn.textContent = 'Press Ctrl+C';
+    }
+  });
+</script>

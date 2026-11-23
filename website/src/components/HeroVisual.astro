@@ -1,8 +1,4 @@
 ---
-// Faithful-but-compact recreation of the real `gg` TUI (see internal/tui/tui.go
-// and internal/tui/theme.go) — same panel layout, labels, and Catppuccin
-// Macchiato palette as the actual dashboard, so the marketing visual matches
-// what users see on first run.
 const bars = [10, 18, 26, 34, 42, 50, 58, 60, 60, 60, 60, 60, 60, 60, 65, 70, 75, 80, 85, 90, 95, 98, 100, 100];
 const cursor = 13;
 
@@ -38,7 +34,7 @@ const panels: { title: string; rows: Row[] }[] = [
   {
     title: 'LATENCY',
     rows: [
-      { label: 'Min:', value: '50.28ms' },
+      { label: 'Min:', value: '2.14ms' },
       { label: 'P50:', value: '12.40ms' },
       { label: 'P95:', value: '38.10ms' },
       { label: 'P99:', value: '64.70ms' },
@@ -46,48 +42,196 @@ const panels: { title: string; rows: Row[] }[] = [
   },
 ];
 ---
-<div class="hero-visual not-content">
-  <div class="terminal-window">
-    <div class="terminal-bar">
-      <span class="dot red"></span>
-      <span class="dot yellow"></span>
-      <span class="dot green"></span>
-      <span class="terminal-title">gg --http-file checkout.http --profile ramp</span>
-    </div>
-    <div class="terminal-body">
-      <div class="title-pill">Gopher Glide (GG)</div>
+<div class="hero-visual not-content" data-hero-showcase>
+  <div class="showcase-tabs" role="tablist" aria-label="Product views">
+    <button type="button" class="sc-tab active" role="tab" aria-selected="true" data-sc-tab="autopilot">🎯 Autopilot (Find Ceiling)</button>
+    <button type="button" class="sc-tab" role="tab" aria-selected="false" data-sc-tab="tui">⚡ Live Chaos TUI</button>
+    <button type="button" class="sc-tab" role="tab" aria-selected="false" data-sc-tab="agent">🤖 AI Agent (MCP &amp; ACP)</button>
+  </div>
 
-      <div class="panel-grid">{panels.map(p => (
-        <div class="panel"><div class="panel-title">{p.title}</div>{p.rows.map(r => (
-          <div class="row"><span class="label">{r.label}</span> <span class={`value${r.cls ? ' ' + r.cls : ''}`}>{r.value}</span>{r.pulse && <span class="pulse"> ●</span>}</div>
-        ))}</div>
-      ))}</div>
-
-      <div class="stage-plan">
-        <div class="stage-header">
-          <span class="panel-title">STAGE PLAN</span>
-          <span class="stage-meta">
-            target <strong>5000 rps</strong> · actual <span class="success">4825 rps</span> · <span class="highlight">1327 active actors</span>
-          </span>
-        </div>
-        <div class="chart">
-          {bars.map((h, i) => (
-            <div
-              class={`bar ${i === cursor ? 'cursor' : i < cursor ? 'past' : 'future'}`}
-              style={`height: ${h}%`}
-            >
-              {i === cursor && <span class="playhead">▼</span>}
-            </div>
-          ))}
-        </div>
-        <div class="stage-footer">[2/3] Sustain  •  stage 8s / 30s  •  total 38s / 1m30s</div>
+  <!-- TAB 1: AUTOPILOT -->
+  <div class="sc-panel active" data-sc-panel="autopilot">
+    <div class="terminal-window">
+      <div class="terminal-bar">
+        <span class="dot red"></span>
+        <span class="dot yellow"></span>
+        <span class="dot green"></span>
+        <span class="terminal-title">gg --http-file checkout.http --autopilot find-ceiling --max-p99 200ms --snap</span>
       </div>
+      <div class="ap-hero-body">
+        <div class="ap-metrics-row">
+          <div class="ap-stat">
+            <span class="ap-stat-label">MODE</span>
+            <span class="ap-stat-val accent">find-ceiling</span>
+          </div>
+          <div class="ap-stat">
+            <span class="ap-stat-label">BREACH POINT</span>
+            <span class="ap-stat-val error">148 RPS (p99 401ms)</span>
+          </div>
+          <div class="ap-stat">
+            <span class="ap-stat-label">CONFIRMED CEILING</span>
+            <span class="ap-stat-val success">118 RPS (p99 10.2ms)</span>
+          </div>
+          <div class="ap-stat">
+            <span class="ap-stat-label">DURATION / LLM COST</span>
+            <span class="ap-stat-val">37s &middot; $0 (Go)</span>
+          </div>
+        </div>
 
-      <div class="director-bar">
-        <span class="keycap">↑</span><span class="kc-label success">+5 rps</span>
-        <span class="keycap">↓</span><span class="kc-label error">-5 rps</span>
-        <span class="keycap">f</span><span class="kc-label">logs (FAILURES ONLY)</span>
-        <span class="keycap">q</span><span class="kc-label">quit</span>
+        <div class="ap-chart-box">
+          <svg viewBox="0 0 680 185" class="ap-svg" role="img" aria-label="Autopilot stepping load up from 30 to 148 RPS, detecting a p99 latency breach at 401ms, backing off to 118 RPS, and confirming the ceiling">
+            <!-- Grid lines -->
+            <line x1="42" y1="28" x2="660" y2="28" stroke="#363a4f" stroke-dasharray="3 4" />
+            <line x1="42" y1="74" x2="660" y2="74" stroke="#ed8796" stroke-opacity="0.45" stroke-dasharray="4 4" />
+            <line x1="42" y1="120" x2="660" y2="120" stroke="#363a4f" stroke-dasharray="3 4" />
+            <line x1="42" y1="160" x2="660" y2="160" stroke="#494d64" />
+
+            <!-- Threshold label -->
+            <text x="656" y="68" text-anchor="end" fill="#ed8796" font-size="10" font-family="monospace">SLO limit: p99 &le; 200ms</text>
+            <text x="36" y="163" text-anchor="end" fill="#6e738d" font-size="9" font-family="monospace">0</text>
+            <text x="36" y="123" text-anchor="end" fill="#6e738d" font-size="9" font-family="monospace">75</text>
+            <text x="36" y="31" text-anchor="end" fill="#6e738d" font-size="9" font-family="monospace">150</text>
+
+            <!-- RPS Staircase fill -->
+            <polygon
+              points="42,160 42,138 125,138 125,128 208,128 208,108 291,108 291,82 374,82 374,40 448,40 448,82 650,82 650,160"
+              fill="url(#apGrad)"
+              opacity="0.28"
+            />
+            <defs>
+              <linearGradient id="apGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#c6a0f6" />
+                <stop offset="100%" stop-color="#181926" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+
+            <!-- RPS Staircase stroke -->
+            <polyline
+              fill="none"
+              stroke="#c6a0f6"
+              stroke-width="2.5"
+              points="42,138 125,138 125,128 208,128 208,108 291,108 291,82 374,82 374,40 448,40 448,82 650,82"
+            />
+
+            <!-- Windowed P99 latency curve -->
+            <polyline
+              fill="none"
+              stroke="#8aadf4"
+              stroke-width="2"
+              points="42,152 125,152 208,151 291,150 374,149 405,146 426,34 448,42 475,147 560,151 650,151"
+            />
+
+            <!-- Breach marker vertical line -->
+            <line x1="426" y1="22" x2="426" y2="160" stroke="#ed8796" stroke-width="1.5" stroke-dasharray="3 3" />
+            <circle cx="426" cy="34" r="5" fill="#ed8796" />
+            <rect x="330" y="6" width="192" height="20" rx="4" fill="#ed8796" />
+            <text x="426" y="19" text-anchor="middle" fill="#181926" font-size="10" font-weight="700" font-family="monospace">BREACH: 148 RPS (p99 401ms)</text>
+
+            <!-- Confirmed zone highlight -->
+            <rect x="448" y="82" width="202" height="78" fill="#a6da95" opacity="0.08" />
+            <circle cx="650" cy="82" r="4.5" fill="#a6da95" />
+            <rect x="478" y="92" width="166" height="20" rx="4" fill="#24273a" stroke="#a6da95" stroke-width="1" />
+            <text x="561" y="105" text-anchor="middle" fill="#a6da95" font-size="10" font-weight="700" font-family="monospace">&check; CONFIRMED: 118 RPS</text>
+
+            <!-- Step labels -->
+            <text x="82" y="176" text-anchor="middle" fill="#939ab7" font-size="9.5" font-family="monospace">30 RPS</text>
+            <text x="248" y="176" text-anchor="middle" fill="#939ab7" font-size="9.5" font-family="monospace">94 RPS</text>
+            <text x="332" y="176" text-anchor="middle" fill="#939ab7" font-size="9.5" font-family="monospace">118 RPS</text>
+            <text x="412" y="176" text-anchor="middle" fill="#ed8796" font-size="9.5" font-weight="700" font-family="monospace">148 RPS</text>
+            <text x="550" y="176" text-anchor="middle" fill="#a6da95" font-size="9.5" font-weight="700" font-family="monospace">Hold 118 RPS (confirm)</text>
+          </svg>
+        </div>
+
+        <div class="ap-legend">
+          <span><i class="swatch rps"></i> Target RPS</span>
+          <span><i class="swatch p99"></i> Windowed p99</span>
+          <span><i class="swatch breach"></i> Auto-mark &amp; backoff</span>
+          <span class="ap-snap-tag">&#128248; Snapshot &amp; HTML report saved</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: LIVE CHAOS TUI -->
+  <div class="sc-panel" data-sc-panel="tui">
+    <div class="terminal-window">
+      <div class="terminal-bar">
+        <span class="dot red"></span>
+        <span class="dot yellow"></span>
+        <span class="dot green"></span>
+        <span class="terminal-title">gg --http-file checkout.http --profile ramp</span>
+      </div>
+      <div class="terminal-body">
+        <div class="title-pill">Gopher Glide (gg)</div>
+
+        <div class="panel-grid">{panels.map(p => (
+          <div class="panel"><div class="panel-title">{p.title}</div>{p.rows.map(r => (
+            <div class="row"><span class="label">{r.label}</span> <span class={`value${r.cls ? ' ' + r.cls : ''}`}>{r.value}</span>{r.pulse && <span class="pulse"> &#9679;</span>}</div>
+          ))}</div>
+        ))}</div>
+
+        <div class="stage-plan">
+          <div class="stage-header">
+            <span class="panel-title">STAGE PLAN</span>
+            <span class="stage-meta">
+              target <strong>5000 rps</strong> &middot; actual <span class="success">4825 rps</span> &middot; <span class="highlight">1327 active actors</span>
+            </span>
+          </div>
+          <div class="chart">
+            {bars.map((h, i) => (
+              <div
+                class={`bar ${i === cursor ? 'cursor' : i < cursor ? 'past' : 'future'}`}
+                style={`height: ${h}%`}
+              >
+                {i === cursor && <span class="playhead">&#9660;</span>}
+              </div>
+            ))}
+          </div>
+          <div class="stage-footer">[2/3] Sustain &bull; stage 8s / 30s &bull; total 38s / 1m30s</div>
+        </div>
+
+        <div class="director-bar">
+          <span class="keycap">&uarr;</span><span class="kc-label success">+5 rps</span>
+          <span class="keycap">&darr;</span><span class="kc-label error">-5 rps</span>
+          <span class="keycap">f</span><span class="kc-label">logs (FAILURES ONLY)</span>
+          <span class="keycap">q</span><span class="kc-label">quit</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: AI AGENT -->
+  <div class="sc-panel" data-sc-panel="agent">
+    <div class="terminal-window">
+      <div class="terminal-bar">
+        <span class="dot red"></span>
+        <span class="dot yellow"></span>
+        <span class="dot green"></span>
+        <span class="terminal-title">Claude Code / VS Code Copilot / JetBrains Air &middot; gg mcp</span>
+      </div>
+      <div class="agent-hero-body">
+        <div class="agent-leash">
+          <span class="leash-pill">Safety Leash Active</span>
+          <span>max-rps: <strong>300</strong></span>
+          <span>allow-host: <strong>localhost:8080</strong></span>
+          <span>secrets: <strong>redacted</strong></span>
+        </div>
+
+        <div class="agent-prompt">
+          <span class="prompt-badge">YOU</span>
+          <span>Dry-run <code>checkout.http</code>, find the p99 &lt; 200ms ceiling, and check for regressions against <code>v1.4</code>.</span>
+        </div>
+
+        <div class="agent-steps">
+          <div class="agent-step done"><span class="st-icon">&check;</span> <code>validate_http_file</code> &rarr; 3 chained steps valid (<code>token</code> extracted)</div>
+          <div class="agent-step done"><span class="st-icon">&check;</span> <code>run_journey_dry_run</code> &rarr; 3/3 passed (200 OK, secrets masked)</div>
+          <div class="agent-step done"><span class="st-icon">&check;</span> <code>start_simulation</code> (<code>mode=find-ceiling</code>) &rarr; confirmed ceiling <strong>118 RPS</strong></div>
+          <div class="agent-step warn"><span class="st-icon">!</span> <code>snap_diff</code> vs <code>v1.4</code> &rarr; <strong>WARN</strong>: <code>POST /checkout</code> p99 +42ms, <code>items[]</code> grew 4.2x</div>
+        </div>
+
+        <div class="agent-verdict">
+          <strong>Agent Verdict:</strong> Sustainable ceiling is <strong>118 RPS</strong> (down from 165 RPS in <code>v1.4</code>). <code>POST /checkout</code> degraded first; response array <code>items[]</code> grew 4.2x on average. Full report saved to <code>run-report.html</code>.
+        </div>
       </div>
     </div>
   </div>
@@ -97,8 +241,44 @@ const panels: { title: string; rows: Row[] }[] = [
   .hero-visual {
     width: 100%;
   }
+
+  .showcase-tabs {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.35rem;
+    margin-bottom: 1rem;
+    border-radius: 12px;
+    background: var(--gg-glass-bg);
+    border: 1px solid var(--gg-glass-border);
+    backdrop-filter: blur(8px);
+  }
+  .sc-tab {
+    padding: 0.45rem 0.95rem;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--sl-color-gray-2);
+    font-size: 0.84rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .sc-tab:hover {
+    color: var(--sl-color-text);
+  }
+  .sc-tab.active {
+    background: color-mix(in srgb, var(--sl-color-accent) 16%, transparent);
+    border-color: color-mix(in srgb, var(--sl-color-accent) 55%, transparent);
+    color: var(--sl-color-text);
+  }
+
+  .sc-panel { display: none; }
+  .sc-panel.active { display: block; }
+
   .terminal-window {
-    background: #181926; /* Catppuccin Crust */
+    background: #181926;
     border: 1px solid var(--sl-color-hairline);
     border-radius: 12px;
     overflow: hidden;
@@ -108,8 +288,8 @@ const panels: { title: string; rows: Row[] }[] = [
   .terminal-bar {
     display: flex;
     align-items: center;
-    padding: 0.75rem 1rem;
-    background: #1e2030; /* Catppuccin Mantle */
+    padding: 0.7rem 1rem;
+    background: #1e2030;
     border-bottom: 1px solid var(--sl-color-hairline);
   }
   .dot {
@@ -117,6 +297,7 @@ const panels: { title: string; rows: Row[] }[] = [
     height: 11px;
     border-radius: 50%;
     margin-right: 8px;
+    flex-shrink: 0;
   }
   .dot.red { background: #ed8796; }
   .dot.yellow { background: #eed49f; }
@@ -124,11 +305,90 @@ const panels: { title: string; rows: Row[] }[] = [
   .terminal-title {
     margin-left: auto;
     margin-right: auto;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     color: #939ab7;
     font-family: var(--__sl-font-mono, monospace);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
+  /* Tab 1: Autopilot hero */
+  .ap-hero-body {
+    padding: 1.1rem 1.25rem 1rem;
+    font-family: var(--__sl-font-mono, monospace);
+    color: #cad3f5;
+  }
+  .ap-metrics-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.6rem;
+    margin-bottom: 0.9rem;
+  }
+  .ap-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.5rem 0.65rem;
+    border-radius: 8px;
+    background: #1e2030;
+    border: 1px solid #363a4f;
+  }
+  .ap-stat-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.05em;
+    color: #939ab7;
+  }
+  .ap-stat-val {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #cad3f5;
+  }
+  .ap-stat-val.accent { color: #c6a0f6; }
+  .ap-stat-val.error { color: #ed8796; }
+  .ap-stat-val.success { color: #a6da95; }
+
+  .ap-chart-box {
+    border: 1px solid #363a4f;
+    border-radius: 8px;
+    background: #141521;
+    padding: 0.5rem 0.5rem 0.25rem;
+  }
+  .ap-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .ap-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 0.7rem;
+    font-size: 0.72rem;
+    color: #a5adcb;
+  }
+  .ap-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .swatch {
+    display: inline-block;
+    width: 10px;
+    height: 3px;
+    border-radius: 2px;
+  }
+  .swatch.rps { background: #c6a0f6; }
+  .swatch.p99 { background: #8aadf4; }
+  .swatch.breach { background: #ed8796; }
+  .ap-snap-tag {
+    margin-left: auto;
+    color: #a6da95;
+    font-weight: 600;
+  }
+
+  /* Tab 2: TUI */
   .terminal-body {
     padding: 1.25rem;
     font-family: var(--__sl-font-mono, monospace);
@@ -136,7 +396,6 @@ const panels: { title: string; rows: Row[] }[] = [
     line-height: 1.5;
     color: #cad3f5;
   }
-
   .title-pill {
     display: inline-block;
     background: #c6a0f6;
@@ -146,7 +405,6 @@ const panels: { title: string; rows: Row[] }[] = [
     border-radius: 4px;
     margin-bottom: 0.85rem;
   }
-
   .panel-grid {
     display: flex;
     flex-direction: row;
@@ -162,12 +420,11 @@ const panels: { title: string; rows: Row[] }[] = [
     border: 1px solid #494d64;
     border-radius: 6px;
     padding: 0.45rem 0.55rem;
-    min-width: 0;
     font-size: 0;
   }
   .panel-title {
     display: block;
-    font-size: 0.68rem; /* restore from parent's 0 */
+    font-size: 0.68rem;
     color: #c6a0f6;
     font-weight: 700;
     letter-spacing: 0.04em;
@@ -176,29 +433,22 @@ const panels: { title: string; rows: Row[] }[] = [
   }
   .row {
     display: block;
-    font-size: 0.68rem; /* restore from parent's 0 */
+    font-size: 0.68rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .label {
-    color: #a5adcb;
-  }
-  .value {
-    color: #cad3f5;
-    font-weight: 700;
-  }
+  .label { color: #a5adcb; }
+  .value { color: #cad3f5; font-weight: 700; }
   .value.success, .success { color: #a6da95; }
   .value.error, .error { color: #ed8796; }
   .value.highlight, .highlight { color: #eed49f; font-weight: 700; }
-
   .pulse {
     display: inline;
     vertical-align: middle;
     color: #a6da95;
     animation: blink 1.2s ease-in-out infinite;
   }
-
   .stage-plan {
     border: 1px solid #494d64;
     border-radius: 6px;
@@ -212,13 +462,8 @@ const panels: { title: string; rows: Row[] }[] = [
     gap: 0.5rem;
     margin-bottom: 0.5rem;
   }
-  .stage-meta {
-    color: #a5adcb;
-  }
-  .stage-meta strong {
-    color: #cad3f5;
-  }
-
+  .stage-meta { color: #a5adcb; }
+  .stage-meta strong { color: #cad3f5; }
   .chart {
     display: flex;
     align-items: flex-end;
@@ -226,23 +471,10 @@ const panels: { title: string; rows: Row[] }[] = [
     height: 56px;
     margin-bottom: 0.4rem;
   }
-  .bar {
-    flex: 1;
-    position: relative;
-    border-radius: 1px;
-    min-height: 2px;
-  }
-  .bar.past {
-    background: #c6a0f6;
-    opacity: 0.55;
-  }
-  .bar.future {
-    background: #494d64;
-  }
-  .bar.cursor {
-    background: #c6a0f6;
-    animation: surge 2.4s ease-in-out infinite;
-  }
+  .bar { flex: 1; position: relative; border-radius: 1px; min-height: 2px; }
+  .bar.past { background: #c6a0f6; opacity: 0.55; }
+  .bar.future { background: #494d64; }
+  .bar.cursor { background: #c6a0f6; animation: surge 2.4s ease-in-out infinite; }
   .playhead {
     position: absolute;
     top: -1.1em;
@@ -251,11 +483,7 @@ const panels: { title: string; rows: Row[] }[] = [
     color: #c6a0f6;
     font-size: 0.7rem;
   }
-
-  .stage-footer {
-    color: #a5adcb;
-  }
-
+  .stage-footer { color: #a5adcb; }
   .director-bar {
     display: flex;
     flex-wrap: wrap;
@@ -270,26 +498,126 @@ const panels: { title: string; rows: Row[] }[] = [
     padding: 0.1rem 0.4rem;
     border-radius: 3px;
   }
-  .kc-label {
-    margin-right: 0.5rem;
+  .kc-label { margin-right: 0.5rem; }
+
+  /* Tab 3: Agent */
+  .agent-hero-body {
+    padding: 1.15rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    color: #cad3f5;
+    font-size: 0.85rem;
+  }
+  .agent-leash {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    background: #1e2030;
+    border: 1px solid #363a4f;
+    font-family: var(--__sl-font-mono, monospace);
+    font-size: 0.74rem;
+    color: #a5adcb;
+  }
+  .leash-pill {
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(166, 218, 149, 0.15);
+    border: 1px solid #a6da95;
+    color: #a6da95;
+    font-weight: 700;
+  }
+  .agent-prompt {
+    display: flex;
+    align-items: baseline;
+    gap: 0.65rem;
+    padding: 0.65rem 0.85rem;
+    border-radius: 8px;
+    background: #24273a;
+    border: 1px solid #363a4f;
+    line-height: 1.5;
+  }
+  .prompt-badge {
+    flex-shrink: 0;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    background: #c6a0f6;
+    color: #181926;
+    font-size: 0.68rem;
+    font-weight: 800;
+  }
+  .agent-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    font-family: var(--__sl-font-mono, monospace);
+    font-size: 0.76rem;
+  }
+  .agent-step {
+    padding: 0.45rem 0.7rem;
+    border-radius: 6px;
+    background: #141521;
+    border-left: 3px solid #a6da95;
+    color: #cad3f5;
+  }
+  .agent-step.warn {
+    border-left-color: #eed49f;
+  }
+  .agent-step .st-icon {
+    display: inline-block;
+    width: 1rem;
+    font-weight: 800;
+    color: #a6da95;
+  }
+  .agent-step.warn .st-icon {
+    color: #eed49f;
+  }
+  .agent-verdict {
+    padding: 0.7rem 0.85rem;
+    border-radius: 8px;
+    background: rgba(138, 173, 244, 0.1);
+    border: 1px solid rgba(138, 173, 244, 0.35);
+    line-height: 1.55;
+    font-size: 0.84rem;
+  }
+  .agent-hero-body code {
+    background: #363a4f;
+    color: #f5f7ff;
+    padding: 0.08rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.78rem;
   }
 
-  @keyframes surge {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
-  }
-  @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-  }
+  @keyframes surge { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
+  @media (max-width: 720px) {
+    .ap-metrics-row { grid-template-columns: repeat(2, 1fr); }
+    .ap-snap-tag { margin-left: 0; }
+  }
   @media (max-width: 540px) {
-    .terminal-body {
-      font-size: 0.62rem;
-      padding: 1rem;
-    }
-    .chart {
-      height: 44px;
-    }
+    .terminal-body { font-size: 0.62rem; padding: 1rem; }
+    .chart { height: 44px; }
   }
 </style>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-hero-showcase]').forEach((wrap) => {
+    const tabs = wrap.querySelectorAll<HTMLButtonElement>('[data-sc-tab]');
+    const panels = wrap.querySelectorAll<HTMLElement>('[data-sc-panel]');
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const key = tab.dataset.scTab;
+        tabs.forEach((t) => {
+          const active = t.dataset.scTab === key;
+          t.classList.toggle('active', active);
+          t.setAttribute('aria-selected', String(active));
+        });
+        panels.forEach((p) => p.classList.toggle('active', p.dataset.scPanel === key));
+      });
+    });
+  });
+</script>

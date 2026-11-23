@@ -6,7 +6,7 @@ Typical load testing tools report basic metrics at the end of a run (e.g., P99 l
 
 Instead of just outputting numbers, `gg` captures a replayable **Behavioral Profiling Snapshot** of your API under load. By continuously sampling your API's responses during a load phase, `gg` records latency, status distributions, and intelligently infers the actual *semantic shape* (JSON schema) of the payloads returned. 
 
-This enables **Semantic Diffing** and automated **Time-Travel Regression Triage**—allowing you to explicitly measure not just *when* your API slows down, but *how* its behavior and response shape dynamically change under pressure.
+This enables **Semantic Diffing** and automated **Time-Travel Regression Triage**, allowing you to explicitly measure not just *when* your API slows down, but *how* its behavior and response shape dynamically change under pressure.
 
 ---
 
@@ -76,15 +76,15 @@ gg snap view v1-baseline
 
 ### Manual bias & marks in the raw file
 
-If a run was manually nudged — a live RPS bias via `↑`/`↓` in the TUI, or a `bias`/`mark` command sent over the [Live Control Protocol](/control-protocol) — and `--snap` was set, that's captured in the snapshot's `meta` object too:
+If a run was manually nudged (a live RPS bias via `↑`/`↓` in the TUI, or a `bias`/`mark` command sent over the [Live Control Protocol](/control-protocol)) and `--snap` was set, that's captured in the snapshot's `meta` object too:
 
-- `marks` — labeled, timestamped annotations you sent during the run (e.g. `"deploy-v2-canary"` at `t+12.4s`), listed in order of `elapsed_s`. A mark sent with an explicit `elapsed_s` sits at that moment, not at the moment `gg` received it.
-- `bias_events` — the full timeline of manual RPS nudges: each entry's `amount`, the `cumulative` value at that point, and `elapsed_s`.
-- `final_bias` — the cumulative bias in effect when the run ended (`0` if nobody touched it).
+- `marks`: labeled, timestamped annotations you sent during the run (e.g. `"deploy-v2-canary"` at `t+12.4s`), listed in order of `elapsed_s`. A mark sent with an explicit `elapsed_s` sits at that moment, not at the moment `gg` received it.
+- `bias_events`: the full timeline of manual RPS nudges: each entry's `amount`, the `cumulative` value at that point, and `elapsed_s`.
+- `final_bias`: the cumulative bias in effect when the run ended (`0` if nobody touched it).
 
 From v1.5, every mark and bias event can also carry a `source` (`user`, `agent` or `autopilot`), recorded when the command said who issued it; the TUI's arrow keys count as `user`. Pinned rates (`hold` and `release`) are saved as `hold_events`, and a run that used the built-in [autopilot](/autopilot) stores its mode, outcome, ceiling, settings and decisions under `autopilot`. Older snapshots simply lack these fields and still load.
 
-All three are additive — only present when `--snap` was set for that run — and today they're written to the file but not yet rendered by `gg snap view` or `gg snap diff`. Until that lands, `jq '.meta.bias_events, .meta.final_bias' your.snap` is the way to check whether a run was manually biased. A run that got `+30` at 8 s and `-20` at 19 s with a mark in between looks like:
+All three are additive (only present when `--snap` was set for that run) and today they're written to the file but not yet rendered by `gg snap view` or `gg snap diff`. Until that lands, `jq '.meta.bias_events, .meta.final_bias' your.snap` is the way to check whether a run was manually biased. A run that got `+30` at 8 s and `-20` at 19 s with a mark in between looks like:
 
 ```json
 {"final_bias":10,"marks":[{"label":"deploy-v2","elapsed_s":14.0}],"bias_events":[{"amount":30,"cumulative":30,"elapsed_s":8.0},{"amount":-20,"cumulative":10,"elapsed_s":19.0}]}
@@ -111,7 +111,7 @@ The diff engine compares the Baseline (first argument) against the Current (seco
 
 Green, yellow, and red borders make it easy to instantly see which endpoints **Passed**, received a **Warning**, or suffered a **Regression**.
 
-Before trusting a latency delta as a real regression, check both snapshots' `final_bias`/`bias_events` (see [Manual bias & marks](#manual-bias--marks-in-the-raw-file) above) — the command-line diff doesn't surface this, but the [IDE plugins'](/plugin) Snap Diff shows a notice when either run had manual changes. A nonzero `final_bias` means a human was leaning on the RPS throttle, not a code change.
+Before trusting a latency delta as a real regression, check both snapshots' `final_bias`/`bias_events` (see [Manual bias & marks](#manual-bias--marks-in-the-raw-file) above): the command-line diff doesn't surface this, but the [IDE plugins'](/plugin) Snap Diff shows a notice when either run had manual changes. A nonzero `final_bias` means a human was leaning on the RPS throttle, not a code change.
 
 ---
 
@@ -136,7 +136,7 @@ gg snap assert --baseline main --current pr-123 \
 - `--error-rate-delta 0.05`: Triggers a failure if the error rate increases by an absolute 5 percentage points.
 - `--payload-size-delta 50`: Triggers a warning if payload sizes increase by 50%.
 - `--deny-removed-fields`: Ensures backward compatibility. If any JSON fields are removed from the payload output, it fails the build.
-- `--max-array-bloat 30`: Triggers a failure if an array field's average length grows by more than 30% versus the baseline — the classic symptom of a missing or broken pagination limit. Disabled by default (`0`).
+- `--max-array-bloat 30`: Triggers a failure if an array field's average length grows by more than 30% versus the baseline: the classic symptom of a missing or broken pagination limit. Disabled by default (`0`).
 - `--fail-on-warn`: Upgrades all warnings (like payload growth) into hard pipeline failures.
 
 ### Headless execution (`--headless`)

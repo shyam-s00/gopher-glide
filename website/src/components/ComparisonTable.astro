@@ -2,37 +2,49 @@
 const rows = [
   {
     feature: 'Scripting',
-    gg: 'None (Reads .http natively)',
+    gg: 'None (Reuses .http files natively)',
     k6: 'JavaScript / Python',
     wrk: 'None (CLI flags only)',
   },
   {
-    feature: 'Traffic Control',
-    gg: 'Live TUI, IDE panel, scripted commands',
-    k6: 'Requires configs',
-    wrk: 'Fixed concurrency only',
-  },
-  {
     feature: 'Finding the limit',
-    gg: 'One command: --autopilot find-ceiling',
-    k6: 'Write a ramp script and read the graphs',
-    wrk: 'Rerun at higher settings by hand',
+    gg: 'Built-in Autopilot (--autopilot find-ceiling & slo-guard)',
+    k6: 'Hand-write ramp scripts & read graphs',
+    wrk: 'Re-run manually at higher concurrency',
   },
   {
-    feature: 'AI agents',
-    gg: 'Built-in MCP server and ACP agent, with safety caps',
+    feature: 'IDE Experience',
+    gg: 'Native JetBrains & VS Code Run Dashboard + Diff UI',
+    k6: 'Terminal / Web cloud only',
+    wrk: 'Terminal only',
+  },
+  {
+    feature: 'AI Agents',
+    gg: 'Built-in MCP (11 tools) & ACP agent with hard safety caps',
     k6: 'Not built in',
     wrk: 'Not built in',
   },
   {
-    feature: 'CI/CD Assertions',
-    gg: 'Semantic JSON Diffing + Array Bloat Detection',
-    k6: 'Pass/Fail Thresholds',
-    wrk: 'Raw latencies only',
+    feature: 'Live Traffic Control',
+    gg: 'Live TUI, IDE panel, pinned rates, markers & stdin LCP',
+    k6: 'Static stage configs',
+    wrk: 'Fixed concurrency only',
+  },
+  {
+    feature: 'Regression Gating',
+    gg: 'Semantic JSON Schema Diffing + Array Bloat Detection',
+    k6: 'Latency & error thresholds',
+    wrk: 'Raw latency numbers only',
+  },
+  {
+    feature: 'Shareable Reports',
+    gg: 'Self-contained HTML & Markdown Mission Reports (free)',
+    k6: 'Paid cloud dashboard or plugins',
+    wrk: 'Raw stdout text',
   },
   {
     feature: 'Performance',
-    gg: '30k+ RPS',
+    gg: '30,000+ RPS · 40% less RAM than k6',
     k6: 'Medium-High',
     wrk: 'Extremely High',
   },
@@ -44,9 +56,9 @@ const rows = [
     <table>
       <colgroup>
         <col style="width: 18%" />
-        <col style="width: 32%" />
-        <col style="width: 25%" />
-        <col style="width: 25%" />
+        <col style="width: 34%" />
+        <col style="width: 24%" />
+        <col style="width: 24%" />
       </colgroup>
       <thead>
         <tr>
@@ -72,12 +84,12 @@ const rows = [
 
 <style>
   .compare-section {
-    padding: 4rem 2rem;
+    padding: 2.25rem 2rem;
   }
   h2 {
-    font-size: 2.25rem;
+    font-size: 2.05rem;
     text-align: center;
-    margin-bottom: 3rem;
+    margin: 0 0 1.5rem 0 !important;
   }
   .compare-wrap {
     overflow-x: auto;
@@ -85,11 +97,12 @@ const rows = [
     backdrop-filter: blur(12px);
     border: 1px solid var(--gg-glass-border);
     border-radius: 12px;
-    padding: 2rem;
+    padding: 1.5rem 2rem;
     box-shadow: 0 8px 32px var(--gg-glass-shadow);
   }
   table {
     width: 100%;
+    min-width: 640px;
     table-layout: fixed;
     border-collapse: collapse;
     text-align: left;
@@ -114,8 +127,10 @@ const rows = [
     border-bottom: none;
   }
   td {
-    padding: 1.5rem 1rem;
+    padding: 1.15rem 1rem;
     color: var(--sl-color-gray-3);
+    font-size: 0.95rem;
+    line-height: 1.45;
   }
   td.cell-gg {
     color: var(--sl-color-text);

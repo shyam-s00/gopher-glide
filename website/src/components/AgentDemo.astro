@@ -1,36 +1,40 @@
 ---
 import Terminal from './Terminal.astro';
-// Captured from a real `gg autopilot --acp` session driven over the protocol (no API key set), abridged.
 ---
-<div class="acp">
+<div class="agent-demo not-content">
+  <p class="ag-meta">Works with no API key on slash commands</p>
   <Terminal title="gg autopilot --acp (no API key)" label="A real ACP session: the client sends the find-ceiling slash command and receives a plan, tool calls and a result">
-<pre class="wire"><span class="dim">← </span><b>available_commands_update</b>
+<pre class="wire"><span class="dim">&larr; </span><b>available_commands_update</b>
 <span class="dim">     </span>/dry-run  /find-ceiling  /slo-guard
-<span class="dim">→ </span><b>session/prompt</b>
+<span class="dim">&rarr; </span><b>session/prompt</b>
 <span class="dim">     </span><span class="acc">/find-ceiling api.http max_p99=200 start_rps=30</span>
 <span class="dim">     </span><span class="acc">max_rps=300</span>
-<span class="dim">← </span><b>plan</b>       start · watch · report
-<span class="dim">← </span><b>tool_call</b>  start_simulation <span class="dim">mode=find-ceiling</span>
-<span class="dim">← </span><b>tool_call</b>  get_live_telemetry <span class="dim">wait_s=5</span>
-<span class="dim">     × 12, the last one reports</span> <span class="ok">ceiling_found, 118 RPS</span>
-<span class="dim">← </span><b>tool_call</b>  stop_simulation <span class="dim">report=md</span>
-<span class="dim">← </span><b>agent_message_chunk</b>
+<span class="dim">&larr; </span><b>plan</b>       start &middot; watch &middot; report
+<span class="dim">&larr; </span><b>tool_call</b>  start_simulation <span class="dim">mode=find-ceiling</span>
+<span class="dim">&larr; </span><b>tool_call</b>  get_live_telemetry <span class="dim">wait_s=5</span>
+<span class="dim">     &times; 12, the last one reports</span> <span class="ok">ceiling_found, 118 RPS</span>
+<span class="dim">&larr; </span><b>tool_call</b>  stop_simulation <span class="dim">report=md</span>
+<span class="dim">&larr; </span><b>agent_message_chunk</b>
 <span class="dim">     </span>/find-ceiling on api.http: run finished
 <span class="dim">     </span>- ceiling: <b>118 RPS</b> (ceiling_found)
-<span class="dim">     </span>- reason: ceiling confirmed at 118 RPS
-<span class="dim">     </span>- 4847 requests, error rate 0.02%,
-<span class="dim">       </span>p50 9 ms, p95 401 ms, p99 401 ms
-<span class="dim">     </span>- snapshot: …/run-20261117-014920.snap
-<span class="dim">     </span>- report: …/run-20261117-014920.report.md
-<span class="dim">← </span><b>stopReason</b>  end_turn</pre>
+<span class="dim">     </span>- 4847 requests, error rate 0.02%, p50 9 ms
+<span class="dim">     </span>- snapshot: .../run-20261117-014920.snap
+<span class="dim">&larr; </span><b>stopReason</b>  end_turn</pre>
   </Terminal>
-  <p class="caption">A real session, abridged. Any ACP client renders these updates as a plan, tool cards and a message.</p>
+
+  <p class="caption">Real session captured from <code>gg autopilot --acp</code>: the exact protocol updates the client receives.</p>
 </div>
 
 <style>
-  .acp { width: 100%; }
+  .agent-demo { width: 100%; }
+  .ag-meta {
+    margin: 0 0 0.7rem;
+    font-size: 0.76rem;
+    color: var(--sl-color-gray-3);
+    text-align: right;
+  }
   .wire { margin: 0; white-space: pre-wrap; word-break: break-word; font: inherit; line-height: 1.65; background: none; padding: 0; }
-  .acp :global(.term-body) { font-size: 0.74rem; }
+  .agent-demo :global(.term-body) { font-size: 0.74rem; }
   .caption {
     margin: 0.75rem 0 0;
     font-size: 0.85rem;

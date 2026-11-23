@@ -1,13 +1,21 @@
 ---
 import Terminal from './Terminal.astro';
 
-// Captured from a real run of the command below against a local service that slows down past ~120 RPS.
-// Lines are verbatim gg output; "…" marks lines left out. Only the snapshot path is shortened.
 const command = 'gg --headless --http-file api.http --autopilot find-ceiling --max-p99 200ms --start-rps 30 --step-interval 3s --confirm-hold 6s --snap';
 
-type L = { t: string; text: string; kind?: 'ap' | 'bad' | 'ok' | 'gap' | 'mark' };
+type Step = { rps: string; p99: string; state: 'ok' | 'bad' | 'confirm'; label: string; note: string };
+const steps: Step[] = [
+  { rps: '30 RPS', p99: '10ms', state: 'ok', label: 'Start', note: 'Healthy (0.00% errors), stepping up +25%' },
+  { rps: '48 RPS', p99: '10ms', state: 'ok', label: 'Step', note: 'Healthy on fresh 3s window, stepping up' },
+  { rps: '94 RPS', p99: '9ms', state: 'ok', label: 'Step', note: 'Healthy, stepping to 118 RPS' },
+  { rps: '118 RPS', p99: '10ms', state: 'ok', label: 'Step', note: 'Healthy, stepping to 148 RPS' },
+  { rps: '148 RPS', p99: '401ms', state: 'bad', label: 'Breach', note: 'p99 > 200ms limit! Auto-marked & backing off to 118 RPS' },
+  { rps: '118 RPS', p99: '10ms', state: 'confirm', label: 'Confirmed', note: 'Held 6s with clean fresh window. Ceiling: 118 RPS' },
+];
+
+type L = { t: string; text: string; kind?: 'ap' | 'bad' | 'ok' | 'gap' };
 const lines: L[] = [
-  { t: '01:47:28Z', text: 'Load test started — 1 stage(s)' },
+  { t: '01:47:28Z', text: 'Load test started (1 stage)' },
   { t: '01:47:28Z', text: 'autopilot stepping: starting at 30 RPS', kind: 'ap' },
   { t: '01:47:30Z', text: 'stage=1/1  target=30 rps  actual=30.0 rps  reqs=60  errors=0.00%  p50=9.3ms  p95=9.7ms  p99=10.3ms' },
   { t: '01:47:31Z', text: 'autopilot stepping: healthy at 30 RPS (p99=10ms, errors=0.00%); stepping to 38', kind: 'ap' },
@@ -18,32 +26,217 @@ const lines: L[] = [
   { t: '01:47:56Z', text: 'stage=1/1  target=148 rps  actual=148.0 rps  reqs=2197  errors=0.00%  p50=9.3ms  p95=401.0ms  p99=401.4ms' },
   { t: '01:47:56Z', text: 'autopilot breached: Autopilot: ceiling breached at 148 RPS (p99=401ms > 200ms); backing off to 118 RPS', kind: 'bad' },
   { t: '01:47:56Z', text: 'autopilot confirming: confirming 118 RPS for 6s', kind: 'ap' },
-  { t: '01:48:02Z', text: 'stage=1/1  target=118 rps  actual=118.0 rps  reqs=2905  errors=0.00%  p50=9.3ms  p95=401.0ms  p99=401.4ms' },
   { t: '01:48:03Z', text: 'autopilot done: ceiling confirmed at 118 RPS', kind: 'ok' },
-  { t: '01:48:03Z', text: '✓ Snapshot saved → …/docs-demo-20261117-014803.snap' },
+  { t: '01:48:03Z', text: '✓ Snapshot saved -> .../docs-demo-20261117-014803.snap' },
 ];
-let i = 0;
+let idx = 0;
 ---
-<div class="ap-demo" data-ap-demo>
-  <Terminal title="headless output of a real run" label="Real headless output of gg finding a capacity ceiling of 118 requests per second">
-    <div class="cmd"><span class="dim">$ </span>{command}</div>
-    <div class="log">
-      {lines.map((l) => (
-        l.kind === 'gap'
-          ? <div class="line gap dim" style={`--i:${i++}`}>…</div>
-          : (
-            <div class={`line ${l.kind ?? ''}`} style={`--i:${i++}`}>
-              <span class="dim">[2026-11-17T{l.t}]</span>{' '}{l.text}
-            </div>
-          )
-      ))}
+<div class="ap-demo not-content" data-ap-toggle>
+  <div class="ap-bar">
+    <div class="ap-tabs" role="tablist" aria-label="Autopilot demo view">
+      <button type="button" class="ap-tab active" role="tab" aria-selected="true" data-tab="visual">Mission Timeline</button>
+      <button type="button" class="ap-tab" role="tab" aria-selected="false" data-tab="raw">Raw CLI Output</button>
     </div>
-  </Terminal>
-  <p class="caption">What <code>gg --headless</code> prints, abridged: the real run found 118 RPS in 37 seconds. In a terminal you get the live TUI instead; in the IDE, a dashboard.</p>
+    <span class="ap-badge">Real run &middot; 37s &middot; 2,905 reqs</span>
+  </div>
+
+  <!-- Visual Mission Timeline -->
+  <div class="ap-view active" data-panel="visual">
+    <div class="mission-card">
+      <div class="mission-cmd"><span class="dim">$ </span>{command}</div>
+
+      <div class="timeline-steps">
+        {steps.map((s, i) => (
+          <div class={`t-step ${s.state}`} style={`--i:${i}`}>
+            <div class="t-left">
+              <span class="t-pill">{s.label}</span>
+              <span class="t-rps">{s.rps}</span>
+            </div>
+            <div class="t-mid">
+              <span class="t-note">{s.note}</span>
+            </div>
+            <div class="t-right">
+              <span class="t-p99">p99: <strong>{s.p99}</strong></span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div class="mission-footer">
+        <div class="mf-verdict">
+          <span class="mf-check">&check;</span>
+          <span><strong>Ceiling confirmed at 118 RPS</strong> (windowed p99: 10ms, errors: 0.00%)</span>
+        </div>
+        <span class="mf-artifact">Snapshot + HTML report saved</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Raw CLI Log -->
+  <div class="ap-view" data-panel="raw">
+    <Terminal title="headless output of a real run" label="Real headless output of gg finding a capacity ceiling of 118 requests per second">
+      <div class="cmd"><span class="dim">$ </span>{command}</div>
+      <div class="log">
+        {lines.map((l) => (
+          l.kind === 'gap'
+            ? <div class="line gap dim" style={`--i:${idx++}`}>&hellip;</div>
+            : (
+              <div class={`line ${l.kind ?? ''}`} style={`--i:${idx++}`}>
+                <span class="dim">[2026-11-17T{l.t}]</span>{' '}{l.text}
+              </div>
+            )
+        ))}
+      </div>
+    </Terminal>
+  </div>
+
+  <p class="caption">Recorded from a real run against a local service with a latency knee above ~120 RPS. Runs live in the TUI, headless in CI, or inside the IDE dashboard.</p>
 </div>
 
 <style>
   .ap-demo { width: 100%; }
+  .ap-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .ap-tabs {
+    display: inline-flex;
+    gap: 0.35rem;
+    padding: 0.25rem;
+    border-radius: 10px;
+    background: var(--gg-glass-bg);
+    border: 1px solid var(--gg-glass-border);
+  }
+  .ap-tab {
+    padding: 0.35rem 0.8rem;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--sl-color-gray-2);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .ap-tab.active {
+    background: var(--sl-color-accent);
+    color: var(--sl-color-bg);
+  }
+  .ap-badge {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--sl-color-gray-2);
+    font-family: var(--__sl-font-mono, monospace);
+  }
+
+  .ap-view { display: none; }
+  .ap-view.active { display: block; }
+
+  .mission-card {
+    background: #181926;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 12px;
+    padding: 1.25rem;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
+    color: #cad3f5;
+  }
+  .mission-cmd {
+    font-family: var(--__sl-font-mono, monospace);
+    font-size: 0.76rem;
+    color: #f5f7ff;
+    padding: 0.6rem 0.8rem;
+    margin-bottom: 1rem;
+    border-radius: 8px;
+    background: #141521;
+    border: 1px solid #363a4f;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .dim { color: #6e738d; }
+
+  .timeline-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .t-step {
+    display: grid;
+    grid-template-columns: 165px 1fr 115px;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: 8px;
+    background: #1e2030;
+    border-left: 3px solid #8aadf4;
+    font-size: 0.84rem;
+  }
+  .t-step.bad {
+    background: rgba(237, 135, 150, 0.12);
+    border-left-color: #ed8796;
+  }
+  .t-step.confirm {
+    background: rgba(166, 218, 149, 0.12);
+    border-left-color: #a6da95;
+  }
+  .t-left {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-family: var(--__sl-font-mono, monospace);
+  }
+  .t-pill {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 0.12rem 0.45rem;
+    border-radius: 4px;
+    background: #363a4f;
+    color: #cad3f5;
+  }
+  .t-step.bad .t-pill { background: #ed8796; color: #181926; }
+  .t-step.confirm .t-pill { background: #a6da95; color: #181926; }
+  .t-rps { font-weight: 700; color: #f5f7ff; font-size: 0.82rem; }
+  .t-note { color: #a5adcb; font-size: 0.83rem; }
+  .t-step.bad .t-note { color: #f5c2e7; font-weight: 600; }
+  .t-step.confirm .t-note { color: #a6da95; font-weight: 600; }
+  .t-right {
+    text-align: right;
+    font-family: var(--__sl-font-mono, monospace);
+    font-size: 0.78rem;
+    color: #a5adcb;
+  }
+  .t-step.bad .t-right strong { color: #ed8796; }
+  .t-step.confirm .t-right strong { color: #a6da95; }
+
+  .mission-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid #363a4f;
+    font-size: 0.85rem;
+  }
+  .mf-verdict {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #a6da95;
+  }
+  .mf-check { font-weight: 800; }
+  .mf-artifact {
+    font-family: var(--__sl-font-mono, monospace);
+    font-size: 0.75rem;
+    color: #c6a0f6;
+  }
+
+  /* Raw terminal styles */
   .cmd { white-space: pre-wrap; word-break: break-all; margin-bottom: 0.8rem; color: #f5f7ff; }
   .log { display: flex; flex-direction: column; }
   .line { white-space: pre; }
@@ -51,8 +244,8 @@ let i = 0;
   .line.ap { color: #8aadf4; }
   .line.bad { color: #ed8796; font-weight: 700; }
   .line.ok { color: #a6da95; font-weight: 700; }
-  .line.ap :global(.dim), .line.bad :global(.dim), .line.ok :global(.dim) { color: var(--gg-term-dim); font-weight: 400; }
   .ap-demo :global(.term-body) { font-size: 0.74rem; }
+
   .caption {
     margin: 0.75rem 0 0;
     font-size: 0.85rem;
@@ -60,25 +253,26 @@ let i = 0;
     text-align: center;
   }
 
-  /* Reveal line by line once on screen. Without JS everything is simply visible. */
-  .ap-demo[data-armed] .line { opacity: 0; }
-  .ap-demo[data-play] .line {
-    animation: ap-in 0.3s ease forwards;
-    animation-delay: calc(var(--i) * 0.22s);
+  @media (max-width: 700px) {
+    .t-step { grid-template-columns: 1fr; gap: 0.3rem; }
+    .t-right { text-align: left; }
   }
-  @keyframes ap-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 </style>
 
 <script>
-  document.querySelectorAll<HTMLElement>('[data-ap-demo]').forEach((el) => {
-    if (!('IntersectionObserver' in window)) return;
-    el.setAttribute('data-armed', '');
-    const io = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) {
-        el.setAttribute('data-play', '');
-        io.disconnect();
-      }
-    }, { threshold: 0.3 });
-    io.observe(el);
+  document.querySelectorAll<HTMLElement>('[data-ap-toggle]').forEach((wrap) => {
+    const tabs = wrap.querySelectorAll<HTMLButtonElement>('[data-tab]');
+    const panels = wrap.querySelectorAll<HTMLElement>('[data-panel]');
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const key = tab.dataset.tab;
+        tabs.forEach((t) => {
+          const active = t.dataset.tab === key;
+          t.classList.toggle('active', active);
+          t.setAttribute('aria-selected', String(active));
+        });
+        panels.forEach((p) => p.classList.toggle('active', p.dataset.panel === key));
+      });
+    });
   });
 </script>
