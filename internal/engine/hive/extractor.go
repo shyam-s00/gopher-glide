@@ -184,3 +184,25 @@ func extractRegex(body []byte, re *regexp.Regexp, pattern string) (string, error
 	}
 	return string(matches[0]), nil
 }
+
+// ValidateJSONPath checks path syntax without a body, so authoring tools can
+// flag typos before a run. It accepts exactly what extractJSONPath can resolve.
+func ValidateJSONPath(path string) error {
+	path = strings.TrimPrefix(path, "$")
+	path = strings.TrimPrefix(path, ".")
+	if path == "" {
+		return nil
+	}
+	for _, seg := range splitPath(path) {
+		if seg == "" {
+			return fmt.Errorf("empty path segment (check for a doubled or trailing '.')")
+		}
+		if strings.ContainsAny(seg, "[]") {
+			_, key, ok := parseArraySegment(seg)
+			if !ok || strings.ContainsAny(key, "[]") {
+				return fmt.Errorf("segment %q: use a single index like name[0]", seg)
+			}
+		}
+	}
+	return nil
+}

@@ -10,7 +10,19 @@ const faqs = [
   },
   {
     q: 'How much load can a single instance generate?',
-    a: 'Thanks to the lock-free Hive Engine, a single Gopher-Glide instance can comfortably push over 30,000 RPS (Requests Per Second) on modern hardware without exhausting system memory or triggering garbage collection pauses.',
+    a: 'Thanks to the lock-free Hive Engine, a single Gopher-Glide instance can comfortably push over 30,000 RPS (Requests Per Second) on modern hardware without exhausting system memory or triggering garbage collection pauses. Make sure your target can sustain that rate too: a server that cannot withstand 30k RPS will hit its own limits long before gg hits its, and the numbers you measure will describe the target, not the load generator.',
+  },
+  {
+    q: 'What is the autopilot, and does it cost anything?',
+    a: 'The autopilot is a built-in controller. Run gg with --autopilot find-ceiling and it steps the load up, judges each step on fresh data, backs off when your p99 or error limit breaks, confirms the rate it settled on and reports it. With --autopilot slo-guard it defends an SLO during a traffic profile instead. It is plain Go code with no model involved, so it is free and reacts within about a second.',
+  },
+  {
+    q: 'How do AI agents fit in?',
+    a: 'gg ships an MCP server (gg mcp) that Claude Code, Cursor, VS Code Copilot and JetBrains agents can use to validate a .http file, dry-run it, run a load test, read live telemetry, steer and compare snapshots. gg mcp init sets it up in one command. gg autopilot adds three ready-made agents (generate, run, triage) that work with Gemini or any local OpenAI-compatible model such as Ollama, and an ACP agent for JetBrains and Zed whose slash commands work without an API key.',
+  },
+  {
+    q: 'Is it safe to let an agent drive load tests?',
+    a: 'The server enforces limits an agent cannot talk its way past: a maximum RPS, a maximum duration, a cap on concurrent runs and an optional host allowlist. Secrets are masked in dry runs, HTTP mode refuses to listen beyond loopback without a token, and an agent cannot steer a run you started from your IDE unless you allow it. Still, load tests send real traffic, so point agents at services you own.',
   },
   {
     q: 'Can I run this in my CI/CD pipeline?',
@@ -18,7 +30,12 @@ const faqs = [
   },
 ];
 ---
-<div class="faq-section">
+<script is:inline type="application/ld+json" set:html={JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+})} />
+<div class="faq-section" id="faq">
   <h2>Frequently Asked Questions</h2>
   {faqs.map((faq) => (
     <details>
@@ -30,14 +47,14 @@ const faqs = [
 
 <style>
   .faq-section {
-    padding: 2rem 2rem 6rem 2rem;
+    padding: 2rem 2rem 3rem 2rem;
     max-width: 1000px;
     margin: 0 auto;
   }
   h2 {
-    font-size: 2.25rem;
+    font-size: 2.05rem;
     text-align: center;
-    margin-bottom: 2.5rem;
+    margin: 0 0 1.5rem 0 !important;
   }
   details {
     background: var(--gg-glass-bg);

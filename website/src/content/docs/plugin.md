@@ -1,9 +1,8 @@
 ---
 title: "IDE Plugins"
 ---
-# IDE Integration
 
-Gopher Glide ships official plugins for both **JetBrains** and **VS Code** (including Open VSX-compatible editors). Both plugins bring the complete `gg` workflow — running traffic simulations, recording and comparing Snapshots, gating CI on regressions — directly into your editor with a native run dashboard and a full Snap Explorer, no terminal required.
+Gopher Glide ships official plugins for both **JetBrains** and **VS Code** (including Open VSX-compatible editors). Both plugins bring the complete `gg` workflow (running traffic simulations, recording and comparing Snapshots, gating CI on regressions) directly into your editor with a native run dashboard and a full Snap Explorer, no terminal required.
 
 ---
 
@@ -15,9 +14,9 @@ Verified on IntelliJ IDEA, GoLand, WebStorm, Rider, PyCharm Community, PhpStorm,
 
 ### ⚡ Quick Start
 
-1. Install the plugin — if no `gg` binary is found, the plugin offers to download it for you the moment you open a project.
+1. Install the plugin: if no `gg` binary is found, the plugin offers to download it for you the moment you open a project.
 2. Open any `.http` file and click the **Run GG** gutter icon (or right-click → **Gopher Glide (GG) → Run**).
-3. Pick a load profile from the popup — optionally override peak RPS/duration and tick **Record snapshot**.
+3. Pick a load profile from the popup: optionally override peak RPS/duration and tick **Record snapshot**.
 4. Watch it run live in the **Gopher Glide** tool window at the bottom of the IDE.
 5. Switch to the **Snaps** tab to view, diff, assert, or prune recorded snapshots.
 
@@ -26,12 +25,12 @@ Verified on IntelliJ IDEA, GoLand, WebStorm, Rider, PyCharm Community, PhpStorm,
 The plugin adds gutter run icons and a right-click **Gopher Glide (GG)** menu (Project View, Editor, and Editor Tab) to your config and `.http` files. The menu is grouped into **Run**, **Generate**, and **CI** sections.
 
 **On `.http` files:**
-- **Run GG** — opens a profile picker covering all **21 built-in load profiles**, grouped by category. Picking a profile opens a dialog pre-filled with that profile's default peak RPS and duration — override as needed — plus a **Record snapshot** checkbox with an optional tag.
-- **Run GG (Config)** — only shown when the `.http` file has a sibling `.gg.yaml`; runs that config directly.
-- **Generate config.yaml...** — scaffolds a starter `.gg.yaml` for the file without running anything.
+- **Run GG**: opens a profile picker covering all **21 built-in load profiles**, grouped by category. Picking a profile opens a dialog pre-filled with that profile's default peak RPS and duration (override as needed) plus a **Record snapshot** checkbox with an optional tag.
+- **Run GG (Config)**: only shown when the `.http` file has a sibling `.gg.yaml`; runs that config directly.
+- **Generate config.yaml...**: scaffolds a starter `.gg.yaml` for the file without running anything.
 
 **On `.gg.yaml` files:**
-- **Run GG** — prompts for optional snapshot recording (with a tag), then runs the config as-is.
+- **Run GG**: prompts for optional snapshot recording (with a tag), then runs the config as-is.
 
 ### 🖥 Native Run Dashboard
 
@@ -41,13 +40,15 @@ While a simulation runs, the **Run** tab of the **Gopher Glide** tool window upd
 - A row of metric cards: **Target RPS**, **Actual RPS**, **Error Rate**, and **Total Requests**
 - A **P50 / P95 / P99** latency card
 - A scaled **RPS chart**
-- A **stage timeline** — a horizontal progress bar with segment widths proportional to each stage's actual duration
-- A **Stop** action that ends the run cleanly — `gg` finishes writing the snapshot first. If it doesn't answer, the plugin interrupts it, and a second click forces it to end.
+- A **stage timeline**: a horizontal progress bar with segment widths proportional to each stage's actual duration
+- A **Stop** action that ends the run cleanly: `gg` finishes writing the snapshot first. If it doesn't answer, the plugin interrupts it, and a second click forces it to end.
 
 **Live control** (JetBrains plugin 7.0+, `gg` v1.3.0+) adds a strip above the metric cards while a run is in progress:
-- **Bias** — **−10 / −5 / +5 / +10** change the target RPS without stopping the run; **Reset** returns to the planned rate. The badge shows the bias `gg` reports.
-- **Mark…** — drop a named marker at the current point of the run. A mark is stamped when you confirm its label.
+- **Bias**: **−10 / −5 / +5 / +10** change the target RPS without stopping the run; **Reset** returns to the planned rate. The badge shows the bias `gg` reports.
+- **Mark…**: drop a named marker at the current point of the run. A mark is stamped when you confirm its label.
 - Bias changes and marks are drawn on the RPS chart, and both are recorded in the snapshot.
+
+**Failure breakdown** (`gg` v1.5.0+): each heartbeat can carry an `error_mix` object saying what kind of failures are happening right now: connection errors, 4xx, 5xx, extraction failures and the top status codes. The plugins don't display it yet; they ignore it safely. See the [Live Control Protocol](/control-protocol#-heartbeat-additions).
 
 With an older `gg`, the strip is replaced by a short notice that names the installed version and offers to install or upgrade it. The run itself works as before.
 
@@ -55,14 +56,14 @@ With an older `gg`, the strip is replaced by a short notice that names the insta
 
 ### 🗂 Snap Explorer
 
-The **Snaps** tab is a full native UI for managing Snapshots — list, view, diff, assert, and prune.
+The **Snaps** tab is a full native UI for managing Snapshots: list, view, diff, assert, and prune.
 
 Toolbar actions:
-- **Refresh** — reload the snapshot list from disk.
-- **View Detail** — inspect a snapshot. The detailed view provides an **Endpoint Breakdown** (Error Rate, P95, Payload Avg) and a dedicated **Inferred JSON Schema** viewer showing the precise `Type`, `Presence %`, and `Stability` of every field observed during the run. For runs recorded with `gg` v1.3.0+, a **Manual changes** section lists every mark and bias change in time order, with final bias, peak bias, how long a bias was in effect, and when the first change happened.
-- **Compare (Diff)** — semantically diff two snapshots side-by-side (select exactly two rows). The diff UI automatically flags **Configuration mismatches** (e.g., if you diff a baseline run with a different config hash) and highlights specific schema regressions, such as a field's presence dropping from 100% to 19% under heavy load. When either run had marks or bias changes made by hand, a one-line notice says so, since those runs may not be like for like.
-- **Assert...** — run `gg snap assert` between any two snapshots against configurable thresholds.
-- **Prune...** — clean up old snapshots by ID(s), tag, keep-last count, or age (e.g. `30d`) — with a dry-run preview by default.
+- **Refresh**: reload the snapshot list from disk.
+- **View Detail**: inspect a snapshot. The detailed view provides an **Endpoint Breakdown** (Error Rate, P95, Payload Avg) and a dedicated **Inferred JSON Schema** viewer showing the precise `Type`, `Presence %`, and `Stability` of every field observed during the run. For runs recorded with `gg` v1.3.0+, a **Manual changes** section lists every mark and bias change in time order, with final bias, peak bias, how long a bias was in effect, and when the first change happened.
+- **Compare (Diff)**: semantically diff two snapshots side-by-side (select exactly two rows). The diff UI automatically flags **Configuration mismatches** (e.g., if you diff a baseline run with a different config hash) and highlights specific schema regressions, such as a field's presence dropping from 100% to 19% under heavy load. When either run had marks or bias changes made by hand, a one-line notice says so, since those runs may not be like for like.
+- **Assert...**: run `gg snap assert` between any two snapshots against configurable thresholds.
+- **Prune...**: clean up old snapshots by ID(s), tag, keep-last count, or age (e.g. `30d`): with a dry-run preview by default.
 
 ![Native snapshot detail view showing inferred JSON schema stability and presence](/assets/plugin-snap-view.png)
 
@@ -76,10 +77,10 @@ Toolbar actions:
 
 Available under **Settings / Preferences → Tools → Gopher Glide**:
 - Set a **custom `gg` binary path** or **custom snapshots directory**.
-- **Run panel refresh interval** — controls the `--heartbeat-interval` passed to `gg`.
-- **Check for Updates** / **Install Gopher Glide** — one-click binary management with download progress.
-- **Check for gg updates on startup** — on by default; looks for a newer release at most once a day and shows one notification with **Update Now**, **Open Settings** and **Skip This Version**. It stays quiet when you're offline, already current, or use a custom binary path.
-- **Copy Diagnostics to Clipboard** — useful when filing a bug report.
+- **Run panel refresh interval**: controls the `--heartbeat-interval` passed to `gg`.
+- **Check for Updates** / **Install Gopher Glide**: one-click binary management with download progress.
+- **Check for gg updates on startup**: on by default; looks for a newer release at most once a day and shows one notification with **Update Now**, **Open Settings** and **Skip This Version**. It stays quiet when you're offline, already current, or use a custom binary path.
+- **Copy Diagnostics to Clipboard**: useful when filing a bug report.
 
 ### Compatibility
 
@@ -96,17 +97,17 @@ Compatible with VS Code `1.120.0+` and any Open VSX-compatible editor (VSCodium,
 
 ### ⚡ Quick Start
 
-1. Install the extension — if no `gg` binary is found, it downloads one automatically on first use.
-2. Open any `.http` or `.rest` file — a **Run** button appears in the editor title bar and a CodeLens link appears inline above each request.
+1. Install the extension: if no `gg` binary is found, it downloads one automatically on first use.
+2. Open any `.http` or `.rest` file: a **Run** button appears in the editor title bar and a CodeLens link appears inline above each request.
 3. Pick a load profile from the Quick Pick (or let the extension use your `gg.defaultProfile` setting).
-4. Watch it run in the **Gopher Glide** panel at the bottom of the editor — and steer it live from there (see [Live control](#live-control-in-vs-code)).
+4. Watch it run in the **Gopher Glide** panel at the bottom of the editor: and steer it live from there (see [Live control](#live-control-in-vs-code)).
 5. Switch to the **Snaps** tree view to browse, diff, and assert snapshots.
 
 ### ▶️ Running Traffic Simulations
 
 Entry points on `.http` / `.rest` files:
-- **Editor title bar play button** — one click to run with a profile picker.
-- **CodeLens** — inline run/config links above each request block.
+- **Editor title bar play button**: one click to run with a profile picker.
+- **CodeLens**: inline run/config links above each request block.
 - **Right-click context menu** (Editor and Explorer) → **Gopher Glide** submenu.
 
 On `.gg.yaml` files, the context menu shows **Run (Config)** to run the config directly.
@@ -121,7 +122,7 @@ The **Gopher Glide** panel at the bottom of the editor shows a live webview upda
 - Target/Actual RPS, Error Rate, Total Requests
 - P50 / P95 / P99 latency percentiles
 - Live RPS chart and stage timeline
-- A **Stop** button that ends the run cleanly — `gg` finishes writing the snapshot first. If `gg` is stuck, the button becomes **Force Stop**.
+- A **Stop** button that ends the run cleanly: `gg` finishes writing the snapshot first. If `gg` is stuck, the button becomes **Force Stop**.
 
 ![Gopher Glide run dashboard in VS Code: live RPS chart with bias ticks and mark lines, the Director Bias bar and metric cards](/assets/vscode-run-view.png)
 
@@ -129,9 +130,9 @@ The **Gopher Glide** panel at the bottom of the editor shows a live webview upda
 
 *(VS Code extension 3.0+, `gg` v1.3.0+.)* A control bar sits above the chart while a run is in progress:
 
-- **Director Bias** — **−10 / −5 / +5 / +10** change the target RPS without stopping the run; **Reset** returns to the planned rate. The badge shows the total bias in effect. `gg` applies a change within about a second, and the chart follows at the next heartbeat (set `gg.heartbeatIntervalSeconds` lower for snappier feedback).
-- **Drop Mark** — asks for a label (for example `cache-cleared`) and drops a named marker at the current point of the run. A mark is stamped when `gg` receives it, which is when you confirm the label.
-- Bias changes and marks are drawn on the RPS chart — ticks on the target line, labeled dashed lines for marks — and both are recorded in the snapshot.
+- **Director Bias**: **−10 / −5 / +5 / +10** change the target RPS without stopping the run; **Reset** returns to the planned rate. The badge shows the total bias in effect. `gg` applies a change within about a second, and the chart follows at the next heartbeat (set `gg.heartbeatIntervalSeconds` lower for snappier feedback).
+- **Drop Mark**: asks for a label (for example `cache-cleared`) and drops a named marker at the current point of the run. A mark is stamped when `gg` receives it, which is when you confirm the label.
+- Bias changes and marks are drawn on the RPS chart (ticks on the target line, labeled dashed lines for marks) and both are recorded in the snapshot.
 - **Stop** asks `gg` to finish the run itself, so a `--snap` snapshot is written with every bias change and mark. While `gg` wraps up the button reads *Stopping…* and then turns into **Force Stop**; a double-click can't accidentally cut off a snapshot being written.
 
 With an older `gg`, the controls are replaced by a short notice naming the installed version, with the next step that fits how `gg` was installed: **Update gg** for the copy the extension manages, **Install managed gg** if yours comes from `$PATH`, or **Open Settings** if you picked a custom binary or use `pathOnly` mode. The run itself works as before.
@@ -140,9 +141,9 @@ With an older `gg`, the controls are replaced by a short notice naming the insta
 
 The **Snaps** tree view in the panel sidebar lets you:
 - **View** a snapshot's endpoint breakdown (latency, status distribution, response schema). For runs recorded with `gg` v1.3.0+, a **Manual changes** section lists every mark and bias change in time order, with final bias, peak bias, how long a bias was in effect, and when the first change happened. Snapshots from older versions say that marks and bias changes were not recorded.
-- **Diff** any two snapshots — select two entries and click **Diff Snapshots**. When either run had marks or bias changes made by hand, a one-line notice says so, since those runs may not be like for like.
-- **Assert** — run `gg snap assert` as a CI-style gate with configurable thresholds.
-- **Prune** — clean up old snapshots by ID, tag, or age.
+- **Diff** any two snapshots: select two entries and click **Diff Snapshots**. When either run had marks or bias changes made by hand, a one-line notice says so, since those runs may not be like for like.
+- **Assert**: run `gg snap assert` as a CI-style gate with configurable thresholds.
+- **Prune**: clean up old snapshots by ID, tag, or age.
 
 ![Snapshot view in VS Code with the Manual changes list, bias figures and inferred JSON schema](/assets/vscode-snap-view.png)
 
@@ -150,8 +151,8 @@ The **Snaps** tree view in the panel sidebar lets you:
 
 ### 🔗 Smart YAML Editing
 
-- **Schema validation & autocomplete** for `.gg.yaml` files — stages, snapshot tuning, and built-in profile names.
-- **Go-to-file navigation** — `Ctrl+Click` / `Cmd+Click` a `httpFile:` path to jump to the referenced `.http` file.
+- **Schema validation & autocomplete** for `.gg.yaml` files: stages, snapshot tuning, and built-in profile names.
+- **Go-to-file navigation**: `Ctrl+Click` / `Cmd+Click` a `httpFile:` path to jump to the referenced `.http` file.
 
 ### ⚙️ Extension Settings
 
@@ -174,9 +175,13 @@ The **Snaps** tree view in the panel sidebar lets you:
 
 ## 🎛 Live Control Protocol
 
-Both plugins already talk to `gg` over its headless heartbeat stream. As of v1.3, that stream is two-way: `gg --headless` accepts commands over stdin — `bias`, `mark`, `stop` — and replies inline, without killing the process. See [Driving a Run Live](/live-control) to try it by hand and the [Live Control Protocol](/control-protocol) for the full spec. Both the JetBrains plugin (7.0+) and the VS Code extension (3.0+) are built on it: the run dashboard drives `bias`, `mark` and `stop` live, and a clean Stop keeps the snapshot.
+Both plugins already talk to `gg` over its headless heartbeat stream. As of v1.3, that stream is two-way: `gg --headless` accepts commands over stdin (`bias`, `mark`, `stop`) and replies inline, without killing the process. See [Driving a Run Live](/live-control) to try it by hand and the [Live Control Protocol](/control-protocol) for the full spec. Both the JetBrains plugin (7.0+) and the VS Code extension (3.0+) are built on it: the run dashboard drives `bias`, `mark` and `stop` live, and a clean Stop keeps the snapshot.
 
-**A note for anyone building their own tooling on the protocol:** it carries a generic signed `amount` for bias, not a fixed ±5 step — the widget is a UI decision, not a protocol one. Both plugins use a **stepper (± buttons)** for parity with the TUI's `↑`/`↓` feel; a slider is a reasonable alternative using the exact same command, just **debounce drag events** (throttle to a few per second) — the request rate only changes once a second, so one command per pixel of drag adds noise without adding precision.
+**Coming next: agents and the IDE share one run.** gg v1.5 adds a daemon mode (`gg mcp --port`) that streams every run, including ones an AI agent starts, to a plugin over server-sent events, with Stop and bias controls staying in the plugin. The plugin releases that use it follow gg v1.5. The protocol is documented now for tool builders: [The IDE bridge](/control-protocol#the-ide-bridge). Until then, [`gg mcp init`](/mcp#one-command) and [`gg autopilot`](/autopilot) work alongside the plugins.
+
+**Marks with a confirm step:** a `mark` can carry the offset captured when the user clicked (`elapsed_s`, `gg` v1.5.0+), so a slow label dialog doesn't shift the mark later in the run. Send it only when the `started` event's `capabilities` contains `control.mark.elapsed`; otherwise send the mark without it. Details in [For plugin authors: marks with a confirm step](/control-protocol#-for-plugin-authors-marks-with-a-confirm-step).
+
+**A note for anyone building their own tooling on the protocol:** it carries a generic signed `amount` for bias, not a fixed ±5 step (the widget is a UI decision, not a protocol one. Both plugins use a **stepper (± buttons)** for parity with the TUI's `↑`/`↓` feel; a slider is a reasonable alternative using the exact same command, just **debounce drag events** (throttle to a few per second)) the request rate only changes once a second, so one command per pixel of drag adds noise without adding precision.
 
 ---
 

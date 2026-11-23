@@ -1,5 +1,7 @@
 package hive
 
+import "github.com/shyam-s00/gopher-glide/internal/engine"
+
 // ApplyBias adds a signed RPS delta to the cumulative bias. The new value is
 // visible to GetBias immediately; the Queen folds it into the target rate at
 // the start of its next 1-second window. Never blocks or drops a delta.
@@ -20,3 +22,24 @@ func (e *Engine) GetBias() int {
 func (e *Engine) SetTargetRPS(rps int) {
 	e.targetRPS.Store(int64(rps))
 }
+
+// HoldRPS pins the target rate at rps (clamped to >= 1), ignoring the stage
+// schedule and bias. The Queen reads it once per window, so it lands within 1 s.
+func (e *Engine) HoldRPS(rps int) {
+	if rps < 1 {
+		rps = 1
+	}
+	e.rpsHold.Store(int64(rps))
+}
+
+// ReleaseHold clears the hold; the schedule resumes wherever the stage clock is.
+func (e *Engine) ReleaseHold() {
+	e.rpsHold.Store(0)
+}
+
+// GetHoldRPS returns the pinned rate, or 0 when no hold is active.
+func (e *Engine) GetHoldRPS() int {
+	return int(e.rpsHold.Load())
+}
+
+var _ engine.Holder = (*Engine)(nil)

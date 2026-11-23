@@ -195,10 +195,18 @@ func diffEndpoint(id string, base, curr EndpointSnap, opts DiffOptions) Endpoint
 		PayloadDelta:   diffPayload(base.PayloadSize, curr.PayloadSize),
 		StatusDelta:    diffStatusDist(base.StatusDist, curr.StatusDist),
 		ErrorRateDelta: curr.ErrorRate - base.ErrorRate,
-		SchemaChanges:  diffSchema(base.Schema, curr.Schema, opts),
+	}
+	if !schemaUnknown(base) && !schemaUnknown(curr) {
+		d.SchemaChanges = diffSchema(base.Schema, curr.Schema, opts)
 	}
 	d.Verdict = calcVerdict(d, opts)
 	return d
+}
+
+// schemaUnknown reports an endpoint that kept no body samples, so a missing
+// schema means "never observed" rather than "no fields".
+func schemaUnknown(ep EndpointSnap) bool {
+	return (ep.Schema == nil || len(ep.Schema.Fields) == 0) && ep.BodySamplesStored == 0
 }
 
 func diffLatency(base, curr LatencyStats) LatencyDelta {

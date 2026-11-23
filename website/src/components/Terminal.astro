@@ -1,0 +1,65 @@
+---
+// A dark terminal window. Slot content can use the .ok .warn .err .dim .acc .info classes.
+export interface Props {
+  title?: string;
+  label?: string;
+}
+const { title = 'gg', label = 'Terminal output' } = Astro.props;
+---
+<div class="term not-content" role="img" aria-label={label}>
+  <div class="term-bar">
+    <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+    <span class="term-title">{title}</span>
+  </div>
+  <div class="term-body"><slot /></div>
+</div>
+
+<style>
+  .term {
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--gg-term-bg);
+    border: 1px solid var(--gg-glass-border);
+    box-shadow: 0 18px 50px var(--gg-glass-shadow);
+    text-align: left;
+    margin: 0;
+  }
+  .term-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.6rem 0.85rem;
+    background: var(--gg-term-bar);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .red { background: #ed8796; }
+  .yellow { background: #eed49f; }
+  .green { background: #a6da95; }
+  .term-title {
+    flex: 1;
+    text-align: center;
+    margin-right: 2.2rem;
+    font-size: 0.72rem;
+    color: var(--gg-term-dim);
+    font-family: var(--__sl-font-mono, monospace);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .term-body {
+    padding: 1rem 1.1rem 1.1rem;
+    font-family: var(--__sl-font-mono, monospace);
+    font-size: 0.78rem;
+    line-height: 1.7;
+    color: var(--gg-term-text);
+    overflow-x: auto;
+  }
+  .term-body :global(.dim) { color: var(--gg-term-dim); }
+  .term-body :global(.ok) { color: #a6da95; }
+  .term-body :global(.warn) { color: #eed49f; }
+  .term-body :global(.err) { color: #ed8796; }
+  .term-body :global(.acc) { color: #c6a0f6; }
+  .term-body :global(.info) { color: #8aadf4; }
+  .term-body :global(b) { color: #f5f7ff; font-weight: 700; }
+</style>

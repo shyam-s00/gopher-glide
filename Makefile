@@ -1,4 +1,4 @@
-## gg — Gopher Glide
+## Gopher Glide (gg)
 ## Local build script. Mirrors exactly what the GHA release workflow does.
 ##
 ## Usage:

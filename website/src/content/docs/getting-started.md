@@ -1,9 +1,9 @@
 ---
 title: "Getting Started"
-description: "Install gg and run your first traffic simulation in under 30 seconds."
+description: "Install gg, run your first traffic simulation in under 30 seconds, then let the autopilot find your capacity ceiling."
 ---
 
-Get up and running with `gg` in three steps. It works with **any backend** (Node, Python, Java, .NET, Rails, Rust, Go, anything that speaks HTTP), so there's nothing to add to your app.
+Get up and running with `gg` in three steps, then let it find your ceiling. It works with **any backend** (Node, Python, Java, .NET, Rails, Rust, Go, anything that speaks HTTP), so there's nothing to add to your app.
 
 ## 1. Install
 
@@ -35,6 +35,26 @@ gg --profile flash-sale --http-file api.http
 ```
 
 You'll drop straight into the interactive Chaos TUI, where you can monitor latencies and adjust load in real-time with the arrow keys.
+
+---
+
+## 4. Try the autopilot
+
+Don't know how much traffic your service can take? Let `gg` find out. It steps the load up, watches latency and errors, backs off when your limits break and reports the highest rate that held:
+
+```bash
+gg --http-file api.http --autopilot find-ceiling --max-p99 200ms --max-rps 300 --snap
+```
+
+Point it at a service you own. It sends real traffic. [How it works &rarr;](/autopilot)
+
+## 5. Bring in an AI agent
+
+```bash
+gg mcp init        # connects Claude Code, Cursor, VS Code Copilot and JetBrains agents to gg
+```
+
+Then ask your agent to validate, run and judge a load test, bounded by the caps you set. [AI Agents (MCP) &rarr;](/mcp)
 
 ---
 

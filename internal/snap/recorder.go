@@ -4,11 +4,14 @@
 package snap
 
 import (
+	"cmp"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand/v2"
 	"net/http"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -62,6 +65,10 @@ type RunMeta struct {
 	// --snap wasn't paired with any control activity.
 	Marks      []Mark
 	BiasEvents []BiasEvent
+	// HoldEvents are the rate pins and releases applied during the run.
+	HoldEvents []HoldEvent
+	// Autopilot is the built-in controller's result, nil when none ran.
+	Autopilot *AutopilotMeta
 
 	// FinalBias is the engine's cumulative bias, read by the caller right
 	// before Finalize.
@@ -72,15 +79,44 @@ type RunMeta struct {
 // SnapMeta.Marks at finalize.
 type Mark struct {
 	Label    string  `json:"label"`
-	ElapsedS float64 `json:"elapsed_s"` // run-relative offset from run start
+	ElapsedS float64 `json:"elapsed_s"`        // run-relative offset from run start
+	Source   string  `json:"source,omitempty"` // who added it: user | agent | autopilot; empty when unattributed
 }
 
 // BiasEvent is one recorded LCP bias command (headless "bias" or the TUI's
 // arrow-key nudge), threaded into RunMeta → SnapMeta.BiasEvents at finalize.
 type BiasEvent struct {
-	Amount     int     `json:"amount"`     // the delta this command applied
-	Cumulative int     `json:"cumulative"` // eng.GetBias() after the delta, same value as the ack
-	ElapsedS   float64 `json:"elapsed_s"`  // run-relative offset, same convention as Mark
+	Amount     int     `json:"amount"`           // the delta this command applied
+	Cumulative int     `json:"cumulative"`       // eng.GetBias() after the delta, same value as the ack
+	ElapsedS   float64 `json:"elapsed_s"`        // run-relative offset, same convention as Mark
+	Source     string  `json:"source,omitempty"` // who applied it, same values as Mark.Source
+}
+
+// HoldEvent is one rate pin (RPS > 0) or release (Released) applied during the run.
+type HoldEvent struct {
+	RPS      int     `json:"rps,omitempty"`
+	Released bool    `json:"released,omitempty"`
+	ElapsedS float64 `json:"elapsed_s"`
+	Source   string  `json:"source,omitempty"`
+}
+
+// AutopilotEvent is one state change of the built-in autopilot.
+type AutopilotEvent struct {
+	State      string  `json:"state"`
+	HoldRPS    int     `json:"hold_rps,omitempty"`
+	Reason     string  `json:"reason,omitempty"`
+	CeilingRPS int     `json:"ceiling_rps,omitempty"`
+	Outcome    string  `json:"outcome,omitempty"`
+	ElapsedS   float64 `json:"elapsed_s"`
+}
+
+// AutopilotMeta records what the built-in autopilot did during a run.
+type AutopilotMeta struct {
+	Mode       string           `json:"mode"`
+	Outcome    string           `json:"outcome"`
+	CeilingRPS int              `json:"ceiling_rps,omitempty"`
+	Params     json.RawMessage  `json:"params,omitempty"`
+	Events     []AutopilotEvent `json:"events,omitempty"`
 }
 
 // Snapshot is the complete behavioral fingerprint of a single load test run.
@@ -115,6 +151,9 @@ type SnapMeta struct {
 	// Both omitempty: absent unless the run actually had control activity.
 	Marks      []Mark      `json:"marks,omitempty"`
 	BiasEvents []BiasEvent `json:"bias_events,omitempty"`
+	HoldEvents []HoldEvent `json:"hold_events,omitempty"`
+	// Autopilot is present only when the built-in autopilot ran.
+	Autopilot *AutopilotMeta `json:"autopilot,omitempty"`
 }
 
 // SnapSettings records the effective tuning parameters used when producing
@@ -472,8 +511,10 @@ func (r *DefaultRecorder) Finalize(meta RunMeta) (*Snapshot, error) {
 				MaxBodyKB:  meta.MaxBodyKB,
 			},
 			FinalBias:  meta.FinalBias,
-			Marks:      meta.Marks,
+			Marks:      sortedMarks(meta.Marks),
 			BiasEvents: meta.BiasEvents,
+			HoldEvents: meta.HoldEvents,
+			Autopilot:  meta.Autopilot,
 		},
 	}
 
@@ -494,6 +535,18 @@ func (r *DefaultRecorder) Finalize(meta RunMeta) (*Snapshot, error) {
 	snap.Meta.TotalRequests = totalRequests
 
 	return snap, nil
+}
+
+// sortedMarks returns marks ordered by ElapsedS (equal offsets keep arrival
+// order) without touching the caller's slice. Client-supplied offsets can
+// arrive out of order.
+func sortedMarks(marks []Mark) []Mark {
+	if len(marks) == 0 {
+		return nil
+	}
+	out := slices.Clone(marks)
+	slices.SortStableFunc(out, func(a, b Mark) int { return cmp.Compare(a.ElapsedS, b.ElapsedS) })
+	return out
 }
 
 // Dropped returns the number of RecordEntry values dropped due to a full

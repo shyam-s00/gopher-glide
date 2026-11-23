@@ -1,7 +1,6 @@
 ---
 title: "Benchmarks"
 ---
-# Hive Engine: Performance Benchmarks
 
 > These numbers measure the load generator (`gg` itself), not your API. What the service under test is written in doesn't change them; it only changes how much of this headroom your backend can absorb.
 
@@ -58,7 +57,7 @@ Because `k6` scales concurrency by spinning up embedded JavaScript Virtual Machi
 | **Context Switches** (Involuntary) | **1.16 Million** | 3.16 Million | `gg` suffers **almost 3x fewer** OS context switches |
 | **Page Faults** (Memory) | **0** | 363 | `gg` achieves perfect memory localization |
 
-* **The Takeaway:** Gopher Glide requires roughly **80 MB** of additional RAM to double its throughput from 5k to 10k RPS, while `k6` requires an additional **332 MB**. Furthermore, because `gg` uses Go's user-space M:N scheduling (Goroutines) and zero-allocation hot paths, it drastically reduces kernel syscalls and OS context switching. This ensures your CI/CD runner is dedicated to pushing network traffic—not fighting a JavaScript VM's garbage collector.
+* **The Takeaway:** Gopher Glide requires roughly **80 MB** of additional RAM to double its throughput from 5k to 10k RPS, while `k6` requires an additional **332 MB**. Furthermore, because `gg` uses Go's user-space M:N scheduling (Goroutines) and zero-allocation hot paths, it drastically reduces kernel syscalls and OS context switching. This ensures your CI/CD runner is dedicated to pushing network traffic, not fighting a JavaScript VM's garbage collector.
 
 ---
 
@@ -66,7 +65,7 @@ Because `k6` scales concurrency by spinning up embedded JavaScript Virtual Machi
 
 While the previous section showed how efficient `gg` is under normal load, this benchmark tests what happens when the target server **fails**.
 
-Because `k6` operates as a traditional "Closed Model" load tester, it scales concurrency by blindly hammering the target server until it hits a wall. Gopher Glide operates as a true "Open Model" with mathematical **Adaptive Backpressure**—it natively protects the target server from catastrophic deadlocks.
+Because `k6` operates as a traditional "Closed Model" load tester, it scales concurrency by blindly hammering the target server until it hits a wall. Gopher Glide operates as a true "Open Model" with mathematical **Adaptive Backpressure**, it natively protects the target server from catastrophic deadlocks.
 
 In a saturation test pushing an impossible target of **30,000 RPS** (attempting ~900k total requests over 30 seconds), both engines correctly identified the physical limit of the target NGINX server (delivering exactly ~92,000 requests to the network before the server choked). However, the *outcomes* were vastly different:
 
@@ -140,7 +139,7 @@ The Hive Engine features a "Smooth Dispatcher" that perfectly paces requests acr
 > **Reproduce this:** `go test -bench=BenchmarkDispatch_ -run='^$' -benchtime=2s ./internal/engine/hive/...`
 > **Source:** [`internal/engine/hive/bench_test.go`]
 
-* **Real-world impact:** Many load testers suffer from "micro-bursting"—if asked for 100 RPS, they fire 100 requests in the first 10ms and sleep for 990ms, overwhelming the target server's buffers and skewing latency metrics. The Hive Engine guarantees steady, uniform traffic distribution across the entire second.
+* **Real-world impact:** Many load testers suffer from "micro-bursting", if asked for 100 RPS, they fire 100 requests in the first 10ms and sleep for 990ms, overwhelming the target server's buffers and skewing latency metrics. The Hive Engine guarantees steady, uniform traffic distribution across the entire second.
 
 **Visualization (Target: 100 RPS)**
 ```text

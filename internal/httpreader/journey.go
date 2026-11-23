@@ -1,6 +1,9 @@
 package httpreader
 
-import "regexp"
+import (
+	"regexp"
+	"sort"
+)
 
 // journeyVarPattern matches {{varName}} placeholders used for actor-memory
 // variable injection. Dynamic placeholders such as {{$uuid}}, {{$timestamp}},
@@ -99,4 +102,16 @@ func Flatten(journeys []Journey) []RequestSpec {
 		specs = append(specs, j.Specs...)
 	}
 	return specs
+}
+
+// ReferencedVars returns the sorted {{name}} variables spec uses in its URL,
+// headers and body. Dynamic {{$...}} placeholders are not variables.
+func ReferencedVars(spec RequestSpec) []string {
+	set := referencedVars(spec)
+	names := make([]string, 0, len(set))
+	for n := range set {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
 }

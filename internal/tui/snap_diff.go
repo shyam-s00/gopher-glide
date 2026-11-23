@@ -165,7 +165,7 @@ func (m snapDiffModel) renderHeader() string {
 	)
 
 	return lipgloss.JoinVertical(lipgloss.Left,
-		titleStyle.Render("Gopher Glide (GG) — Snapshot Diff"),
+		titleStyle.Render("Gopher Glide (gg) — Snapshot Diff"),
 		lipgloss.JoinHorizontal(lipgloss.Top,
 			boxStyle.Render(baseBox),
 			boxStyle.Render(currBox),

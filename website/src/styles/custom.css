@@ -24,7 +24,7 @@
 	--sl-color-hairline-shade: #bcc0cc;
 	--sl-color-backdrop-overlay: rgba(230, 233, 239, 0.5);
 
-	/* Glass panels (StatsRow, BentoGrid, GlassFeatureRow, tables, FAQ) */
+	/* Glass panels (BentoGrid, GlassFeatureRow, tables, FAQ) */
 	--gg-glass-bg: rgba(255, 255, 255, 0.6);
 	--gg-glass-border: rgba(76, 79, 105, 0.15);
 	--gg-glass-shadow: rgba(76, 79, 105, 0.1);
@@ -55,9 +55,76 @@
 	--sl-color-hairline-shade: #181926;
 	--sl-color-backdrop-overlay: rgba(24, 25, 38, 0.5);
 
-	/* Glass panels (StatsRow, BentoGrid, GlassFeatureRow, tables, FAQ) */
+	/* Glass panels (BentoGrid, GlassFeatureRow, tables, FAQ) */
 	--gg-glass-bg: rgba(30, 32, 48, 0.4);
 	--gg-glass-border: var(--sl-color-hairline);
 	--gg-glass-shadow: rgba(0, 0, 0, 0.3);
 	--gg-glass-shadow-hover: rgba(198, 160, 246, 0.15);
+}
+
+/* Shared tokens and polish ------------------------------------------------ */
+:root {
+	--gg-radius: 14px;
+	--gg-grad: linear-gradient(135deg, #c6a0f6 0%, #8aadf4 55%, #91d7e3 100%);
+	--gg-ok: #a6da95;
+	--gg-warn: #eed49f;
+	--gg-err: #ed8796;
+	--gg-info: #8aadf4;
+	--gg-term-bg: #181926;
+	--gg-term-bar: #1e2030;
+	--gg-term-text: #cad3f5;
+	--gg-term-dim: #6e738d;
+}
+:root[data-theme='light'] {
+	--gg-grad: linear-gradient(135deg, #8839ef 0%, #1e66f5 60%, #04a5e5 100%);
+	--gg-ok: #40a02b;
+	--gg-warn: #df8e1d;
+	--gg-err: #d20f39;
+	--gg-info: #1e66f5;
+	/* Terminals stay dark in both themes, like a real terminal. */
+	--gg-term-bg: #1e2030;
+	--gg-term-bar: #24273a;
+	--gg-term-text: #cad3f5;
+	--gg-term-dim: #8087a2;
+}
+html {
+	scroll-behavior: smooth;
+}
+::selection {
+	background: color-mix(in srgb, var(--sl-color-accent) 35%, transparent);
+}
+:focus-visible {
+	outline: 2px solid var(--sl-color-accent);
+	outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+	html {
+		scroll-behavior: auto;
+	}
+	*, *::before, *::after {
+		animation-duration: 0.001ms !important;
+		animation-delay: 0ms !important;
+		transition-duration: 0.001ms !important;
+	}
+}
+
+/* Section heading pattern used on the home page */
+.gg-eyebrow {
+	display: inline-block;
+	margin-bottom: 0.6rem;
+	padding: 0.2rem 0.75rem;
+	border: 1px solid var(--gg-glass-border);
+	border-radius: 999px;
+	background: var(--gg-glass-bg);
+	color: var(--sl-color-accent);
+	font-size: 0.75rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+.gg-gradient-text {
+	background: var(--gg-grad);
+	-webkit-background-clip: text;
+	background-clip: text;
+	-webkit-text-fill-color: transparent;
 }

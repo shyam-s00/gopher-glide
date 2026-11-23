@@ -231,3 +231,42 @@ func BenchmarkRecorder_Finalize(b *testing.B) {
 		})
 	}
 }
+
+// reportFixtureScaled is a long run: many endpoints and a busy timeline.
+func reportFixtureScaled() *Snapshot {
+	s := reportFixture()
+	base := s.Endpoints
+	for i := 0; i < 60; i++ {
+		e := base[i%len(base)]
+		e.ID = e.ID + "/" + string(rune('a'+i%26)) + string(rune('a'+i/26))
+		s.Endpoints = append(s.Endpoints, e)
+	}
+	for i := 0; i < 200; i++ {
+		s.Meta.Marks = append(s.Meta.Marks, Mark{Label: "checkpoint", ElapsedS: float64(i) / 3, Source: "agent"})
+		s.Meta.BiasEvents = append(s.Meta.BiasEvents, BiasEvent{Amount: 5, Cumulative: 5, ElapsedS: float64(i) / 3, Source: "user"})
+	}
+	return s
+}
+
+func BenchmarkRenderReport(b *testing.B) {
+	cases := []struct {
+		name string
+		snap *Snapshot
+		f    ReportFormat
+	}{
+		{"markdown_small", reportFixture(), ReportMarkdown},
+		{"html_small", reportFixture(), ReportHTML},
+		{"markdown_large", reportFixtureScaled(), ReportMarkdown},
+		{"html_large", reportFixtureScaled(), ReportHTML},
+	}
+	for _, c := range cases {
+		b.Run(c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if _, err := RenderReport(c.snap, "bench", c.f); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}

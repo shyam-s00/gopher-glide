@@ -330,3 +330,31 @@ func TestValueToString(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateJSONPath(t *testing.T) {
+	good := []string{"$", "$.a", "a.b.c", "$.items[0].id", "items[12]", "$.a.b[3]", "$token"}
+	for _, p := range good {
+		if err := ValidateJSONPath(p); err != nil {
+			t.Errorf("%q: unexpected error %v", p, err)
+		}
+	}
+	bad := []string{"$.a..b", "$.a.", "items[", "items[x]", "a]b", "items[0][1]", "$.[0]x"}
+	for _, p := range bad {
+		if err := ValidateJSONPath(p); err == nil {
+			t.Errorf("%q should be rejected", p)
+		}
+	}
+}
+
+// Anything ValidateJSONPath accepts must be resolvable by the real extractor.
+func TestValidateJSONPath_AgreesWithExtract(t *testing.T) {
+	body := []byte(`{"a":{"b":[{"id":7}]},"token":"t"}`)
+	for _, p := range []string{"$.a.b[0].id", "a.b[0].id", "$.token", "$token"} {
+		if err := ValidateJSONPath(p); err != nil {
+			t.Fatalf("%q: %v", p, err)
+		}
+		if _, err := extractJSONPath(body, p); err != nil {
+			t.Errorf("%q validated but does not extract: %v", p, err)
+		}
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/shyam-s00/gopher-glide/internal/autopilot"
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/httpreader"
@@ -50,6 +51,22 @@ type HeadlessRenderer struct {
 	// ControlInput is the source read for control commands when ControlMode
 	// is "stdin". Defaults to os.Stdin; tests inject their own reader.
 	ControlInput io.Reader
+
+	// ControlExitOnEOF makes the end of the control input behave like a "stop"
+	// command, so a supervised run stops gracefully (and keeps its snapshot)
+	// when its parent exits. Off by default: EOF is otherwise not a stop.
+	ControlExitOnEOF bool
+
+	// Autopilot, when set, starts this controller with the run. find-ceiling
+	// started this way owns the schedule; slo-guard rides the configured plan.
+	Autopilot *autopilot.Params
+
+	// ap is the running controller; apResult and apPrior are what earlier or
+	// finished controllers reported, for the snapshot.
+	ap         *autopilot.Host
+	apResult   *autopilot.Result
+	apPrior    []autopilot.Event
+	holdEvents []snap.HoldEvent
 
 	// biasEvents records every bias command applied this run, for
 	// SnapMeta.BiasEvents at finalize. Exposed via BiasEvents().
@@ -97,10 +114,16 @@ func (r *HeadlessRenderer) controlInput() io.Reader {
 // capabilities returns the "started" event's Capabilities pointer: the full
 // LCP set for "stdin", or an explicit empty slice for "none" — distinct from
 // a pre-v1.3 binary that omits the field entirely.
-func (r *HeadlessRenderer) capabilities() *[]string {
+func (r *HeadlessRenderer) capabilities(eng engine.Runner) *[]string {
 	caps := []string{}
 	if r.controlMode() == "stdin" {
-		caps = []string{"control.bias", "control.mark", "control.stop"}
+		caps = []string{"control.bias", "control.mark", "control.mark.elapsed", "control.stop"}
+		if _, ok := eng.(engine.Holder); ok {
+			caps = append(caps, "control.hold")
+		}
+		if _, ok := eng.(autopilot.Target); ok {
+			caps = append(caps, "control.autopilot")
+		}
 	}
 	return &caps
 }
@@ -116,6 +139,17 @@ func (r *HeadlessRenderer) Marks() []snap.Mark {
 // convention as Marks.
 func (r *HeadlessRenderer) BiasEvents() []snap.BiasEvent {
 	return r.biasEvents
+}
+
+// HoldEvents returns every hold and release applied this run. Same calling
+// convention as Marks.
+func (r *HeadlessRenderer) HoldEvents() []snap.HoldEvent {
+	return r.holdEvents
+}
+
+// AutopilotMeta is the autopilot's record for the snapshot, nil when none ran.
+func (r *HeadlessRenderer) AutopilotMeta() *snap.AutopilotMeta {
+	return autopilotMeta(r.apResult, r.apPrior)
 }
 
 // protocolVersion is the LCP wire version emitted on every "started" event.
@@ -136,7 +170,7 @@ type StageInfo struct {
 // human-readable line when Reporter == "text".
 type HeartbeatPayload struct {
 	Time         string      `json:"time"`
-	Event        string      `json:"event"` // "heartbeat" | "started" | "finished" | "interrupted" | "snap" | "error" | "ack" | "mark" | "stopped"
+	Event        string      `json:"event"` // "heartbeat" | "started" | "finished" | "interrupted" | "snap" | "error" | "ack" | "mark" | "stopped" | "autopilot"
 	Stage        int         `json:"stage"` // 1-based
 	TotalStages  int         `json:"total_stages"`
 	Stages       []StageInfo `json:"stages,omitempty"`        // set on "started" only
@@ -161,7 +195,91 @@ type HeartbeatPayload struct {
 	Command         string    `json:"command,omitempty"`          // set on ack/error only
 	Reason          string    `json:"reason,omitempty"`           // error replies only
 	Label           string    `json:"label,omitempty"`            // mark replies only
-	ElapsedS        float64   `json:"elapsed_s,omitempty"`        // mark replies only, run-relative offset
+	ElapsedS        *float64  `json:"elapsed_s,omitempty"`        // run-relative seconds; on heartbeat, ack, mark, stopped and finished. Pointer so a real 0 is still emitted
+	Clamped         bool      `json:"clamped,omitempty"`          // mark replies only: client elapsed_s was ahead of the run and got capped
+
+	// Autopilot controller fields: Mode/State/Outcome/CeilingRPS on "autopilot" events
+	// and the terminal event; Autopilot (compact status) on heartbeats while one runs.
+	Mode       string           `json:"mode,omitempty"`
+	State      string           `json:"state,omitempty"`
+	Outcome    string           `json:"outcome,omitempty"`
+	CeilingRPS *int             `json:"ceiling_rps,omitempty"`
+	Autopilot  *AutopilotStatus `json:"autopilot,omitempty"`
+
+	// ErrorMix is set on heartbeats only, and only when failures occurred in the recent window.
+	ErrorMix *engine.ErrorMix `json:"error_mix,omitempty"`
+
+	// Window is request health over the last heartbeatWindow; heartbeats only.
+	Window *engine.HealthWindow `json:"window,omitempty"`
+	// HoldRPS is the pinned rate; set on heartbeat and hold ack only while a hold is active.
+	HoldRPS *int `json:"hold_rps,omitempty"`
+	// Source echoes who issued the command (user | agent | autopilot); ack and mark replies.
+	Source string `json:"source,omitempty"`
+}
+
+// heartbeatWindow is the span of the windowed health figures on a heartbeat.
+const heartbeatWindow = 5 * time.Second
+
+// recentWindow returns the engine's windowed health, or nil when unavailable.
+func recentWindow(eng engine.Runner) *engine.HealthWindow {
+	wh, ok := eng.(engine.WindowedHealth)
+	if !ok {
+		return nil
+	}
+	w, ok := wh.HealthSince(heartbeatWindow)
+	if !ok {
+		return nil
+	}
+	return &w
+}
+
+// activeHold returns the pinned rate, or nil when no hold is active.
+func activeHold(eng engine.Runner) *int {
+	h, ok := eng.(engine.Holder)
+	if !ok {
+		return nil
+	}
+	if rps := h.GetHoldRPS(); rps > 0 {
+		return &rps
+	}
+	return nil
+}
+
+// runElapsed is the run-relative seconds to stamp on an event.
+func runElapsed(eng engine.Runner) *float64 {
+	e := elapsedSince(eng.GetStartTime())
+	return &e
+}
+
+// finalElapsed is the run's length once it has ended (the end time is frozen).
+func finalElapsed(eng engine.Runner) *float64 {
+	start := eng.GetStartTime()
+	if start.IsZero() {
+		z := 0.0
+		return &z
+	}
+	e := eng.GetEndTime().Sub(start).Seconds()
+	if e < 0 {
+		e = 0
+	}
+	return &e
+}
+
+// errorMixWindow is how far back a heartbeat looks when summarising failures.
+const errorMixWindow = 10 * time.Second
+
+// recentErrorMix returns the engine's recent failure mix, or nil when the
+// engine cannot report one or nothing failed in the window.
+func recentErrorMix(eng engine.Runner) *engine.ErrorMix {
+	em, ok := eng.(engine.ErrorMixer)
+	if !ok {
+		return nil
+	}
+	mix, any := em.RecentErrorMix(errorMixWindow)
+	if !any {
+		return nil
+	}
+	return &mix
 }
 
 // Run executes the engine headlessly and blocks until the run finishes or an
@@ -175,6 +293,15 @@ func (r *HeadlessRenderer) Run(eng engine.Runner, cfg *config.Config, specs []ht
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
 
+	r.ap, r.apResult, r.apPrior, r.holdEvents = nil, nil, nil, nil
+	if r.Autopilot != nil {
+		run, err := autopilot.StartHost(eng, cfg, *r.Autopilot)
+		if err != nil {
+			return fmt.Errorf("autopilot: %w", err)
+		}
+		r.ap = run
+	}
+
 	// Start the engine in a background goroutine (mirrors what tui.go does).
 	engineDone := make(chan error, 1)
 	go func() {
@@ -187,7 +314,12 @@ func (r *HeadlessRenderer) Run(eng engine.Runner, cfg *config.Config, specs []ht
 	var cmdCh chan controlCommand
 	if r.controlMode() == "stdin" {
 		cmdCh = make(chan controlCommand, controlCmdChanCap)
-		go controlReader(r.controlInput(), cmdCh)
+		go func() {
+			controlReader(r.controlInput(), cmdCh)
+			if r.ControlExitOnEOF {
+				cmdCh <- controlCommand{Command: cmdInputClosed}
+			}
+		}()
 	}
 
 	if opts.Snapping {
@@ -227,7 +359,7 @@ func (r *HeadlessRenderer) Run(eng engine.Runner, cfg *config.Config, specs []ht
 		ProfileScale:    profileScale,
 		Message:         startedMsg,
 		ProtocolVersion: protocolVersion,
-		Capabilities:    r.capabilities(),
+		Capabilities:    r.capabilities(eng),
 	})
 
 	ticker := time.NewTicker(r.heartbeatInterval())
@@ -267,7 +399,18 @@ loop:
 				})
 				continue
 			}
+			if r.ap.Active() && (cmd.Command == "bias" || cmd.Command == "hold" || cmd.Command == "release") {
+				r.emit(HeartbeatPayload{
+					Time: now(), Event: "error", ID: cmd.ID, Command: cmd.Command, Reason: "autopilot_active",
+					Message: "autopilot owns the rate; stop it first with the autopilot stop command",
+				})
+				continue
+			}
 			switch cmd.Command {
+			case cmdInputClosed:
+				stopRequested = true
+				cancel()
+				break loop
 			case "bias":
 				eng.ApplyBias(cmd.Amount)
 				cumulative := eng.GetBias()
@@ -275,35 +418,85 @@ loop:
 					Amount:     cmd.Amount,
 					Cumulative: cumulative,
 					ElapsedS:   elapsedSince(eng.GetStartTime()),
+					Source:     cmd.Source,
 				})
 				r.emit(HeartbeatPayload{
-					Time:    now(),
-					Event:   "ack",
-					ID:      cmd.ID,
-					Command: cmd.Command,
-					Bias:    &cumulative,
-					Message: fmt.Sprintf("bias %+d applied (cumulative %+d)", cmd.Amount, cumulative),
+					Time:     now(),
+					Event:    "ack",
+					ID:       cmd.ID,
+					Command:  cmd.Command,
+					Bias:     &cumulative,
+					ElapsedS: runElapsed(eng),
+					Source:   cmd.Source,
+					Message:  fmt.Sprintf("bias %+d applied (cumulative %+d)", cmd.Amount, cumulative),
+				})
+			case "hold":
+				h, ok := eng.(engine.Holder)
+				if !ok {
+					r.emitUnsupported(cmd)
+					continue
+				}
+				h.HoldRPS(cmd.RPS)
+				rps := h.GetHoldRPS()
+				r.holdEvents = append(r.holdEvents, snap.HoldEvent{RPS: rps, ElapsedS: elapsedSince(eng.GetStartTime()), Source: cmd.Source})
+				r.emit(HeartbeatPayload{
+					Time:     now(),
+					Event:    "ack",
+					ID:       cmd.ID,
+					Command:  cmd.Command,
+					HoldRPS:  &rps,
+					ElapsedS: runElapsed(eng),
+					Source:   cmd.Source,
+					Message:  fmt.Sprintf("hold %d rps", rps),
+				})
+			case "release":
+				h, ok := eng.(engine.Holder)
+				if !ok {
+					r.emitUnsupported(cmd)
+					continue
+				}
+				h.ReleaseHold()
+				r.holdEvents = append(r.holdEvents, snap.HoldEvent{Released: true, ElapsedS: elapsedSince(eng.GetStartTime()), Source: cmd.Source})
+				r.emit(HeartbeatPayload{
+					Time:     now(),
+					Event:    "ack",
+					ID:       cmd.ID,
+					Command:  cmd.Command,
+					ElapsedS: runElapsed(eng),
+					Source:   cmd.Source,
+					Message:  "hold released",
 				})
 			case "mark":
-				elapsed := elapsedSince(eng.GetStartTime())
-				r.marks = append(r.marks, snap.Mark{Label: cmd.Label, ElapsedS: elapsed})
+				elapsed, clamped := markElapsed(cmd.ElapsedS, elapsedSince(eng.GetStartTime()))
+				r.marks = append(r.marks, snap.Mark{Label: cmd.Label, ElapsedS: elapsed, Source: cmd.Source})
 				// The mark event itself is the reply — no separate ack.
 				r.emit(HeartbeatPayload{
 					Time:     now(),
 					Event:    "mark",
 					ID:       cmd.ID,
 					Label:    cmd.Label,
-					ElapsedS: elapsed,
+					ElapsedS: &elapsed,
+					Clamped:  clamped,
+					Source:   cmd.Source,
 				})
+			case "autopilot":
+				r.handleAutopilotCommand(eng, cfg, cmd)
 			case "stop":
 				r.emit(HeartbeatPayload{
-					Time:    now(),
-					Event:   "ack",
-					ID:      cmd.ID,
-					Command: cmd.Command,
-					Message: "stop received",
+					Time:     now(),
+					Event:    "ack",
+					ID:       cmd.ID,
+					Command:  cmd.Command,
+					ElapsedS: runElapsed(eng),
+					Message:  "stop received",
 				})
 				stopRequested = true
+				cancel()
+				break loop
+			}
+
+		case m := <-r.ap.In():
+			if r.handleAutopilotMsg(eng, m) {
 				cancel()
 				break loop
 			}
@@ -337,6 +530,11 @@ loop:
 				P95Ms:        m.P95Latency,
 				P99Ms:        m.P99Latency,
 				Bias:         &m.Bias,
+				ElapsedS:     runElapsed(eng),
+				ErrorMix:     recentErrorMix(eng),
+				Window:       recentWindow(eng),
+				HoldRPS:      activeHold(eng),
+				Autopilot:    apStatus(r.ap),
 			})
 		}
 	}
@@ -359,6 +557,8 @@ loop:
 			}
 		}
 	}
+
+	r.endAutopilot(eng, !stopRequested && !interrupted)
 
 	// Run the post-run hook (e.g. write the snapshot) synchronously; printing is
 	// safe in headless mode. A stop-ended run emits a single "stopped" instead of
@@ -387,11 +587,28 @@ loop:
 			P50Ms:        m.P50Latency,
 			P95Ms:        m.P95Latency,
 			P99Ms:        m.P99Latency,
+			ElapsedS:     finalElapsed(eng),
 			Message:      message,
+			Mode:         apMode(r.apResult),
+			Outcome:      apOutcome(r.apResult),
+			CeilingRPS:   apCeiling(r.apResult),
 		})
 	}
 
 	return nil
+}
+
+// emitUnsupported replies to a command the engine cannot execute, the same way
+// a binary that predates it would.
+func (r *HeadlessRenderer) emitUnsupported(cmd controlCommand) {
+	r.emit(HeartbeatPayload{
+		Time:    now(),
+		Event:   "error",
+		ID:      cmd.ID,
+		Command: cmd.Command,
+		Reason:  "unknown_command",
+		Message: fmt.Sprintf("unknown command %q", cmd.Command),
+	})
 }
 
 // emit writes a single HeartbeatPayload in the configured reporter format.
@@ -418,7 +635,11 @@ func (r *HeadlessRenderer) emit(p HeartbeatPayload) {
 		case "mark":
 			// No Message on this event by design — Label/ElapsedS
 			// already say everything, so the text line is built from those.
-			_, _ = fmt.Fprintf(os.Stdout, "[%s] mark %q (t+%.1fs)\n", p.Time, p.Label, p.ElapsedS)
+			var at float64
+			if p.ElapsedS != nil {
+				at = *p.ElapsedS
+			}
+			_, _ = fmt.Fprintf(os.Stdout, "[%s] mark %q (t+%.1fs)\n", p.Time, p.Label, at)
 		default:
 			if p.Message != "" {
 				_, _ = fmt.Fprintf(os.Stdout, "[%s] %s\n", p.Time, p.Message)
@@ -435,6 +656,18 @@ func (r *HeadlessRenderer) emitMessage(event, message string) {
 // now returns the current UTC time formatted for log lines.
 func now() string {
 	return time.Now().UTC().Format("2006-01-02T15:04:05Z")
+}
+
+// markElapsed picks the offset a mark is recorded at: the client's value when
+// given, capped at the server's current run time (clamped reports the cap).
+func markElapsed(client *float64, serverNow float64) (elapsed float64, clamped bool) {
+	if client == nil {
+		return serverNow, false
+	}
+	if *client > serverNow {
+		return serverNow, true
+	}
+	return *client, false
 }
 
 // elapsedSince returns seconds since start, or 0 if start is the zero time —

@@ -1,7 +1,6 @@
 ---
 title: "Configuration"
 ---
-# Configuration Reference
 
 ## .http file format
 
@@ -45,7 +44,7 @@ config:
   jitter: 0.1                     # ±10% noise on the RPS ticker; 0 disables (default: 0)
   time_scale: 1.0                 # stage clock multiplier; 2.0 = run 2× faster (default: 1.0)
 
-# Optional — tunes the schema-inference engine used by `--snap`.
+# Optional: tunes the schema-inference engine used by `--snap`.
 # See https://gopherglide.dev/snap for the full walkthrough.
 snap:
   sample_rate: 0.05                # fraction of responses to body-sample (default: 0.05)
@@ -98,7 +97,7 @@ time_scale: 10   # a 10-minute plan finishes in 1 minute
 
 ## Multi-stage load profiles
 
-`gg` uses **implicit ramping** — stage defines a `target_rps` and `duration`. The engine automatically interpolates (LERP) from the previous stage's rate to the new target. You never specify the "ramp type" explicitly; it is inferred from the numbers.
+`gg` uses **implicit ramping**: stage defines a `target_rps` and `duration`. The engine automatically interpolates (LERP) from the previous stage's rate to the new target. You never specify the "ramp type" explicitly; it is inferred from the numbers.
 
 ```yaml
 stages:

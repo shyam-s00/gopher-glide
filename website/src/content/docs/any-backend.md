@@ -1,9 +1,9 @@
 ---
 title: "Works With Any Backend"
-description: "gg is an HTTP traffic and regression simulator for any API — Node.js, Python, Java, .NET, Rails, PHP, Rust, Go or anything else that speaks HTTP. Nothing to install in your app."
+description: "gg is an HTTP traffic and regression simulator for any API: Node.js, Python, Java, .NET, Rails, PHP, Rust, Go or anything else that speaks HTTP. Nothing to install in your app."
 ---
 
-`gg` doesn't care what your service is written in. It's an outside-in HTTP client: it sends requests to a URL, measures what comes back, and (with [snapshots](/snap)) tells you when behaviour or latency drifts between builds. Express, FastAPI, Spring Boot, Rails, ASP.NET Core, Laravel, Axum, Phoenix, a Go service, a legacy monolith, a serverless function behind a gateway — to `gg` they are all just URLs.
+`gg` doesn't care what your service is written in. It's an outside-in HTTP client: it sends requests to a URL, measures what comes back, and (with [snapshots](/snap)) tells you when behaviour or latency drifts between builds. Express, FastAPI, Spring Boot, Rails, ASP.NET Core, Laravel, Axum, Phoenix, a Go service, a legacy monolith, a serverless function behind a gateway: to `gg` they are all just URLs.
 
 > **What `gg` needs from your service:** a URL that `gg` can reach. That's the whole list. No agent, no SDK, no library in your dependency tree, no code change and no restart.
 
@@ -64,7 +64,7 @@ You get the live TUI by default. Add `--headless --reporter json` for scripts an
 | on your machine | on your machine | `localhost` |
 | in Docker | on your machine | `host.docker.internal` (Docker Desktop) |
 | in Docker, same Compose network | in another container | the Compose service name, e.g. `http://api:8080` |
-| in CI | as a service container or Compose stack | the service name or `localhost`, depending on how the job is wired — see [CI & Containers](/ci) |
+| in CI | as a service container or Compose stack | the service name or `localhost`, depending on how the job is wired: see [CI & Containers](/ci) |
 | anywhere | deployed (staging, a preview environment) | its public or internal URL |
 
 Only load-test systems you own or have explicit permission to test.

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gg run report: checkout-ceiling</title>
+<style>
+:root{--bg:#fff;--fg:#1c2025;--muted:#5d6672;--line:#d9dee5;--card:#f5f7fa;--accent:#2563eb;--autopilot:#7c3aed;--agent:#0e7490;--user:#b45309}
+@media (prefers-color-scheme:dark){:root{--bg:#14171c;--fg:#e6e9ee;--muted:#9aa4b2;--line:#2c333d;--card:#1b2027;--accent:#6ea0ff;--autopilot:#b196ff;--agent:#58c4dc;--user:#f0b35a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:960px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:1.5rem;margin:0 0 4px}h2{font-size:1.1rem;margin:32px 0 10px}
+.sub{color:var(--muted);margin:0 0 20px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.card b{display:block;font-size:1.25rem}.card span{color:var(--muted);font-size:.8rem}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
+.badge{display:inline-block;border:1px solid currentColor;border-radius:999px;padding:0 8px;font-size:.75rem}
+.src-autopilot{color:var(--autopilot)}.src-agent{color:var(--agent)}.src-user{color:var(--user)}.src-none{color:var(--muted)}
+.scroll{overflow-x:auto}
+svg{width:100%;height:auto;max-width:720px;display:block}
+svg .grid{stroke:var(--line);stroke-width:1}svg .tick{fill:var(--muted);font-size:11px}
+svg .rate{fill:none;stroke:var(--accent);stroke-width:2.5}
+svg .mark line{stroke:currentColor;stroke-width:1.5;stroke-dasharray:4 3}svg .mark text{fill:currentColor;font-size:11px;font-weight:700}
+.note{color:var(--muted);font-size:.85rem}
+</style>
+</head>
+<body>
+<main>
+<h1>gg run report: checkout-ceiling</h1>
+<p class="sub">2026-11-12 09:30 UTC · 90.0s · plan peak 400 RPS</p>
+
+<div class="cards">
+<div class="card"><b>5200</b><span>requests</span></div>
+<div class="card"><b>1.54%</b><span>error rate</span></div>
+<div class="card"><b>41.2 ms</b><span>p50, slowest endpoint</span></div>
+<div class="card"><b>180.6 ms</b><span>p95, slowest endpoint</span></div>
+<div class="card"><b>351 ms</b><span>p99, slowest endpoint</span></div>
+</div>
+
+<h2>Autopilot</h2>
+<p><span class="badge src-autopilot">find-ceiling</span> outcome <b>ceiling_found</b> · ceiling <b>95 RPS</b></p>
+<p>Highest sustainable rate: 95 RPS.</p>
+<div class="scroll"><table><thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody>
+<tr><td>max_error_rate</td><td>0.01</td></tr>
+<tr><td>max_p99_ms</td><td>200</td></tr>
+<tr><td>start_rps</td><td>20</td></tr>
+<tr><td>step_pct</td><td>25</td></tr>
+</tbody></table></div>
+
+<h2>Timeline</h2>
+<div class="scroll"><svg viewBox="0 0 720 260" role="img" aria-label="Pinned request rate over time, with marks"><line class="grid" x1="52" y1="226.0" x2="704" y2="226.0"/><text class="tick" x="46" y="230.0" text-anchor="end">0</text><line class="grid" x1="52" y1="173.0" x2="704" y2="173.0"/><text class="tick" x="46" y="177.0" text-anchor="end">50</text><line class="grid" x1="52" y1="120.0" x2="704" y2="120.0"/><text class="tick" x="46" y="124.0" text-anchor="end">100</text><line class="grid" x1="52" y1="67.0" x2="704" y2="67.0"/><text class="tick" x="46" y="71.0" text-anchor="end">150</text><line class="grid" x1="52" y1="14.0" x2="704" y2="14.0"/><text class="tick" x="46" y="18.0" text-anchor="end">200</text><text class="tick" x="52.0" y="242" text-anchor="middle">0.0s</text><text class="tick" x="182.4" y="242" text-anchor="middle">18.0s</text><text class="tick" x="312.8" y="242" text-anchor="middle">36.0s</text><text class="tick" x="443.2" y="242" text-anchor="middle">54.0s</text><text class="tick" x="573.6" y="242" text-anchor="middle">72.0s</text><text class="tick" x="704.0" y="242" text-anchor="middle">90.0s</text><text class="tick" x="52" y="11">RPS held</text><path class="rate" d="M196.9 183.6 L254.8 183.6"/><path class="rate" d="M341.8 194.2 L414.2 194.2 L414.2 141.2 L472.2 141.2 L472.2 109.4 L496.8 109.4 L496.8 125.3 L704.0 125.3"/><g class="mark src-none"><line x1="142.6" y1="14" x2="142.6" y2="226"/><text x="142.6" y="24" text-anchor="middle">1</text></g><g class="mark src-agent"><line x1="291.1" y1="14" x2="291.1" y2="226"/><text x="291.1" y="24" text-anchor="middle">2</text></g><g class="mark src-autopilot"><line x1="496.8" y1="14" x2="496.8" y2="226"/><text x="496.8" y="24" text-anchor="middle">3</text></g></svg></div>
+<p class="note">Pinned request rate over the run (autopilot and manual holds). Numbered lines are the marks (#) in the table below; a gap means the rate followed the plan. A snapshot keeps no per-second traffic series, so this shows the rate commands, not measured throughput.</p>
+<div class="scroll"><table><thead><tr><th class="n">Time</th><th>Source</th><th>Event</th></tr></thead><tbody>
+<tr><td class="n">8.0s</td><td><span class="badge src-user">user</span></td><td>bias &#43;5 RPS (total &#43;5)</td></tr>
+<tr><td class="n">12.5s</td><td><span class="badge src-none">-</span></td><td><b>#1</b> looking at the dashboard</td></tr>
+<tr><td class="n">20.0s</td><td><span class="badge src-agent">agent</span></td><td>hold 40 RPS</td></tr>
+<tr><td class="n">28.0s</td><td><span class="badge src-agent">agent</span></td><td>release hold</td></tr>
+<tr><td class="n">33.0s</td><td><span class="badge src-agent">agent</span></td><td><b>#2</b> cache flushed | retrying</td></tr>
+<tr><td class="n">40.0s</td><td><span class="badge src-autopilot">autopilot</span></td><td>stepping (hold 30 RPS): starting at 30 RPS</td></tr>
+<tr><td class="n">50.0s</td><td><span class="badge src-autopilot">autopilot</span></td><td>stepping (hold 80 RPS): healthy at 65 RPS; stepping to 80</td></tr>
+<tr><td class="n">58.0s</td><td><span class="badge src-autopilot">autopilot</span></td><td>stepping (hold 110 RPS): healthy at 95 RPS; stepping to 110</td></tr>
+<tr><td class="n">61.4s</td><td><span class="badge src-autopilot">autopilot</span></td><td>breached (hold 110 RPS): ceiling breached at 110 RPS</td></tr>
+<tr><td class="n">61.4s</td><td><span class="badge src-autopilot">autopilot</span></td><td>confirming (hold 95 RPS): confirming 95 RPS for 15s</td></tr>
+<tr><td class="n">61.4s</td><td><span class="badge src-autopilot">autopilot</span></td><td><b>#3</b> Autopilot: ceiling breached at 110 RPS (p99=351ms &gt; 200ms; top failing: POST /checkout 503); backing off to 95 RPS</td></tr>
+<tr><td class="n">77.0s</td><td><span class="badge src-autopilot">autopilot</span></td><td>done (hold 95 RPS): ceiling confirmed at 95 RPS</td></tr>
+</tbody></table></div>
+
+
+<h2>Top failing endpoints</h2>
+<div class="scroll"><table><thead><tr><th>Endpoint</th><th class="n">Failures</th><th class="n">Error rate</th><th>Mostly</th></tr></thead><tbody>
+<tr><td><code>POST:/checkout</code></td><td class="n">80</td><td class="n">4.44%</td><td>HTTP 503</td></tr>
+</tbody></table></div>
+
+<h2>Endpoints</h2>
+<div class="scroll"><table><thead><tr><th>Endpoint</th><th class="n">Requests</th><th class="n">Errors</th><th class="n">p50</th><th class="n">p95</th><th class="n">p99</th><th>Status</th></tr></thead><tbody>
+<tr><td><code>GET:/users/{{id}}</code></td><td class="n">3400</td><td class="n">0%</td><td class="n">8.4</td><td class="n">19</td><td class="n">33.7</td><td>200 100%</td></tr>
+<tr><td><code>POST:/checkout</code></td><td class="n">1800</td><td class="n">4.44%</td><td class="n">41.2</td><td class="n">180.6</td><td class="n">351</td><td>200 95.6%, 503 4.44%</td></tr>
+</tbody></table></div>
+<p class="note">Latencies in ms. Generated by gg from the run's snapshot; it holds no headers or response bodies.</p>
+</main>
+</body>
+</html>

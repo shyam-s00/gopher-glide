@@ -141,7 +141,7 @@ func (m snapViewModel) renderHeader() string {
 	)
 
 	return lipgloss.JoinVertical(lipgloss.Left,
-		titleStyle.Render("Gopher Glide (GG) — Snapshot Viewer"),
+		titleStyle.Render("Gopher Glide (gg) — Snapshot Viewer"),
 		lipgloss.JoinHorizontal(lipgloss.Top,
 			boxStyle.Render(metaBox),
 			boxStyle.Render(perfBox),

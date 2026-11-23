@@ -6,7 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
+
+	"github.com/shyam-s00/gopher-glide/internal/autopilot"
 )
+
+// cmdInputClosed is an internal pseudo-command, never parsed from the wire: the
+// control input reached EOF and the renderer was asked to stop on that.
+const cmdInputClosed = "\x00input-closed"
 
 // controlLineMaxBytes caps a single control command line — a deliberate
 // protocol limit, not an incidental one.
@@ -16,14 +23,32 @@ const controlLineMaxBytes = 64 * 1024
 // protocol (LCP), or a failed one carrying the error to reply with instead.
 type controlCommand struct {
 	ID      string // caller-chosen correlation id; empty if omitted
-	Command string // "bias" | "mark" | "stop"
+	Command string // "bias" | "mark" | "stop" | "hold" | "release" | "autopilot"
 	Amount  int    // bias only: signed, non-zero delta
 	Label   string // mark only: non-empty annotation text
+	RPS     int    // hold only: pinned rate, >= 1
+
+	// Source says who issued a bias, hold, release or mark; empty when the
+	// client sent none.
+	Source string
+
+	// Autopilot is set for the "autopilot" command only.
+	Autopilot *autopilotCommand
+
+	// ElapsedS is a mark's client-captured run-relative offset; nil when the
+	// client sent none (the server then stamps its own receive time).
+	ElapsedS *float64
 
 	// Err is set when the line failed to parse or validate. Every other
 	// field is zero; the select loop should reply with Err, not execute
 	// anything.
 	Err *controlError
+}
+
+// autopilotCommand is a parsed "autopilot" start or stop request.
+type autopilotCommand struct {
+	Action string // "start" | "stop"
+	Params autopilot.Params
 }
 
 // controlError is a typed command-line failure, carrying the error
@@ -37,14 +62,32 @@ type controlError struct {
 
 func (e *controlError) Error() string { return e.Message }
 
-// rawControlCommand keeps Amount/Label raw so a bad type there doesn't fail
-// decoding — only a non-string id/command, or broken JSON, is parse_error.
-// Amount/Label are validated separately, into invalid_argument.
+// rawControlCommand keeps Amount/Label/ElapsedS raw so a bad type there doesn't
+// fail decoding — only a non-string id/command, or broken JSON, is parse_error.
+// Those fields are validated separately, into invalid_argument.
 type rawControlCommand struct {
-	ID      string          `json:"id"`
-	Command string          `json:"command"`
-	Amount  json.RawMessage `json:"amount"`
-	Label   json.RawMessage `json:"label"`
+	ID       string          `json:"id"`
+	Command  string          `json:"command"`
+	Amount   json.RawMessage `json:"amount"`
+	Label    json.RawMessage `json:"label"`
+	ElapsedS json.RawMessage `json:"elapsed_s"`
+	RPS      json.RawMessage `json:"rps"`
+	Source   json.RawMessage `json:"source"`
+
+	Action json.RawMessage `json:"action"`
+	Mode   json.RawMessage `json:"mode"`
+	// Autopilot tuning, all optional; absent or 0 means the default.
+	MaxP99Ms      json.RawMessage `json:"max_p99_ms"`
+	MaxErrorRate  json.RawMessage `json:"max_error_rate"`
+	MinSamples    json.RawMessage `json:"min_samples"`
+	StartRPS      json.RawMessage `json:"start_rps"`
+	StepPct       json.RawMessage `json:"step_pct"`
+	StepRPS       json.RawMessage `json:"step_rps"`
+	StepIntervalS json.RawMessage `json:"step_interval_s"`
+	ConfirmHoldS  json.RawMessage `json:"confirm_hold_s"`
+	MaxRPS        json.RawMessage `json:"max_rps"`
+	MaxDurationS  json.RawMessage `json:"max_duration_s"`
+	RecoverHoldS  json.RawMessage `json:"recover_hold_s"`
 }
 
 // parseControlLine decodes and validates one NDJSON command line, returning
@@ -61,6 +104,17 @@ func parseControlLine(line []byte) (controlCommand, *controlError) {
 	}
 
 	switch raw.Command {
+	case "bias", "mark", "hold", "release":
+		if _, ok := decodeSource(raw.Source); !ok {
+			return controlCommand{}, &controlError{
+				Reason: "invalid_argument", ID: raw.ID, Command: raw.Command,
+				Message: "source must be one of: user, agent, autopilot",
+			}
+		}
+	}
+	source, _ := decodeSource(raw.Source)
+
+	switch raw.Command {
 	case "bias":
 		amount, ok := decodeInt(raw.Amount)
 		if !ok || amount == 0 {
@@ -69,7 +123,7 @@ func parseControlLine(line []byte) (controlCommand, *controlError) {
 				Message: "amount must be a non-zero integer",
 			}
 		}
-		return controlCommand{ID: raw.ID, Command: raw.Command, Amount: amount}, nil
+		return controlCommand{ID: raw.ID, Command: raw.Command, Amount: amount, Source: source}, nil
 
 	case "mark":
 		label, ok := decodeString(raw.Label)
@@ -79,10 +133,33 @@ func parseControlLine(line []byte) (controlCommand, *controlError) {
 				Message: "label must be a non-empty string",
 			}
 		}
-		return controlCommand{ID: raw.ID, Command: raw.Command, Label: label}, nil
+		elapsed, ok := decodeOptionalOffset(raw.ElapsedS)
+		if !ok {
+			return controlCommand{}, &controlError{
+				Reason: "invalid_argument", ID: raw.ID, Command: raw.Command,
+				Message: "elapsed_s must be a non-negative number",
+			}
+		}
+		return controlCommand{ID: raw.ID, Command: raw.Command, Label: label, ElapsedS: elapsed, Source: source}, nil
+
+	case "hold":
+		rps, ok := decodeInt(raw.RPS)
+		if !ok || rps < 1 {
+			return controlCommand{}, &controlError{
+				Reason: "invalid_argument", ID: raw.ID, Command: raw.Command,
+				Message: "rps must be an integer >= 1",
+			}
+		}
+		return controlCommand{ID: raw.ID, Command: raw.Command, RPS: rps, Source: source}, nil
+
+	case "release":
+		return controlCommand{ID: raw.ID, Command: raw.Command, Source: source}, nil
 
 	case "stop":
 		return controlCommand{ID: raw.ID, Command: raw.Command}, nil
+
+	case "autopilot":
+		return parseAutopilot(raw)
 
 	default:
 		return controlCommand{}, &controlError{
@@ -91,6 +168,57 @@ func parseControlLine(line []byte) (controlCommand, *controlError) {
 		}
 	}
 }
+
+// parseAutopilot validates the shape of an "autopilot" command; value ranges
+// are checked when the controller is built.
+func parseAutopilot(raw rawControlCommand) (controlCommand, *controlError) {
+	bad := func(msg string) (controlCommand, *controlError) {
+		return controlCommand{}, &controlError{Reason: "invalid_argument", ID: raw.ID, Command: raw.Command, Message: msg}
+	}
+	action, _ := decodeString(raw.Action)
+	switch action {
+	case "stop":
+		return controlCommand{ID: raw.ID, Command: raw.Command, Autopilot: &autopilotCommand{Action: "stop"}}, nil
+	case "start":
+	default:
+		return bad("action must be \"start\" or \"stop\"")
+	}
+	mode, _ := decodeString(raw.Mode)
+	if mode != string(autopilot.ModeFindCeiling) && mode != string(autopilot.ModeSLOGuard) {
+		return bad("mode must be \"find-ceiling\" or \"slo-guard\"")
+	}
+
+	p := autopilot.Params{Mode: autopilot.Mode(mode)}
+	nums := []struct {
+		raw  json.RawMessage
+		name string
+		set  func(float64)
+	}{
+		{raw.MaxP99Ms, "max_p99_ms", func(v float64) { p.MaxP99Ms = v }},
+		{raw.MaxErrorRate, "max_error_rate", func(v float64) { p.MaxErrorRate = v }},
+		{raw.MinSamples, "min_samples", func(v float64) { p.MinSamples = int(v) }},
+		{raw.StartRPS, "start_rps", func(v float64) { p.StartRPS = int(v) }},
+		{raw.StepPct, "step_pct", func(v float64) { p.StepPct = int(v) }},
+		{raw.StepRPS, "step_rps", func(v float64) { p.StepRPS = int(v) }},
+		{raw.StepIntervalS, "step_interval_s", func(v float64) { p.StepInterval = secs(v) }},
+		{raw.ConfirmHoldS, "confirm_hold_s", func(v float64) { p.ConfirmHold = secs(v) }},
+		{raw.MaxRPS, "max_rps", func(v float64) { p.MaxRPS = int(v) }},
+		{raw.MaxDurationS, "max_duration_s", func(v float64) { p.MaxDuration = secs(v) }},
+		{raw.RecoverHoldS, "recover_hold_s", func(v float64) { p.RecoverHold = secs(v) }},
+	}
+	for _, n := range nums {
+		v, ok := decodeOptionalOffset(n.raw)
+		if !ok {
+			return bad(n.name + " must be a non-negative number")
+		}
+		if v != nil {
+			n.set(*v)
+		}
+	}
+	return controlCommand{ID: raw.ID, Command: raw.Command, Autopilot: &autopilotCommand{Action: "start", Params: p}}, nil
+}
+
+func secs(v float64) time.Duration { return time.Duration(v * float64(time.Second)) }
 
 // decodeInt reports whether raw holds a valid JSON integer. An absent field
 // and a present-but-wrong-typed one both return ok=false so callers treat
@@ -117,6 +245,40 @@ func decodeString(raw json.RawMessage) (string, bool) {
 		return "", false
 	}
 	return s, true
+}
+
+// decodeSource parses the optional "source" field. Absent and null mean none
+// (empty, ok); otherwise it must be one of the known values.
+func decodeSource(raw json.RawMessage) (string, bool) {
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return "", true
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return "", false
+	}
+	switch s {
+	case "user", "agent", "autopilot":
+		return s, true
+	}
+	return "", false
+}
+
+// decodeOptionalOffset parses an optional non-negative JSON number. Absent and
+// null both mean "not provided" (nil, ok); anything else non-numeric or
+// negative is ok=false.
+func decodeOptionalOffset(raw json.RawMessage) (*float64, bool) {
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil, true
+	}
+	var v float64
+	if err := json.Unmarshal(raw, &v); err != nil || v < 0 {
+		return nil, false
+	}
+	if v == 0 {
+		v = 0 // normalise -0 so it never serialises as "-0"
+	}
+	return &v, true
 }
 
 // controlReader reads r line by line into cmdCh — parsing only, not

@@ -83,7 +83,7 @@ release:
   draft: false
   prerelease: auto   # auto-detects pre-release when tag contains a hyphen (e.g. v1.0.0-rc1)
   header: |
-    ## gg (Gopher Glide) {{ .Version }}
+    ## Gopher Glide (gg) {{ .Version }}
 
     ### What's included in each package
     | File | Purpose |
@@ -132,7 +132,7 @@ dockers:
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.title=gg"
-      - "--label=org.opencontainers.image.description=Gopher Glide — HTTP load-testing tool"
+      - "--label=org.opencontainers.image.description=Gopher Glide (gg) — HTTP load-testing tool"
       - "--label=org.opencontainers.image.url=https://github.com/shyam-s00/gopher-glide"
       - "--label=org.opencontainers.image.source=https://github.com/shyam-s00/gopher-glide"
       - "--label=org.opencontainers.image.version={{ .Version }}"
@@ -154,7 +154,7 @@ brews:
       email: bot@goreleaser.com
     commit_msg_template: "Brew formula update for gg version {{ .Tag }}"
     homepage: "https://github.com/shyam-s00/gopher-glide"
-    description: "gg (Gopher Glide) — fast, stage-based HTTP load-testing tool with behavioral snapshot support"
+    description: "Gopher Glide (gg) — fast, stage-based HTTP load-testing tool with behavioral snapshot support"
     license: "MIT"
     # Only include the darwin/arm64 and linux/amd64 archives in the formula
     skip_upload: auto

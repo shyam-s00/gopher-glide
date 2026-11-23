@@ -13,6 +13,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/shyam-s00/gopher-glide/internal/autopilot"
 	"github.com/shyam-s00/gopher-glide/internal/config"
 	"github.com/shyam-s00/gopher-glide/internal/engine"
 	"github.com/shyam-s00/gopher-glide/internal/engine/hive"
@@ -30,7 +31,7 @@ func main() {
 	if len(os.Args) >= 2 {
 		a := os.Args[1]
 		if a == "--version" || a == "-version" || a == "-v" || a == "version" {
-			fmt.Printf("gg (Gopher Glide)\n")
+			fmt.Printf("Gopher Glide (gg)\n")
 			fmt.Printf("  Version:    %s\n", version.Version)
 			fmt.Printf("  Commit:     %s\n", version.GitCommit)
 			fmt.Printf("  Built:      %s\n", version.GetBuildDate())
@@ -40,7 +41,7 @@ func main() {
 
 	// Printed to stderr (not stdout) so it doesn't pollute headless JSON output,
 	// which CI tools and log aggregators expect to be pure JSON-lines on stdout.
-	_, _ = fmt.Fprintf(os.Stderr, "gg (Gopher Glide) %s (commit:%s) built %s\n",
+	_, _ = fmt.Fprintf(os.Stderr, "Gopher Glide (gg) %s (commit:%s) built %s\n",
 		version.Version, version.GitCommit, version.GetBuildDate())
 
 	// Dispatched before the config load so `gg snap` works without a config file.
@@ -51,6 +52,16 @@ func main() {
 
 	if len(os.Args) >= 2 && os.Args[1] == "profile" {
 		runProfileCmd(os.Args[2:])
+		return
+	}
+
+	if len(os.Args) >= 2 && os.Args[1] == "mcp" {
+		runMCPCmd(os.Args[2:])
+		return
+	}
+
+	if len(os.Args) >= 2 && os.Args[1] == "autopilot" {
+		runAutopilotCmd(os.Args[2:])
 		return
 	}
 
@@ -94,6 +105,10 @@ func main() {
 	reporter := fs.String("reporter", "text", "output format in headless mode: text | json")
 	heartbeatInterval := fs.Duration("heartbeat-interval", 0, "headless heartbeat cadence, e.g. 2s (0 = default of 5s)")
 	controlMode := fs.String("control", "stdin", "headless control protocol mode: stdin | none")
+	controlExitOnEOF := fs.Bool("control-exit-on-eof", false, "headless: stop gracefully (keeping the snapshot) when the control input closes, for supervised runs")
+	reportPath := fs.String("report", "", "write a shareable mission report of the run to this file when it ends (.html for HTML, otherwise Markdown); implies --snap")
+	var apFlags autopilotFlags
+	apFlags.register(fs)
 	tuiTickMs := fs.Int("tui-tick-ms", 0, "interactive TUI redraw cadence in ms, clamped to [16, 100] (0 = default of 42ms)")
 	_ = fs.Parse(flagArgs)
 
@@ -111,7 +126,7 @@ func main() {
 	// so users don't need to type both --snap and e.g. --snap-dir.
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
-		case "snap-dir", "snap-tag", "snap-sample", "snap-max-samples", "snap-max-body-kb":
+		case "snap-dir", "snap-tag", "snap-sample", "snap-max-samples", "snap-max-body-kb", "report":
 			*snapEnabled = true
 		}
 		switch f.Name {
@@ -160,6 +175,16 @@ func main() {
 		}
 		cfg.ConfigSection.HTTPFile = *httpFileFlag
 		cfg.ConfigSection.HTTPFilePath = absHTTPFile
+	}
+
+	// find-ceiling replaces the stages, so this runs before validation.
+	apParams, err := apFlags.build(cfg, cliProfileSet, durationFlag)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	if apParams != nil && apParams.Mode == autopilot.ModeFindCeiling && configPath != "" {
+		_, _ = fmt.Fprintln(os.Stderr, "Note: find-ceiling sets its own schedule; the stages in the config file are ignored.")
 	}
 
 	// Load() skips Validate() when booting from defaults so CLI overrides can
@@ -331,19 +356,24 @@ func main() {
 		hr.Reporter = *reporter
 		hr.HeartbeatInterval = *heartbeatInterval
 		hr.ControlMode = *controlMode
+		hr.ControlExitOnEOF = *controlExitOnEOF
+		hr.Autopilot = apParams
+	}
+	if tr != nil {
+		tr.Autopilot = apParams
 	}
 
 	// controlData returns the marks/bias events recorded so far: from hr for
 	// headless, from tr for the TUI (which has no marks). Safe to call from
 	// onRunComplete either way.
-	controlData := func() ([]snap.Mark, []snap.BiasEvent) {
+	controlData := func() controlRecord {
 		if hr != nil {
-			return hr.Marks(), hr.BiasEvents()
+			return controlRecord{Marks: hr.Marks(), BiasEvents: hr.BiasEvents(), HoldEvents: hr.HoldEvents(), Autopilot: hr.AutopilotMeta()}
 		}
 		if tr != nil {
-			return nil, tr.BiasEvents()
+			return controlRecord{Marks: tr.Marks(), BiasEvents: tr.BiasEvents(), Autopilot: tr.AutopilotMeta()}
 		}
-		return nil, nil
+		return controlRecord{}
 	}
 
 	// onRunComplete is dispatched by the TUI as a background goroutine once the
@@ -357,9 +387,8 @@ func main() {
 			if !snapDone.CompareAndSwap(false, true) {
 				return "" // already handled
 			}
-			marks, biasEvents := controlData()
 			status, err := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir,
-				effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB, marks, biasEvents)
+				effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB, controlData(), *reportPath)
 			if err != nil {
 				return fmt.Sprintf("⚠  snap error: %v", err)
 			}
@@ -381,9 +410,8 @@ func main() {
 	// never ran. The CAS guards against double-finalizing if it already did.
 	if rec != nil && snapDone.CompareAndSwap(false, true) {
 		_, _ = fmt.Fprintln(os.Stderr, "Finalizing snapshot...")
-		marks, biasEvents := controlData()
 		status, finalErr := finalizeSnapResult(rec, eng, cfg, *snapTag, resolvedSnapDir,
-			effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB, marks, biasEvents)
+			effectiveSampleRate, effectiveMaxSamples, effectiveMaxBodyKB, controlData(), *reportPath)
 		if finalErr != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", finalErr)
 		} else {
@@ -392,12 +420,20 @@ func main() {
 	}
 }
 
+// controlRecord is what the run's control channel produced, for the snapshot.
+type controlRecord struct {
+	Marks      []snap.Mark
+	BiasEvents []snap.BiasEvent
+	HoldEvents []snap.HoldEvent
+	Autopilot  *snap.AutopilotMeta
+}
+
 // finalizeSnapResult drains the recorder and writes the .snap file to dir,
 // returning a status line. Never writes to stdout/stderr, so it's safe to
 // call while the TUI alt-screen is active.
 func finalizeSnapResult(rec *snap.DefaultRecorder, eng engine.Runner, cfg *config.Config,
 	tag, dir string, sampleRate float64, maxSamples, maxBodyKB int,
-	marks []snap.Mark, biasEvents []snap.BiasEvent) (string, error) {
+	ctl controlRecord, reportPath string) (string, error) {
 	endTime := eng.GetEndTime()
 	if endTime.IsZero() {
 		endTime = time.Now()
@@ -412,8 +448,10 @@ func finalizeSnapResult(rec *snap.DefaultRecorder, eng engine.Runner, cfg *confi
 		SampleRate: sampleRate,
 		MaxSamples: maxSamples,
 		MaxBodyKB:  maxBodyKB,
-		Marks:      marks,
-		BiasEvents: biasEvents,
+		Marks:      ctl.Marks,
+		BiasEvents: ctl.BiasEvents,
+		HoldEvents: ctl.HoldEvents,
+		Autopilot:  ctl.Autopilot,
 		// Read from the engine at finalize time, not derived from biasEvents.
 		FinalBias: eng.GetBias(),
 	})
@@ -431,6 +469,16 @@ func finalizeSnapResult(rec *snap.DefaultRecorder, eng engine.Runner, cfg *confi
 	status := fmt.Sprintf("✓ Snapshot saved → %s", outPath)
 	if dropped := rec.Dropped(); dropped > 0 {
 		status += fmt.Sprintf("  ⚠ %d dropped", dropped)
+	}
+	if reportPath != "" {
+		format, err := reportFormatFor("", reportPath)
+		if err == nil {
+			err = writeReportFile(snapData, outPath, reportPath, format)
+		}
+		if err != nil {
+			return status, fmt.Errorf("snapshot saved to %s, but the report failed: %w", outPath, err)
+		}
+		status += fmt.Sprintf("  ✓ Report → %s", reportPath)
 	}
 	return status, nil
 }
@@ -451,6 +499,8 @@ func runSnapCmd(args []string) {
 		runSnapAssert(args[1:])
 	case "prune":
 		runSnapPrune(args[1:])
+	case "report":
+		runSnapReport(args[1:])
 	default:
 		_, _ = fmt.Fprintf(os.Stderr, "unknown snap subcommand %q\n\n", args[0])
 		snapUsage()
@@ -461,7 +511,9 @@ func runSnapCmd(args []string) {
 func runSnapList(args []string) {
 	fs := flag.NewFlagSet("gg snap list", flag.ExitOnError)
 	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
+	reporter := fs.String("reporter", "text", "output format: text | json")
 	_ = fs.Parse(args)
+	asJSON := snapReporterIsJSON("snap list", *reporter)
 
 	dir, err := snap.ResolveSnapDir(*snapDir)
 	if err != nil {
@@ -478,6 +530,10 @@ func runSnapList(args []string) {
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap list: %v\n", err)
 		os.Exit(1)
+	}
+	if asJSON {
+		printSnapJSON("snap list", snap.BuildListReport(dir, summaries))
+		return
 	}
 	if len(summaries) == 0 {
 		fmt.Printf("No snapshots found in %s\n", dir)
@@ -503,6 +559,7 @@ func runSnapList(args []string) {
 func runSnapView(args []string) {
 	fs := flag.NewFlagSet("gg snap view", flag.ExitOnError)
 	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
+	reporter := fs.String("reporter", "text", "output format: text (interactive viewer) | json")
 
 	// Go's flag package stops at the first non-flag argument, so a leading target
 	// (`gg snap view 2 --snap-dir /tmp`) is pulled out first and the rest parsed as
@@ -516,6 +573,7 @@ func runSnapView(args []string) {
 		flagArgs = args
 	}
 	_ = fs.Parse(flagArgs)
+	asJSON := snapReporterIsJSON("snap view", *reporter)
 	if target == "" {
 		if rest := fs.Args(); len(rest) > 0 {
 			target = rest[0]
@@ -523,7 +581,7 @@ func runSnapView(args []string) {
 	}
 
 	if target == "" {
-		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap view <id|tag|file> [--snap-dir DIR]")
+		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap view <id|tag|file> [--snap-dir DIR] [--reporter text|json]")
 		os.Exit(1)
 	}
 
@@ -550,6 +608,10 @@ func runSnapView(args []string) {
 		os.Exit(1)
 	}
 
+	if asJSON {
+		printSnapJSON("snap view", snap.ViewReport{Ref: snap.RefOf(*info), Snapshot: s})
+		return
+	}
 	if err := tui.StartSnapViewer(s, *info); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap view: %v\n", err)
 		os.Exit(1)
@@ -560,6 +622,7 @@ func runSnapDiff(args []string) {
 	fs := flag.NewFlagSet("gg snap diff", flag.ExitOnError)
 	snapDir := fs.String("snap-dir", "", "override the default snapshot directory")
 	maxArrayBloat := fs.Float64("max-array-bloat", 0, "array field avg-length % increase that triggers REGRESSION (0 = disabled)")
+	reporter := fs.String("reporter", "text", "output format: text (interactive viewer) | json")
 
 	// Extract the two positional args before any flags, following the same
 	// pattern as runSnapView.  Accepts: IDs, tag names, or file paths.
@@ -573,6 +636,7 @@ func runSnapDiff(args []string) {
 		positional = append(positional, a)
 	}
 	_ = fs.Parse(args[flagStart:])
+	asJSON := snapReporterIsJSON("snap diff", *reporter)
 	// If both positionals weren't found before the first flag, pick up
 	// whatever remains after flag parsing (handles: --snap-dir /x id1 id2).
 	for len(positional) < 2 {
@@ -585,7 +649,7 @@ func runSnapDiff(args []string) {
 	}
 
 	if len(positional) != 2 {
-		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR] [--max-array-bloat PCT]")
+		_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR] [--max-array-bloat PCT] [--reporter text|json]")
 		os.Exit(1)
 	}
 
@@ -630,6 +694,10 @@ func runSnapDiff(args []string) {
 	}
 	result := snap.Diff(baseSnap, currSnap, diffOpts)
 
+	if asJSON {
+		printSnapJSON("snap diff", snap.DiffReport{BaselineRef: snap.RefOf(*baseInfo), CurrentRef: snap.RefOf(*currInfo), Result: result})
+		return
+	}
 	if err := tui.StartSnapDiff(result, *baseInfo, *currInfo); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "snap diff: %v\n", err)
 		os.Exit(1)
@@ -644,7 +712,7 @@ func resolveSnapTarget(target, dir string) (*snap.SnapInfo, error) {
 		return snap.FindByID(dir, id)
 	}
 	if _, err := os.Stat(target); err == nil {
-		si := snap.SnapInfo{Path: target, FileName: filepath.Base(target)}
+		si := snap.InfoFromPath(target)
 		return &si, nil
 	}
 	return snap.FindByTag(dir, target)
@@ -894,14 +962,38 @@ func printPruneCandidates(candidates []snap.PruneCandidate) {
 	_ = w.Flush()
 }
 
+// snapReporterIsJSON validates a --reporter value and reports whether it asks for JSON.
+func snapReporterIsJSON(cmd, reporter string) bool {
+	switch strings.ToLower(strings.TrimSpace(reporter)) {
+	case "", "text":
+		return false
+	case "json":
+		return true
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "%s: --reporter must be text or json, got %q\n", cmd, reporter)
+	os.Exit(1)
+	return false
+}
+
+// printSnapJSON writes a report to stdout as indented JSON, or exits with the error.
+func printSnapJSON(cmd string, report any) {
+	js, err := snap.MarshalReport(report)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "%s: encode report: %v\n", cmd, err)
+		os.Exit(1)
+	}
+	fmt.Println(js)
+}
+
 func snapUsage() {
 	_, _ = fmt.Fprintln(os.Stderr, "Usage: gg snap <subcommand> [flags]")
 	_, _ = fmt.Fprintln(os.Stderr, "")
 	_, _ = fmt.Fprintln(os.Stderr, "Subcommands:")
-	_, _ = fmt.Fprintln(os.Stderr, "  list                                   [--snap-dir DIR]   list all saved snapshots")
-	_, _ = fmt.Fprintln(os.Stderr, "  view <id|tag|file>                     [--snap-dir DIR]   view a single snapshot")
-	_, _ = fmt.Fprintln(os.Stderr, "  diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR]   diff two snapshots")
+	_, _ = fmt.Fprintln(os.Stderr, "  list                                   [--snap-dir DIR] [--reporter text|json]   list all saved snapshots")
+	_, _ = fmt.Fprintln(os.Stderr, "  view <id|tag|file>                     [--snap-dir DIR] [--reporter text|json]   view a single snapshot")
+	_, _ = fmt.Fprintln(os.Stderr, "  diff <id1|tag1|file1> <id2|tag2|file2> [--snap-dir DIR] [--reporter text|json]   diff two snapshots")
 	_, _ = fmt.Fprintln(os.Stderr, "  assert --baseline <id|tag|file> --current <id|tag|file> [flags] [--snap-dir DIR]   CI regression gate (exits 1 on failure)")
+	_, _ = fmt.Fprintln(os.Stderr, "  report <id|tag|file> [--format md|html] [--out FILE] [--snap-dir DIR]   render a shareable mission report")
 	_, _ = fmt.Fprintln(os.Stderr, "  prune  [--keep-last N] [--older-than DURATION] [--tag TAG] [--ids 1,3,5] [--dry-run] [--yes] [--reporter text|json] [--snap-dir DIR]   delete old snapshots")
 }
 
