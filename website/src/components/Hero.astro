@@ -1,7 +1,7 @@
 ---
 import HeroVisual from './HeroVisual.astro';
 ---
-<div class="hero-container">
+<div class="hero-container not-content">
   <div class="hero-content">
     <a href="#whats-new" class="hero-pill">
       <span class="pill-badge">New in v1.5</span>
@@ -181,18 +181,24 @@ import HeroVisual from './HeroVisual.astro';
   }
   .install-tabs {
     display: flex;
+    align-items: stretch;
     border-bottom: 1px solid var(--gg-glass-border);
     background: color-mix(in srgb, var(--sl-color-bg-nav) 65%, transparent);
   }
   .install-tab {
     flex: 1;
-    padding: 0.5rem 0.65rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0.38rem 0.6rem;
     border: none;
     border-bottom: 2px solid transparent;
     background: transparent;
     color: var(--sl-color-gray-2);
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     font-weight: 600;
+    line-height: 1.25;
     cursor: pointer;
     transition: color 0.15s, border-color 0.15s, background 0.15s;
   }
@@ -202,15 +208,16 @@ import HeroVisual from './HeroVisual.astro';
   .install-tab.active {
     color: var(--sl-color-accent);
     border-bottom-color: var(--sl-color-accent);
-    background: color-mix(in srgb, var(--sl-color-accent) 8%, transparent);
+    background: color-mix(in srgb, var(--sl-color-accent) 10%, transparent);
   }
   .install-panel {
     display: none;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    min-height: 3rem;
+    margin: 0;
+    padding: 0.65rem 1rem;
+    min-height: 2.75rem;
   }
   .install-panel.active {
     display: flex;
