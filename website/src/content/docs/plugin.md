@@ -27,10 +27,13 @@ The plugin adds gutter run icons and a right-click **Gopher Glide (GG)** menu (P
 **On `.http` files:**
 - **Run GG**: opens a profile picker covering all **21 built-in load profiles**, grouped by category. Picking a profile opens a dialog pre-filled with that profile's default peak RPS and duration (override as needed) plus a **Record snapshot** checkbox with an optional tag.
 - **Run GG (Config)**: only shown when the `.http` file has a sibling `.gg.yaml`; runs that config directly.
+- **⚡ Autopilot: Find Ceiling…** (`gg` v1.5.0+): at the top of the picker. `gg` steps the rate up while health holds, marks where it breaches, confirms the rate it backs off to, and reports the highest sustainable RPS. No LLM involved.
 - **Generate config.yaml...**: scaffolds a starter `.gg.yaml` for the file without running anything.
 
 **On `.gg.yaml` files:**
 - **Run GG**: prompts for optional snapshot recording (with a tag), then runs the config as-is.
+
+<img src="/assets/plugin-profile-picker.png" alt="The Run with Profile popup: Autopilot Find Ceiling at the top, then all built-in profiles grouped by category" style="max-width: 260px; height: auto; display: block;" loading="lazy" />
 
 ### 🖥 Native Run Dashboard
 
@@ -45,14 +48,19 @@ While a simulation runs, the **Run** tab of the **Gopher Glide** tool window upd
 
 **Live control** (JetBrains plugin 7.0+, `gg` v1.3.0+) adds a strip above the metric cards while a run is in progress:
 - **Bias**: **−10 / −5 / +5 / +10** change the target RPS without stopping the run; **Reset** returns to the planned rate. The badge shows the bias `gg` reports.
-- **Mark…**: drop a named marker at the current point of the run. A mark is stamped when you confirm its label.
+- **Mark…**: drop a named marker at the current point of the run. With `gg` v1.5.0+ a mark is stamped when you click **Mark…**, not when you confirm its label; with older versions it is stamped when you confirm.
 - Bias changes and marks are drawn on the RPS chart, and both are recorded in the snapshot.
 
-**Failure breakdown** (`gg` v1.5.0+): each heartbeat can carry an `error_mix` object saying what kind of failures are happening right now: connection errors, 4xx, 5xx, extraction failures and the top status codes. The plugins don't display it yet; they ignore it safely. See the [Live Control Protocol](/control-protocol#-heartbeat-additions).
+With `gg` v1.5.0+ the strip also has:
+- **Hold RPS**: pin the rate at a number you choose, ignoring the profile's ramp, until you click **Release Hold**. A **📌 Hold N RPS** badge shows while it is in force.
+- **🛡️ Guard SLO…**: start the built-in SLO guard mid-run with your own p99 and error-rate limits. It clamps the rate when health breaches and releases it in steps. While an autopilot runs, bias and hold are off and **Stop Autopilot (Take Over)** hands the rate back. You can also protect a whole run from the run dialogs.
+- Marks the autopilot drops itself appear on the chart with a ⚡ prefix; yours carry 👤, and an AI agent's carry 🤖.
+
+**Failure breakdown** (`gg` v1.5.0+): each heartbeat can carry an `error_mix` object saying what kind of failures are happening right now: connection errors, 4xx, 5xx, extraction failures and the top status codes. The JetBrains plugin shows it as a one-line **Recent errors** strip under the metric cards, and in the error-rate and latency card tooltips. See the [Live Control Protocol](/control-protocol#-heartbeat-additions).
 
 With an older `gg`, the strip is replaced by a short notice that names the installed version and offers to install or upgrade it. The run itself works as before.
 
-![Native run dashboard showing live RPS chart, metric cards, and stage timeline](/assets/plugin-run-view.png)
+![Native run dashboard after an autopilot ceiling search: metric cards, Live Control with a hold badge, and the RPS chart with the autopilot's marks](/assets/plugin-run-dashboard.png)
 
 ### 🗂 Snap Explorer
 
@@ -63,11 +71,31 @@ Toolbar actions:
 - **View Detail**: inspect a snapshot. The detailed view provides an **Endpoint Breakdown** (Error Rate, P95, Payload Avg) and a dedicated **Inferred JSON Schema** viewer showing the precise `Type`, `Presence %`, and `Stability` of every field observed during the run. For runs recorded with `gg` v1.3.0+, a **Manual changes** section lists every mark and bias change in time order, with final bias, peak bias, how long a bias was in effect, and when the first change happened.
 - **Compare (Diff)**: semantically diff two snapshots side-by-side (select exactly two rows). The diff UI automatically flags **Configuration mismatches** (e.g., if you diff a baseline run with a different config hash) and highlights specific schema regressions, such as a field's presence dropping from 100% to 19% under heavy load. When either run had marks or bias changes made by hand, a one-line notice says so, since those runs may not be like for like.
 - **Assert...**: run `gg snap assert` between any two snapshots against configurable thresholds.
+- **Export Mission Report…** and **Copy PR Markdown** (`gg` v1.5.0+): save a snapshot's report as Markdown or HTML, or put it on the clipboard as Markdown for a pull request. In the Snapshot View, the export button is a split button with **Markdown (.md)** and **HTML (.html)**, and it remembers your last choice.
 - **Prune...**: clean up old snapshots by ID(s), tag, keep-last count, or age (e.g. `30d`): with a dry-run preview by default.
 
 ![Native snapshot detail view showing inferred JSON schema stability and presence](/assets/plugin-snap-view.png)
 
 ![Native snapshot diff view highlighting configuration warnings and schema regressions between two snapshots](/assets/plugin-diff-view.png)
+
+A run steered by the autopilot shows an outcome banner above the list of manual changes, and the Snapshot View lists who made each change.
+
+![Snapshot View for an autopilot run: outcome banner, manual changes table, and the Export as Markdown or HTML menu](/assets/plugin-snap-export.png)
+
+### 🤖 AI Agents
+
+Needs `gg` v1.5.0+. **Tools → Connect AI Agents to Gopher Glide…** (or the **AI Agents** button in the Run tab) connects Claude Code, Cursor, Junie, JetBrains AI Assistant and JetBrains Air to `gg`, so a run an agent starts shows up live in the Run tab like one of yours.
+
+- **One dialog, nothing silent.** It shows what is linked now, previews every change, and writes only what you tick. Your other servers and agents are kept, and an entry of yours is never overwritten unless you choose **Replace**.
+- **Workspace `.mcp.json`** gets a `gg` server that attaches to the IDE's shared daemon (`gg mcp --attach`), so agent runs are visible and steerable in the IDE. Claude Code, Cursor and Junie use their own model to decide what to run.
+- **JetBrains Air** gets the `gg autopilot` agent in `~/.jetbrains/acp.json`. Its slash commands need no API key or model. Free-text requests need a Gemini key or an OpenAI-compatible server, set in an optional section of the dialog.
+- **In the Run tab**, an agent's run opens with a **STARTED BY AI AGENT** badge, and its marks, bias steps and holds appear on the chart with a 🤖 prefix. If you are mid-run, it waits and takes the tab when yours ends.
+- **Your runs stay yours.** Agents can read a run you started but cannot steer it until you tick **🤖 Allow AI Steer**. It is off for every new run, and it appears on runs you start through the shared daemon (**Settings → Gopher Glide → Run my simulations through the shared daemon**).
+- **Limits for agents** (max RPS, max duration, runs at once, and which hosts they may target) are in the dialog. By default agents may only target the hosts in your project's `.http` files.
+
+![The Connect AI Agents dialog: shared daemon, mcp.json, agent skill and JetBrains Air status, with options to set each one up](/assets/plugin-connect-agents.png)
+
+![A JetBrains Air agent session beside the Run tab, which shows the agent's run with a Started by AI Agent badge](/assets/plugin-agent-run.png)
 
 ### 🛡️ One-Click CI Workflow Generator
 
@@ -85,6 +113,7 @@ Available under **Settings / Preferences → Tools → Gopher Glide**:
 ### Compatibility
 
 - **IntelliJ Platform baseline:** `2024.2` and newer
+- Checked with the JetBrains Plugin Verifier against IntelliJ IDEA from `2024.2` to `2026.3`
 - Verified on IntelliJ IDEA, GoLand, WebStorm, Rider, PyCharm Community, PhpStorm, and RubyMine
 
 ---

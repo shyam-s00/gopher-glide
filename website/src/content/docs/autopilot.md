@@ -161,6 +161,8 @@ The agent works out of the box even before you configure a model, because these 
 
 Relative paths resolve against the project folder. Anything that is not a slash command goes to the model-backed agent; without a model it says so and lists the commands above. Cancelling a turn stops any run it started.
 
+![JetBrains Air's new session box listing the gg autopilot slash commands: dry-run, find-ceiling, slo-guard and triage](/assets/plugin-acp-runs.png)
+
 ### Set it up
 
 ```bash
@@ -182,6 +184,8 @@ Prefer to do it by hand? Add an entry to `acp.json` (the `command` must be an ab
   }
 }
 ```
+
+The JetBrains plugin can do all of this for you: **Tools → Connect AI Agents to Gopher Glide…** registers the agent through a small launcher that connects it to the IDE's shared daemon, so the runs it starts show live in the plugin's Run tab. See [IDE Plugins](/plugin).
 
 For Zed, add the same command and args under `agent_servers` in its settings. Set `GEMINI_API_KEY` (or the `GG_AUTOPILOT_*` variables) in the environment the IDE starts the agent with to enable open-ended requests.
 

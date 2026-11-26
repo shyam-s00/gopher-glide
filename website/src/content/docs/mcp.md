@@ -199,7 +199,9 @@ gg mcp --attach http://127.0.0.1:8765/mcp
 
 `--attach` bridges stdio to the daemon in both directions, including cancellation and blocking `wait_s` calls. With no daemon running it falls back to serving in-process, and a stale discovery file is ignored.
 
-> IDE plugin support for this bridge follows in the next plugin releases. Until then the daemon, `--attach` and `gg autopilot --mcp-url` work on their own.
+The JetBrains plugin uses this bridge (`gg` v1.5.0+). **Tools → Connect AI Agents to Gopher Glide…** links the workspace's `.mcp.json` to the IDE's daemon, and a run an agent starts opens in the Run tab with a **STARTED BY AI AGENT** badge. See [IDE Plugins](/plugin).
+
+![A JetBrains Air agent session beside the plugin's Run tab, which shows the run the agent started with a Started by AI Agent badge](/assets/plugin-agent-run.png)
 
 ---
 

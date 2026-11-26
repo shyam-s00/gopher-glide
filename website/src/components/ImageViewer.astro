@@ -1,0 +1,475 @@
+---
+---
+<dialog class="gg-lightbox" id="gg-lightbox" aria-label="Image preview">
+  <div class="gg-lightbox-toolbar" role="toolbar" aria-label="Image zoom controls">
+    <button type="button" class="gg-lb-btn" data-lb-action="zoom-out" aria-label="Zoom out" title="Zoom out (-)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12" /></svg>
+    </button>
+    <button type="button" class="gg-lb-btn gg-lb-level" data-lb-action="zoom-reset" aria-label="Reset zoom" title="Reset to fit (0)">
+      100%
+    </button>
+    <button type="button" class="gg-lb-btn" data-lb-action="zoom-in" aria-label="Zoom in" title="Zoom in (+)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+    </button>
+    <span class="gg-lb-sep" aria-hidden="true"></span>
+    <button type="button" class="gg-lb-btn gg-lb-close" data-lb-action="close" aria-label="Close preview" title="Close (Esc)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+    </button>
+  </div>
+
+  <div class="gg-lightbox-stage" data-lb-stage>
+    <img class="gg-lightbox-img" data-lb-img alt="" draggable="false" />
+  </div>
+
+  <div class="gg-lightbox-footer" data-lb-footer>
+    <p class="gg-lightbox-caption" data-lb-caption></p>
+    <span class="gg-lightbox-hint">Click or scroll to zoom &middot; Drag to pan &middot; Esc to close</span>
+  </div>
+</dialog>
+
+<style>
+  :global(.gg-zoomable-img) {
+    cursor: zoom-in;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+  }
+  :global(.sl-markdown-content img.gg-zoomable-img) {
+    border-radius: 8px;
+    border: 1px solid var(--gg-glass-border);
+  }
+  :global(.gg-zoomable-img:hover) {
+    box-shadow: 0 8px 28px var(--gg-glass-shadow-hover);
+  }
+
+  .gg-lightbox {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100dvh;
+    max-width: 100vw;
+    max-height: 100dvh;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: rgba(17, 18, 29, 0.9);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: #cad3f5;
+    overflow: hidden;
+    z-index: 9999;
+    user-select: none;
+  }
+  .gg-lightbox:not([open]) {
+    display: none;
+  }
+  .gg-lightbox::backdrop {
+    background: transparent;
+  }
+
+  .gg-lightbox-toolbar {
+    position: fixed;
+    top: 1rem;
+    right: 1.25rem;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.35rem;
+    border-radius: 999px;
+    background: rgba(30, 32, 48, 0.88);
+    border: 1px solid rgba(198, 160, 246, 0.28);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(12px);
+  }
+
+  .gg-lb-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 34px;
+    padding: 0 0.5rem;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: #cad3f5;
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: var(--__sl-font-mono, monospace);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .gg-lb-btn:hover:not(:disabled) {
+    background: rgba(198, 160, 246, 0.2);
+    color: #ffffff;
+  }
+  .gg-lb-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .gg-lb-level {
+    min-width: 56px;
+  }
+  .gg-lb-close:hover {
+    background: rgba(237, 135, 150, 0.24) !important;
+    color: #ed8796 !important;
+  }
+  .gg-lb-sep {
+    width: 1px;
+    height: 18px;
+    background: rgba(202, 211, 245, 0.18);
+    margin: 0 0.15rem;
+  }
+
+  .gg-lightbox-stage {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3.75rem 2rem 4.25rem;
+    box-sizing: border-box;
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  .gg-lightbox-img {
+    max-width: 92vw;
+    max-height: 80dvh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 8px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65);
+    transform-origin: center center;
+    transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1);
+    cursor: zoom-in;
+    will-change: transform;
+  }
+  .gg-lightbox-img.is-zoomed {
+    cursor: grab;
+  }
+  .gg-lightbox-img.is-dragging {
+    cursor: grabbing;
+    transition: none;
+  }
+
+  .gg-lightbox-footer {
+    position: fixed;
+    left: 50%;
+    bottom: 0.9rem;
+    transform: translateX(-50%);
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    max-width: min(90vw, 820px);
+    padding: 0.45rem 1rem;
+    border-radius: 12px;
+    background: rgba(24, 25, 38, 0.82);
+    border: 1px solid rgba(202, 211, 245, 0.12);
+    backdrop-filter: blur(10px);
+    text-align: center;
+    pointer-events: none;
+  }
+  .gg-lightbox-caption {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #cad3f5;
+    line-height: 1.35;
+  }
+  .gg-lightbox-caption:empty {
+    display: none;
+  }
+  .gg-lightbox-hint {
+    font-size: 0.72rem;
+    color: #939ab7;
+  }
+
+  @media (max-width: 640px) {
+    .gg-lightbox-toolbar {
+      top: 0.75rem;
+      right: 0.75rem;
+    }
+    .gg-lightbox-stage {
+      padding: 3.5rem 0.75rem 4rem;
+    }
+    .gg-lightbox-img {
+      max-width: 96vw;
+      max-height: 78dvh;
+    }
+    .gg-lightbox-hint {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  function initImageViewer() {
+    const dialog = document.getElementById('gg-lightbox') as HTMLDialogElement | null;
+    if (!dialog || dialog.dataset.bound === 'true') return;
+    dialog.dataset.bound = 'true';
+
+    const stage = dialog.querySelector<HTMLElement>('[data-lb-stage]')!;
+    const viewerImg = dialog.querySelector<HTMLImageElement>('[data-lb-img]')!;
+    const captionEl = dialog.querySelector<HTMLElement>('[data-lb-caption]')!;
+    const levelBtn = dialog.querySelector<HTMLButtonElement>('[data-lb-action="zoom-reset"]')!;
+    const zoomInBtn = dialog.querySelector<HTMLButtonElement>('[data-lb-action="zoom-in"]')!;
+    const zoomOutBtn = dialog.querySelector<HTMLButtonElement>('[data-lb-action="zoom-out"]')!;
+
+    const MIN_SCALE = 1;
+    const MAX_SCALE = 5;
+
+    let scale = 1;
+    let panX = 0;
+    let panY = 0;
+    let dragging = false;
+    let movedDuringPointer = false;
+    let startX = 0;
+    let startY = 0;
+    let startPanX = 0;
+    let startPanY = 0;
+    let lastFocused: HTMLElement | null = null;
+
+    const pointers = new Map<number, { x: number; y: number }>();
+    let pinchStartDist = 0;
+    let pinchStartScale = 1;
+
+    function clampPan(nx: number, ny: number, s: number) {
+      if (s <= 1) return { x: 0, y: 0 };
+      const baseW = viewerImg.offsetWidth || 0;
+      const baseH = viewerImg.offsetHeight || 0;
+      const maxX = Math.max((baseW * (s - 1)) / 2, (baseW * s - window.innerWidth + 120) / 2, 0);
+      const maxY = Math.max((baseH * (s - 1)) / 2, (baseH * s - window.innerHeight + 140) / 2, 0);
+      return {
+        x: Math.min(maxX, Math.max(-maxX, nx)),
+        y: Math.min(maxY, Math.max(-maxY, ny)),
+      };
+    }
+
+    function applyTransform(instant = false) {
+      if (instant) {
+        viewerImg.classList.add('is-dragging');
+      } else {
+        viewerImg.classList.remove('is-dragging');
+      }
+      viewerImg.classList.toggle('is-zoomed', scale > 1.01);
+      viewerImg.style.transform = `translate3d(${panX}px, ${panY}px, 0) scale(${scale})`;
+      levelBtn.textContent = `${Math.round(scale * 100)}%`;
+      zoomOutBtn.disabled = scale <= MIN_SCALE + 0.01;
+      zoomInBtn.disabled = scale >= MAX_SCALE - 0.01;
+    }
+
+    function zoomTo(targetScale: number, originX?: number, originY?: number, instant = false) {
+      const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, targetScale));
+      if (clamped <= 1.001) {
+        scale = 1;
+        panX = 0;
+        panY = 0;
+        applyTransform(instant);
+        return;
+      }
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+      const ox = originX ?? cx;
+      const oy = originY ?? cy;
+      const ratio = clamped / scale;
+      const nextX = ox - cx - (ox - cx - panX) * ratio;
+      const nextY = oy - cy - (oy - cy - panY) * ratio;
+      const clampedPan = clampPan(nextX, nextY, clamped);
+      scale = clamped;
+      panX = clampedPan.x;
+      panY = clampedPan.y;
+      applyTransform(instant);
+    }
+
+    function openViewer(src: string, alt: string, trigger: HTMLElement) {
+      lastFocused = trigger;
+      scale = 1;
+      panX = 0;
+      panY = 0;
+      pointers.clear();
+      viewerImg.src = src;
+      viewerImg.alt = alt;
+      captionEl.textContent = alt;
+      applyTransform(true);
+      document.documentElement.style.overflow = 'hidden';
+      dialog!.showModal();
+      requestAnimationFrame(() => applyTransform(false));
+    }
+
+    function closeViewer() {
+      if (!dialog!.open) return;
+      dialog!.close();
+    }
+
+    dialog.addEventListener('close', () => {
+      document.documentElement.style.overflow = '';
+      pointers.clear();
+      dragging = false;
+      lastFocused?.focus({ preventScroll: true });
+    });
+
+    // Toolbar buttons
+    dialog.querySelectorAll<HTMLButtonElement>('[data-lb-action]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = btn.dataset.lbAction;
+        if (action === 'zoom-in') zoomTo(scale < 1.5 ? 1.5 : scale * 1.35);
+        else if (action === 'zoom-out') zoomTo(scale / 1.35);
+        else if (action === 'zoom-reset') zoomTo(1);
+        else if (action === 'close') closeViewer();
+      });
+    });
+
+    // Backdrop click closes when clicking outside the image
+    stage.addEventListener('click', (e) => {
+      if (e.target === stage) closeViewer();
+    });
+
+    // Wheel / trackpad zoom
+    stage.addEventListener(
+      'wheel',
+      (e) => {
+        e.preventDefault();
+        const delta = -e.deltaY;
+        const factor = e.ctrlKey ? Math.exp(delta * 0.01) : Math.exp(delta * 0.0025);
+        zoomTo(scale * factor, e.clientX, e.clientY, true);
+      },
+      { passive: false }
+    );
+
+    // Pointer drag & pinch-to-zoom on image
+    viewerImg.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      viewerImg.setPointerCapture(e.pointerId);
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      movedDuringPointer = false;
+
+      if (pointers.size === 2) {
+        const pts = Array.from(pointers.values());
+        pinchStartDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        pinchStartScale = scale;
+        dragging = false;
+      } else if (pointers.size === 1) {
+        dragging = scale > 1.01;
+        startX = e.clientX;
+        startY = e.clientY;
+        startPanX = panX;
+        startPanY = panY;
+      }
+    });
+
+    viewerImg.addEventListener('pointermove', (e) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (pointers.size === 2) {
+        movedDuringPointer = true;
+        const pts = Array.from(pointers.values());
+        const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        const midX = (pts[0].x + pts[1].x) / 2;
+        const midY = (pts[0].y + pts[1].y) / 2;
+        if (pinchStartDist > 0) {
+          zoomTo(pinchStartScale * (dist / pinchStartDist), midX, midY, true);
+        }
+        return;
+      }
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (Math.hypot(dx, dy) > 4) {
+        movedDuringPointer = true;
+      }
+      if (dragging && movedDuringPointer) {
+        const clamped = clampPan(startPanX + dx, startPanY + dy, scale);
+        panX = clamped.x;
+        panY = clamped.y;
+        applyTransform(true);
+      }
+    });
+
+    const endPointer = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinchStartDist = 0;
+      if (pointers.size === 0 && dragging) {
+        dragging = false;
+        viewerImg.classList.remove('is-dragging');
+      }
+    };
+    viewerImg.addEventListener('pointerup', endPointer);
+    viewerImg.addEventListener('pointercancel', endPointer);
+
+    // Click image (without drag) toggles 1x <-> 2.25x zoom at click location
+    viewerImg.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (movedDuringPointer) {
+        movedDuringPointer = false;
+        return;
+      }
+      if (scale > 1.05) {
+        zoomTo(1);
+      } else {
+        zoomTo(2.25, e.clientX, e.clientY);
+      }
+    });
+
+    // Keyboard shortcuts while open
+    dialog.addEventListener('keydown', (e) => {
+      if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        zoomTo(scale < 1.5 ? 1.5 : scale * 1.35);
+      } else if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        zoomTo(scale / 1.35);
+      } else if (e.key === '0') {
+        e.preventDefault();
+        zoomTo(1);
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      if (!dialog.open) return;
+      const clamped = clampPan(panX, panY, scale);
+      panX = clamped.x;
+      panY = clamped.y;
+      applyTransform(true);
+    });
+
+    // Attach to eligible content & showcase images
+    const candidates = document.querySelectorAll<HTMLImageElement>(
+      '.sl-markdown-content img, .code-compare img'
+    );
+    candidates.forEach((img) => {
+      if (img.dataset.noZoom !== undefined || img.classList.contains('no-zoom')) return;
+      const parentLink = img.closest('a');
+      if (parentLink) {
+        const href = parentLink.getAttribute('href') || '';
+        if (!/\.(png|jpe?g|gif|webp|svg|avif)(\?.*)?$/i.test(href)) return;
+      }
+      if (img.complete && img.naturalWidth > 0 && img.naturalWidth < 80 && img.naturalHeight < 80) {
+        return;
+      }
+
+      img.classList.add('gg-zoomable-img');
+      if (!img.title) img.title = 'Click to zoom';
+      if (!img.hasAttribute('tabindex')) img.tabIndex = 0;
+
+      const triggerOpen = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openViewer(img.currentSrc || img.src, img.alt || '', img);
+      };
+
+      img.addEventListener('click', triggerOpen);
+      img.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          triggerOpen(e);
+        }
+      });
+    });
+  }
+
+  initImageViewer();
+  document.addEventListener('astro:page-load', initImageViewer);
+</script>

@@ -1,10 +1,12 @@
 ---
 import Default from '@astrojs/starlight/components/Footer.astro';
 import type { Props } from '@astrojs/starlight/props';
+import ImageViewer from './ImageViewer.astro';
 const isSplash = Astro.props.entry?.data?.template === 'splash';
 ---
 
 <Default {...Astro.props} />
+<ImageViewer />
 
 <footer class:list={['site-footer', { 'full-width': isSplash }]}>
   <div class="footer-content">
